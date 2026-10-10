@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "KaamConnect",
+    "slug": "kaamconnect",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "kaamconnect",
+    "splash": {
+      "backgroundColor": "#00B074"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kaamconnect.app"
+    },
+    "android": {
+      "package": "com.kaamconnect.app"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router"
+    ]
+  }
+}

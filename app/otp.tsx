@@ -1,0 +1,568 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, SafeAreaView, Alert, Platform } from 'react-native';
+import { useRouter } from 'expo-router';
+import { ArrowLeft, MapPin, MailCheck, Edit2, Volume2, Clock, MessageSquare, Verified, Lock } from 'lucide-react-native';
+import { useStore } from '../store/useStore';
+
+export default function OtpScreen() {
+  const router = useRouter();
+  const { mobile } = useStore();
+  const [digits, setDigits] = useState(['', '', '', '', '', '']);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [secondsLeft, setSecondsLeft] = useState(28);
+  const [isVerifying, setIsVerifying] = useState(false);
+
+  const inputs = useRef<Array<TextInput | null>>([]);
+
+  useEffect(() => {
+    if (secondsLeft > 0) {
+      const timerId = setTimeout(() => setSecondsLeft(secondsLeft - 1), 1000);
+      return () => clearTimeout(timerId);
+    }
+  }, [secondsLeft]);
+
+  const handleDigitChange = (val: string, idx: number) => {
+    const updated = [...digits];
+    updated[idx] = val;
+    setDigits(updated);
+    
+    if (val && idx < 5) {
+      setTimeout(() => {
+        inputs.current[idx + 1]?.focus();
+      }, 10);
+    }
+  };
+
+  const handleKeyPress = (e: any, idx: number) => {
+    if (e.nativeEvent.key === 'Backspace' && !digits[idx] && idx > 0) {
+      const updated = [...digits];
+      updated[idx - 1] = '';
+      setDigits(updated);
+      
+      setTimeout(() => {
+        inputs.current[idx - 1]?.focus();
+      }, 10);
+    }
+  };
+
+  const handleVerify = () => {
+    setIsVerifying(true);
+    setTimeout(() => {
+      setIsVerifying(false);
+      router.push('/role');
+    }, 1200);
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Top Bar / Navigation */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <TouchableOpacity 
+            style={styles.backBtn} 
+            onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
+            activeOpacity={0.7}
+          >
+            <ArrowLeft color="#111c2d" size={22} strokeWidth={2.5} />
+          </TouchableOpacity>
+          
+          <View style={styles.tricityBadge}>
+            <MapPin color="#006c46" size={15} strokeWidth={2.5} />
+            <Text style={styles.tricityBadgeText}>Tricity Chandigarh • Mohali • Panchkula</Text>
+          </View>
+        </View>
+
+        <View style={styles.langToggle}>
+          <View style={styles.langPillActive}>
+            <Text style={styles.langPillActiveText}>EN</Text>
+          </View>
+          <View style={styles.langPillInactive}>
+            <Text style={styles.langPillInactiveText}>हिं</Text>
+          </View>
+          <View style={styles.langPillInactive}>
+            <Text style={styles.langPillInactiveText}>ਪੰ</Text>
+          </View>
+        </View>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        {/* Header Illustration / Icon Badge */}
+        <View style={styles.iconBadgeWrap}>
+          <View style={styles.iconBox}>
+            <MailCheck color="#ffffff" size={26} strokeWidth={2} />
+          </View>
+          <View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={styles.pingDot} />
+              <Text style={styles.iconTitle}>DIRECT WORKER NETWORK</Text>
+            </View>
+            <Text style={styles.iconDesc}>Instant Verification • 0% Commission Platform</Text>
+          </View>
+        </View>
+
+        {/* Title & Subtitle Section */}
+        <View style={styles.titleSection}>
+          <Text style={styles.mainTitle}>
+            Verify Phone Number <Text style={{ color: '#006c46' }}>/</Text> <Text style={{ fontSize: 20, color: '#3d4a41', fontWeight: '700' }}>ओटीपी सत्यापन</Text>
+          </Text>
+          <Text style={styles.subTitle}>
+            Enter 6-digit code sent to <Text style={{ fontWeight: '600', color: '#111c2d' }}>+91 {mobile || '98765 43210'}</Text>
+          </Text>
+          <TouchableOpacity 
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, alignSelf: 'flex-start' }}
+            onPress={() => router.canGoBack() ? router.back() : router.replace('/login')}
+          >
+            <Edit2 color="#006c46" size={15} strokeWidth={2.5} />
+            <Text style={styles.editLink}>Edit Number (बदलें)</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* 6-Digit OTP Input Boxes */}
+        <View style={styles.otpSection}>
+          {digits.map((d, i) => {
+            const isActive = activeIndex === i;
+            const isFilled = d.length > 0;
+            return (
+              <View 
+                key={i} 
+                style={[
+                  styles.otpBoxWrapper, 
+                  isFilled && styles.otpBoxFilled,
+                  isActive && styles.otpBoxActive
+                ]}
+              >
+                <TextInput
+                  ref={(el) => (inputs.current[i] = el)}
+                  style={styles.otpInput}
+                  value={d}
+                  onChangeText={(val) => handleDigitChange(val, i)}
+                  onKeyPress={(e) => handleKeyPress(e, i)}
+                  onFocus={() => setActiveIndex(i)}
+                  onBlur={() => setActiveIndex(-1)}
+                  keyboardType="number-pad"
+                  maxLength={1}
+                  selectTextOnFocus
+                  cursorColor="#00b074"
+                />
+                {/* Decorative Bottom Dash */}
+                <View 
+                  pointerEvents="none"
+                  style={[
+                    styles.bottomDash,
+                    isFilled ? styles.dashFilled : (isActive ? styles.dashActive : styles.dashEmpty)
+                  ]} 
+                />
+                {/* Placeholder Dot if empty and not active */}
+                {!isFilled && !isActive && <View pointerEvents="none" style={styles.placeholderDot} />}
+              </View>
+            );
+          })}
+        </View>
+
+        {/* Low-Literacy Audio Assist Pill */}
+        <View style={styles.audioWrap}>
+          <TouchableOpacity style={styles.audioBtn} activeOpacity={0.8} onPress={() => Alert.alert('🔊', 'Playing OTP Audio...')}>
+            <Volume2 color="#006c46" size={19} strokeWidth={2.5} />
+            <Text style={styles.audioBtnText}>Audio code help available / आवाज द्वारा ओटीपी सुनें 🔊</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Resend Timer & WhatsApp Backup Card */}
+        <View style={styles.resendCard}>
+          <View style={styles.resendRow}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Clock color="#006c46" size={18} strokeWidth={2.5} />
+              <Text style={styles.resendLabel}>Didn't receive SMS?</Text>
+            </View>
+            <View style={styles.timerPill}>
+              {secondsLeft > 0 ? (
+                <Text style={styles.timerPillText}>Resend OTP in 0:{secondsLeft < 10 ? `0${secondsLeft}` : secondsLeft}s</Text>
+              ) : (
+                <TouchableOpacity onPress={() => setSecondsLeft(28)}>
+                  <Text style={[styles.timerPillText, { textDecorationLine: 'underline' }]}>Resend OTP Now</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          <TouchableOpacity style={styles.whatsappBtn} activeOpacity={0.8}>
+            <MessageSquare color="#25D366" size={20} strokeWidth={2.5} />
+            <Text style={styles.whatsappBtnText}>Get OTP on WhatsApp / व्हाट्सएप पर पाएं 💬</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+
+      {/* Bottom Action Container */}
+      <View style={styles.footerAction}>
+        <TouchableOpacity 
+          style={[styles.verifyBtn, isVerifying && { backgroundColor: '#006c46' }]} 
+          onPress={handleVerify}
+          activeOpacity={0.9}
+        >
+          {isVerifying ? (
+            <Text style={styles.verifyBtnText}>Verifying / जांच हो रही है...</Text>
+          ) : (
+            <>
+              <Verified color="#ffffff" size={22} strokeWidth={2} />
+              <Text style={styles.verifyBtnText}>Verify & Continue / सत्यापित करें</Text>
+            </>
+          )}
+        </TouchableOpacity>
+        
+        <View style={styles.securityNote}>
+          <Lock color="#006c46" size={15} strokeWidth={2.5} />
+          <Text style={styles.securityNoteText}>Automatic SIM reading supported • Safe Tricity Login</Text>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f9f9ff'
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'web' ? 8 : 16,
+    paddingBottom: 12,
+    backgroundColor: '#f9f9ff'
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(188, 202, 191, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1,
+    elevation: 1
+  },
+  tricityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 9999,
+    backgroundColor: 'rgba(0, 176, 116, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 176, 116, 0.2)'
+  },
+  tricityBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#006c46',
+    letterSpacing: -0.2
+  },
+  langToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 2,
+    backgroundColor: '#e7eeff',
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: 'rgba(188, 202, 191, 0.3)'
+  },
+  langPillActive: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 9999,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1,
+    elevation: 1
+  },
+  langPillActiveText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#111c2d'
+  },
+  langPillInactive: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 9999
+  },
+  langPillInactiveText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#3d4a41'
+  },
+  scrollContent: {
+    padding: 20,
+    paddingTop: 8
+  },
+  iconBadgeWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#f0f3ff',
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(188, 202, 191, 0.2)',
+    marginBottom: 16
+  },
+  iconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#00b074',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#00b074',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 3
+  },
+  pingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#00b074'
+  },
+  iconTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#006c46',
+    letterSpacing: 0.5
+  },
+  iconDesc: {
+    fontSize: 13,
+    color: '#3d4a41',
+    marginTop: 2
+  },
+  titleSection: {
+    marginBottom: 24
+  },
+  mainTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#111c2d',
+    lineHeight: 30,
+    letterSpacing: -0.2
+  },
+  subTitle: {
+    fontSize: 14,
+    color: '#3d4a41',
+    marginTop: 4,
+    lineHeight: 20
+  },
+  editLink: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#006c46'
+  },
+  otpSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 20
+  },
+  otpBoxWrapper: {
+    flex: 1,
+    height: 58,
+    borderRadius: 12,
+    backgroundColor: '#f0f3ff',
+    borderWidth: 1,
+    borderColor: 'rgba(188, 202, 191, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative'
+  },
+  otpBoxFilled: {
+    backgroundColor: '#ffffff',
+    borderColor: '#00b074',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1,
+    elevation: 1
+  },
+  otpBoxActive: {
+    backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: '#00b074',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1,
+    elevation: 1
+    // Missing the ring effect, but borderWidth=2 approximates it
+  },
+  otpInput: {
+    width: '100%',
+    height: '100%',
+    textAlign: 'center',
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#111c2d',
+    padding: 0
+  },
+  placeholderDot: {
+    position: 'absolute',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#bccabf'
+  },
+  bottomDash: {
+    position: 'absolute',
+    bottom: 6,
+    height: 2.5,
+    borderRadius: 2
+  },
+  dashFilled: {
+    width: 20,
+    backgroundColor: '#00b074'
+  },
+  dashActive: {
+    width: 24,
+    backgroundColor: '#00b074'
+  },
+  dashEmpty: {
+    width: 16,
+    height: 2,
+    backgroundColor: 'rgba(188, 202, 191, 0.5)'
+  },
+  audioWrap: {
+    alignItems: 'center',
+    marginBottom: 20
+  },
+  audioBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: '#e7eeff',
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 176, 116, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1,
+    elevation: 1
+  },
+  audioBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#111c2d'
+  },
+  resendCard: {
+    backgroundColor: '#f0f3ff',
+    borderWidth: 1,
+    borderColor: 'rgba(188, 202, 191, 0.3)',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16
+  },
+  resendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14
+  },
+  resendLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#3d4a41'
+  },
+  timerPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: '#e7eeff',
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: 'rgba(188, 202, 191, 0.2)'
+  },
+  timerPillText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#006c46'
+  },
+  whatsappBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    width: '100%',
+    height: 48,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(37, 211, 102, 0.4)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1,
+    elevation: 1
+  },
+  whatsappBtnText: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#111c2d'
+  },
+  footerAction: {
+    padding: 20,
+    backgroundColor: '#ffffff',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(188, 202, 191, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    elevation: 10
+  },
+  verifyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    width: '100%',
+    height: 52,
+    backgroundColor: '#00b074',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    marginBottom: 12
+  },
+  verifyBtnText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
+    letterSpacing: 0.5
+  },
+  securityNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6
+  },
+  securityNoteText: {
+    fontSize: 11,
+    color: '#3d4a41',
+    textAlign: 'center'
+  }
+});

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>KaamConnect • Hyperlocal Tricity Marketplace (Chandigarh, Mohali, Panchkula)</title>
+  
+  <!-- Modern Typography from Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- App & Studio Styling -->
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <!-- ==========================================================================
+       Studio Control Bar (Device, Role, Language & Screen Navigation)
+       ========================================================================== -->
+  <header class="studio-header">
+    <div class="studio-brand">
+      <div class="studio-logo">
+        <svg viewBox="0 0 48 48" fill="none">
+          <rect width="48" height="48" rx="14" fill="#00B074"/>
+          <path d="M16 26.5L22 32.5L32 18.5" stroke="white" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="studio-title-wrap">
+        <div class="studio-title">
+          Kaam<span>Connect</span> Studio
+        </div>
+        <div class="studio-subtitle">
+          Chandigarh • Mohali • Panchkula (18 Screens)
+        </div>
+      </div>
+    </div>
+
+    <div class="studio-controls">
+      <!-- Screen Jump Button -->
+      <button class="screen-select-btn" onclick="window.toggleScreensDrawer()">
+        <span>✦ Jump to Screen:</span>
+        <span id="currentScreenName" style="color: #FFFFFF; text-decoration: underline;">1. Splash & Welcome</span>
+        <span>▾</span>
+      </button>
+
+      <!-- Role Toggle -->
+      <div class="control-group">
+        <span class="control-label">Role</span>
+        <button class="studio-btn active" id="studioRoleLabel" onclick="window.toggleRole()">
+          👤 Customer Mode
+        </button>
+      </div>
+
+      <!-- Device Switcher (iOS vs Android vs Tablet vs Fullscreen) -->
+      <div class="control-group">
+        <span class="control-label">Device</span>
+        <button class="studio-btn active" data-device-btn="iphone" onclick="window.setDevice('iphone')" title="Apple iPhone 15 Pro (iOS)">
+           iPhone 15 Pro
+        </button>
+        <button class="studio-btn" data-device-btn="pixel" onclick="window.setDevice('pixel')" title="Google Pixel 8 (Android)">
+          🤖 Pixel 8
+        </button>
+        <button class="studio-btn" data-device-btn="ipad" onclick="window.setDevice('ipad')" title="iPad Tablet">
+          Tablet
+        </button>
+        <button class="studio-btn" data-device-btn="fullscreen" onclick="window.setDevice('fullscreen')" title="Fluid Responsive">
+          Fluid Web
+        </button>
+      </div>
+
+      <!-- Language Switcher -->
+      <div class="control-group">
+        <span class="control-label">Lang</span>
+        <button class="studio-btn" onclick="window.setLanguage('en')">EN</button>
+        <button class="studio-btn" onclick="window.setLanguage('hi')">हिन्दी</button>
+        <button class="studio-btn" onclick="window.setLanguage('pa')">ਪੰਜਾਬੀ</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==========================================================================
+       Interactive Device Frame Workspace
+       ========================================================================== -->
+  <main class="studio-workspace">
+    <div id="deviceFrameWrapper" class="device-frame-wrapper device-iphone">
+      <!-- Hardware Notch / Dynamic Island -->
+      <div id="hardwareNotch" class="hardware-notch">
+        <div class="dynamic-island">
+          <div class="island-camera"></div>
+          <div class="island-sensor"></div>
+        </div>
+      </div>
+
+      <!-- Screen Window Inside Device -->
+      <div class="device-screen">
+        <!-- Native Hardware Status Bar -->
+        <div class="phone-status-bar">
+          <div class="status-time" id="statusClock">9:41</div>
+          <div class="status-icons">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13a10 10 0 0 1 14 0"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M12 20h.01"/></svg>
+            <span style="font-size: 11px; font-weight: 800; font-family: var(--font-headline); letter-spacing: -0.05em;">5G</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect width="18" height="11" x="2" y="6" rx="2.5"/><line x1="22" x2="22" y1="10" y2="13"/><rect width="10" height="7" x="4" y="8" fill="currentColor" rx="1"/></svg>
+          </div>
+        </div>
+
+        <!-- Rendered Native Mobile App Viewport -->
+        <div id="appContainer" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative;">
+          <!-- Loaded by app.js -->
+        </div>
+
+        <!-- Native Hardware Bottom Home Indicator (iOS or Android) -->
+        <div id="hardwareBottomNav" class="phone-bottom-nav-bar">
+          <div class="ios-home-indicator"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- All 18 Screens Quick Jump Drawer Modal -->
+  <div id="screensDrawer"></div>
+
+  <!-- App Bootstrap Script -->
+  <script type="module" src="/src/app.js"></script>
+</body>
+</html>
