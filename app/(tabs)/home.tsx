@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, SafeAreaView, Image, Linking, Alert, Modal, Animated, Dimensions, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Linking, Alert, Modal, Animated, Dimensions, TouchableWithoutFeedback } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MapPin, Bell, Volume2, Search, Mic, Zap, Droplet, Wind, Hammer, Paintbrush, Sparkles, Tv, Truck, Phone, Star, Menu, X, HelpCircle, User as UserIcon, Globe, Settings } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../../constants/theme';
@@ -8,6 +9,7 @@ import { useStore } from '../../store/useStore';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { selectedSector, setSelectedCategory, setActiveBooking } = useStore();
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -62,33 +64,33 @@ export default function HomeScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Top Header Bar */}
         <View style={styles.headerBar}>
           <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={openDrawer} style={styles.menuBtn} activeOpacity={0.7}>
+            <TouchableOpacity onPress={openDrawer} style={styles.menuBtn} activeOpacity={0.7} hitSlop={8} accessibilityRole="button" accessibilityLabel="Open menu">
               <Menu color={Colors.textMain} size={26} strokeWidth={2.5} />
             </TouchableOpacity>
             <View style={styles.logoBox}>
               <Text style={{ color: '#FFFFFF', fontWeight: '900', fontSize: 16 }}>KC</Text>
             </View>
-            <View>
+            <View style={{ flexShrink: 1 }}>
               <Text style={styles.brandTitle}>
                 Kaam<Text style={{ color: Colors.primary }}>Connect</Text>
               </Text>
-              <TouchableOpacity style={styles.locSelector} onPress={() => router.push('/customer-onboarding')}>
+              <TouchableOpacity style={styles.locSelector} onPress={() => router.push('/customer-onboarding')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Change location">
                 <MapPin color={Colors.tertiary} size={11} />
-                <Text style={styles.locText}>{selectedSector || 'Sector 22, Chandigarh'} ▾</Text>
+                <Text style={styles.locText} numberOfLines={1}>{selectedSector || 'Sector 22, Chandigarh'} ▾</Text>
               </TouchableOpacity>
             </View>
           </View>
 
           <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.iconCircle} onPress={() => Alert.alert('🔊 Audio Assistance', 'Welcome to KaamConnect Tricity.')}>
+            <TouchableOpacity style={styles.iconCircle} onPress={() => Alert.alert('🔊 Audio Assistance', 'Welcome to KaamConnect Tricity.')} accessibilityRole="button" accessibilityLabel="Audio assistance">
               <Volume2 color={Colors.textMain} size={18} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.iconCircle} onPress={() => router.push('/(tabs)/activity')}>
+            <TouchableOpacity style={styles.iconCircle} onPress={() => router.push('/(tabs)/activity')} accessibilityRole="button" accessibilityLabel="Notifications">
               <Bell color={Colors.textMain} size={18} />
               <View style={styles.notifDot} />
             </TouchableOpacity>
@@ -99,7 +101,7 @@ export default function HomeScreen() {
         <View style={styles.sosBanner}>
           <View style={styles.sosIcon}><Text style={{ fontSize: 18 }}>⚡</Text></View>
           <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
               <Text style={styles.sosTitle}>Need Urgent Mistri?</Text>
               <View style={styles.sosBadge}><Text style={styles.sosBadgeText}>15 MIN ETA</Text></View>
             </View>
@@ -115,7 +117,7 @@ export default function HomeScreen() {
             placeholder="Search electrician, plumber, AC repair in Tricity..."
             placeholderTextColor={Colors.textSubtle}
           />
-          <TouchableOpacity style={styles.micBtn} onPress={() => router.push('/(tabs)/post-job')}>
+          <TouchableOpacity style={styles.micBtn} onPress={() => router.push('/(tabs)/post-job')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Post a job by voice">
             <Mic color="#FFFFFF" size={16} />
           </TouchableOpacity>
         </View>
@@ -234,12 +236,12 @@ export default function HomeScreen() {
             <View style={styles.drawerBackground} />
           </TouchableWithoutFeedback>
           <Animated.View style={[styles.drawerContent, { transform: [{ translateX: slideAnim }] }]}>
-            <View style={styles.drawerHeader}>
+            <View style={[styles.drawerHeader, { paddingTop: insets.top + 20 }]}>
               <View>
                 <Text style={styles.drawerTitle}>Menu</Text>
                 <Text style={styles.drawerSub}>KaamConnect Tricity</Text>
               </View>
-              <TouchableOpacity onPress={closeDrawer} style={{ padding: 8 }}>
+              <TouchableOpacity onPress={closeDrawer} style={{ padding: 8 }} accessibilityRole="button" accessibilityLabel="Close menu">
                 <X color={Colors.textMain} size={24} />
               </TouchableOpacity>
             </View>
@@ -261,7 +263,7 @@ export default function HomeScreen() {
                 </View>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.drawerItem} onPress={() => { closeDrawer(); router.push('/language'); }}>
+              <TouchableOpacity style={styles.drawerItem} onPress={() => { closeDrawer(); router.push({ pathname: '/language', params: { from: 'app' } }); }}>
                 <Globe color={Colors.primary} size={26} />
                 <View style={styles.drawerItemTextWrap}>
                   <Text style={styles.drawerItemTitle}>Language</Text>
@@ -273,7 +275,7 @@ export default function HomeScreen() {
                 <Settings color={Colors.primary} size={26} />
                 <View style={styles.drawerItemTextWrap}>
                   <Text style={styles.drawerItemTitle}>Settings</Text>
-                  <Text style={styles.drawerItemSub}>सेटिंग्स / ਸੈਟਿੰग्स</Text>
+                  <Text style={styles.drawerItemSub}>सेटिंग्स / ਸੈਟਿੰਗਜ਼</Text>
                 </View>
               </TouchableOpacity>
             </ScrollView>
@@ -299,13 +301,14 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md
   },
   headerLeft: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10
+    gap: 8,
+    marginRight: 4
   },
   menuBtn: {
-    padding: 4,
-    marginRight: 4,
+    padding: 4
   },
   logoBox: {
     width: 36,
@@ -324,6 +327,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
     backgroundColor: '#F0F9FF',
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -331,6 +336,7 @@ const styles = StyleSheet.create({
     marginTop: 2
   },
   locText: {
+    flexShrink: 1,
     fontSize: 10,
     fontWeight: '700',
     color: Colors.tertiaryDark
@@ -378,6 +384,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   sosTitle: {
+    flexShrink: 1,
     fontSize: 13,
     fontWeight: '800',
     color: '#92400E'
@@ -412,6 +419,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
+    minWidth: 0,
     fontSize: 12,
     color: Colors.textMain
   },
@@ -447,9 +455,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
     marginBottom: 10
   },
   sectionTitle: {
+    flex: 1,
     fontSize: 14,
     fontWeight: '800',
     color: Colors.textMain
@@ -460,9 +470,11 @@ const styles = StyleSheet.create({
     color: Colors.primary
   },
   catGrid: {
+    // 4 x 23% tiles; the leftover 8% becomes the gutters, so the row fits at any width
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    justifyContent: 'space-between',
+    rowGap: 8,
     marginBottom: Spacing.lg
   },
   catTile: {
@@ -502,6 +514,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 12,
     marginBottom: Spacing.lg
   },
   postJobTitle: {
@@ -572,6 +585,7 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF'
   },
   workerName: {
+    flexShrink: 1,
     fontSize: 14,
     fontWeight: '800',
     color: Colors.textMain
@@ -584,8 +598,10 @@ const styles = StyleSheet.create({
   },
   workerMeta: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
-    gap: 8,
+    columnGap: 8,
+    rowGap: 4,
     marginTop: 4
   },
   ratingBadge: {
@@ -608,6 +624,7 @@ const styles = StyleSheet.create({
   },
   skillsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 4,
     marginBottom: 10
   },
@@ -623,8 +640,10 @@ const styles = StyleSheet.create({
   },
   workerBottom: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
     paddingTop: 8,
     borderTopWidth: 1,
     borderStyle: 'dashed',
@@ -691,7 +710,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 20,
-    paddingTop: 50,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },

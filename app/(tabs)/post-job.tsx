@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, SafeAreaView, Alert, Image, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Image, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Mic, Camera, Send, Check } from 'lucide-react-native';
+import { Mic, Camera, Send } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../../constants/theme';
+import { SERVICE_CATEGORIES } from '../../constants/mockData';
 import { useStore } from '../../store/useStore';
 
 export default function PostJobScreen() {
@@ -12,6 +14,9 @@ export default function PostJobScreen() {
   const [desc, setDesc] = useState('PVC pipe under the kitchen sink cracked suddenly, water is spreading on floor. Need replacement pipe immediately.');
   const [isRecording, setIsRecording] = useState(false);
   const [timing, setTiming] = useState('immediate');
+  const [titleError, setTitleError] = useState(false);
+
+  const category = SERVICE_CATEGORIES.find((cat) => cat.id === selectedCategory) ?? SERVICE_CATEGORIES[1];
 
   const handleToggleRecord = () => {
     setIsRecording(!isRecording);
@@ -23,6 +28,10 @@ export default function PostJobScreen() {
   };
 
   const handleBroadcast = () => {
+    if (!title.trim()) {
+      setTitleError(true);
+      return;
+    }
     if (Platform.OS === 'web') {
       window.alert('🎉 Job Broadcasted\n\nRequest sent to 24 nearby Tricity technicians in Sector 22 & Mohali! Receiving quotes now...');
       router.push('/compare-offers');
@@ -34,8 +43,8 @@ export default function PostJobScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Post Job & Details / काम का विवरण</Text>
           <Text style={styles.headerSub}>Broadcast Direct to Tricity Workers • 0% Fee</Text>
@@ -45,7 +54,7 @@ export default function PostJobScreen() {
         <View style={styles.card}>
           <Text style={styles.label}>Service Type / सेवा का प्रकार *</Text>
           <View style={styles.pickerBox}>
-            <Text style={styles.pickerText}>Plumber (पानी / लीकेज समस्या)</Text>
+            <Text style={styles.pickerText} numberOfLines={1}>{category.title} ({category.hindi})</Text>
           </View>
         </View>
 
@@ -53,11 +62,18 @@ export default function PostJobScreen() {
         <View style={styles.card}>
           <Text style={styles.label}>Problem Heading / मुख्य समस्या *</Text>
           <TextInput
-            style={styles.textInput}
+            style={[styles.textInput, titleError && styles.textInputError]}
             value={title}
-            onChangeText={setTitle}
+            onChangeText={(text) => {
+              setTitle(text);
+              setTitleError(false);
+            }}
             placeholder="e.g. Geyser not turning on, Water pipe burst"
+            placeholderTextColor={Colors.textSubtle}
           />
+          {titleError && (
+            <Text style={styles.errorText}>Please describe the main problem / कृपया समस्या लिखें</Text>
+          )}
         </View>
 
         {/* Interactive Voice Note Card */}
@@ -204,6 +220,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.textMain
   },
+  textInputError: {
+    borderColor: Colors.error
+  },
+  errorText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.error,
+    marginTop: 6
+  },
   voiceCard: {
     backgroundColor: '#F0FDF4',
     borderWidth: 2,
@@ -262,7 +287,8 @@ const styles = StyleSheet.create({
   voiceAttached: {
     fontSize: 10,
     color: '#059669',
-    fontWeight: '700'
+    fontWeight: '700',
+    textAlign: 'center'
   },
   addPhotoBox: {
     width: 60,
@@ -287,14 +313,14 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 10,
     borderRadius: Radius.md,
-    borderWidth: 1,
+    // Constant 2px border so the row doesn't shift when the selection changes
+    borderWidth: 2,
     borderColor: Colors.border,
     alignItems: 'center'
   },
   timingBtnActive: {
     backgroundColor: '#F0FDF4',
-    borderColor: Colors.primary,
-    borderWidth: 2
+    borderColor: Colors.primary
   },
   timingText: {
     fontSize: 10,
@@ -306,7 +332,9 @@ const styles = StyleSheet.create({
   },
   broadcastBtn: {
     backgroundColor: Colors.primary,
-    height: 52,
+    minHeight: 52,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: 8,
     borderRadius: Radius.lg,
     flexDirection: 'row',
     alignItems: 'center',
@@ -316,6 +344,8 @@ const styles = StyleSheet.create({
     marginBottom: 20
   },
   broadcastBtnText: {
+    flexShrink: 1,
+    textAlign: 'center',
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '800'

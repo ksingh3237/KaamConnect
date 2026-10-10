@@ -1,15 +1,27 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, RefreshCw, Compass, Play, ChevronRight, Zap, Droplet, Wind, Hammer, Paintbrush, Sparkles, Tv, Truck } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../../constants/theme';
-import { WORKER_ACTIVE_LEADS, SERVICE_CATEGORIES } from '../../constants/mockData';
+import { WORKER_ACTIVE_LEADS, SERVICE_CATEGORIES, CustomerLead } from '../../constants/mockData';
 import { useStore } from '../../store/useStore';
+
+const LEAD_FILTERS: { id: string; label: string; showCount?: boolean; match: (lead: CustomerLead) => boolean }[] = [
+  { id: 'all', label: 'All Leads', showCount: true, match: () => true },
+  { id: 'immediate', label: 'Immediate', showCount: true, match: (lead) => lead.urgency.startsWith('Immediate') },
+  { id: 'plumbing', label: 'Plumbing', match: (lead) => lead.category === 'Plumbing' },
+  { id: 'electrician', label: 'Electrician', match: (lead) => lead.category === 'Electrician' }
+];
 
 export default function LeadsScreen() {
   const router = useRouter();
   const { role, toggleRole, setSelectedCategory } = useStore();
   const isWorker = role === 'worker';
+  const [leadFilter, setLeadFilter] = useState('all');
+
+  const activeFilter = LEAD_FILTERS.find((f) => f.id === leadFilter) ?? LEAD_FILTERS[0];
+  const visibleLeads = WORKER_ACTIVE_LEADS.filter(activeFilter.match);
 
   const renderIcon = (name: string, color: string) => {
     switch (name) {
@@ -26,11 +38,11 @@ export default function LeadsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.headerBar}>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>
               {isWorker ? 'Leads Radar • काम रडार' : 'Browse Services • सेवाएं'}
             </Text>
@@ -46,8 +58,8 @@ export default function LeadsScreen() {
           /* WORKER MODE: Live Customer Leads Radar */
           <View>
             <View style={styles.radarHero}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
                   <View style={styles.radarDot} />
                   <Text style={styles.radarHeroTitle}>Live Customer Job Radar</Text>
                 </View>
@@ -61,15 +73,41 @@ export default function LeadsScreen() {
             </View>
 
             {/* Filter Chips */}
-            <View style={styles.chipsRow}>
-              <View style={[styles.chip, styles.chipActive]}><Text style={[styles.chipText, styles.chipTextActive]}>All Leads (2)</Text></View>
-              <View style={styles.chip}><Text style={styles.chipText}>Immediate (1)</Text></View>
-              <View style={styles.chip}><Text style={styles.chipText}>Plumbing</Text></View>
-              <View style={styles.chip}><Text style={styles.chipText}>Electrician</Text></View>
-            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.chipsScroll}
+              contentContainerStyle={styles.chipsRow}
+            >
+              {LEAD_FILTERS.map((filter) => {
+                const isActive = filter.id === leadFilter;
+                return (
+                  <TouchableOpacity
+                    key={filter.id}
+                    style={[styles.chip, isActive && styles.chipActive]}
+                    onPress={() => setLeadFilter(filter.id)}
+                    activeOpacity={0.8}
+                    hitSlop={{ top: 8, bottom: 8 }}
+                    accessibilityRole="button"
+                    aria-selected={isActive}
+                  >
+                    <Text style={[styles.chipText, isActive && styles.chipTextActive]}>
+                      {filter.label}
+                      {filter.showCount ? ` (${WORKER_ACTIVE_LEADS.filter(filter.match).length})` : ''}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {visibleLeads.length === 0 && (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyText}>No {activeFilter.label.toLowerCase()} leads right now. New requests appear here live.</Text>
+              </View>
+            )}
 
             {/* Leads Cards */}
-            {WORKER_ACTIVE_LEADS.map((lead) => (
+            {visibleLeads.map((lead) => (
               <View key={lead.id} style={styles.leadCard}>
                 <View style={styles.leadHeader}>
                   <View style={{ flex: 1 }}>
@@ -92,11 +130,11 @@ export default function LeadsScreen() {
                 )}
 
                 <View style={styles.leadFooter}>
-                  <View>
+                  <View style={{ flex: 1 }}>
                     <Text style={styles.leadLoc}>📍 {lead.sector} ({lead.distance})</Text>
                     <Text style={styles.leadBudget}>Budget: {lead.budget}</Text>
                   </View>
-                  <TouchableOpacity style={styles.quoteBtn} onPress={() => router.push('/lead-offer')}>
+                  <TouchableOpacity style={styles.quoteBtn} onPress={() => router.push({ pathname: '/lead-offer', params: { id: lead.id } })}>
                     <Text style={styles.quoteBtnText}>Send Quote →</Text>
                   </TouchableOpacity>
                 </View>
@@ -119,7 +157,7 @@ export default function LeadsScreen() {
                   {renderIcon(cat.iconName, cat.color)}
                 </View>
                 <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                     <Text style={styles.catDirTitle}>{cat.title}</Text>
                     <Text style={styles.catDirFee}>From {cat.baseFee}</Text>
                   </View>
@@ -148,6 +186,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
     marginBottom: Spacing.lg
   },
   headerTitle: {
@@ -188,6 +227,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success
   },
   radarHeroTitle: {
+    flexShrink: 1,
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '800'
@@ -209,10 +249,30 @@ const styles = StyleSheet.create({
     opacity: 0.9,
     marginTop: 2
   },
+  chipsScroll: {
+    flexGrow: 0,
+    marginHorizontal: -Spacing.lg,
+    marginBottom: Spacing.md
+  },
   chipsRow: {
     flexDirection: 'row',
     gap: 6,
-    marginBottom: Spacing.md
+    paddingHorizontal: Spacing.lg
+  },
+  emptyCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.xl,
+    paddingVertical: 32,
+    paddingHorizontal: Spacing.lg,
+    alignItems: 'center'
+  },
+  emptyText: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 18
   },
   chip: {
     backgroundColor: '#FFFFFF',
@@ -248,6 +308,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    gap: 8,
     marginBottom: 6
   },
   catPill: {
@@ -295,6 +356,7 @@ const styles = StyleSheet.create({
     marginBottom: 10
   },
   audioBoxText: {
+    flexShrink: 1,
     color: '#0369A1',
     fontSize: 10,
     fontWeight: '700'
@@ -303,6 +365,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
     paddingTop: 8,
     borderTopWidth: 1,
     borderStyle: 'dashed',
@@ -351,6 +414,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   catDirTitle: {
+    flexShrink: 1,
     fontSize: 13,
     fontWeight: '800',
     color: Colors.textMain

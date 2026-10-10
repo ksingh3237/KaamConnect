@@ -1,11 +1,16 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ShieldCheck, UserSearch, Wrench, Check, ArrowRight, RefreshCw, BadgeInfo, Zap, CircleDollarSign, Verified, Lock, UserCog } from 'lucide-react-native';
-import { useStore, UserRole } from '../store/useStore';
+import { ShieldCheck, UserSearch, Wrench, Check, ArrowRight, RefreshCw, BadgeInfo, Zap, CircleDollarSign, Verified, UserCog } from 'lucide-react-native';
+import LanguageToggle, { FULL_LANG_LABELS } from '../components/LanguageToggle';
+import { useStore } from '../store/useStore';
+
+const LANG_LABELS = { ...FULL_LANG_LABELS, en: 'ENG' };
 
 export default function RoleScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { role, setRole } = useStore();
 
   const handleContinue = () => {
@@ -17,33 +22,23 @@ export default function RoleScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Top Utility Bar */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.logoBox}>
             <UserCog color="#ffffff" size={20} strokeWidth={2} />
           </View>
-          <View style={{ flexDirection: 'column' }}>
+          <View style={{ flexDirection: 'column', flex: 1 }}>
             <Text style={styles.headerBrand}>KaamConnect</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 4, marginTop: 2 }}>
               <View style={styles.tricityDot} />
               <Text style={styles.headerSub}>Tricity • Chandigarh • Mohali • Panchkula</Text>
             </View>
           </View>
         </View>
 
-        <View style={styles.langToggle}>
-          <View style={styles.langPillActive}>
-            <Text style={styles.langPillActiveText}>ENG</Text>
-          </View>
-          <View style={styles.langPillInactive}>
-            <Text style={styles.langPillInactiveText}>हिंदी</Text>
-          </View>
-          <View style={styles.langPillInactive}>
-            <Text style={styles.langPillInactiveText}>ਪੰਜਾਬੀ</Text>
-          </View>
-        </View>
+        <LanguageToggle variant="soft" labels={LANG_LABELS} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -73,11 +68,11 @@ export default function RoleScreen() {
             activeOpacity={0.9}
           >
             <View style={styles.cardHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+              <View style={styles.cardHeaderMain}>
                 <View style={[styles.cardIconBox, { backgroundColor: '#cce5ff' }]}>
                   <UserSearch color="#006398" size={28} strokeWidth={1.5} />
                 </View>
-                <View>
+                <View style={{ flex: 1 }}>
                   <Text style={[styles.cardTag, { color: '#006398' }]}>Customer / ग्राहक</Text>
                   <Text style={styles.cardTitle}>I Need a Service</Text>
                   <Text style={styles.cardSubtitle}>मुझे काम करवाना है</Text>
@@ -127,11 +122,11 @@ export default function RoleScreen() {
             </View>
 
             <View style={styles.cardHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+              <View style={styles.cardHeaderMain}>
                 <View style={[styles.cardIconBox, { backgroundColor: '#00b074', shadowColor: '#00b074', shadowOpacity: 0.4, shadowRadius: 4, elevation: 2 }]}>
                   <Wrench color="#ffffff" size={26} strokeWidth={1.5} />
                 </View>
-                <View>
+                <View style={{ flex: 1 }}>
                   <Text style={[styles.cardTag, { color: '#006c46' }]}>Worker / Skilled Professional (कारीगर)</Text>
                   <Text style={styles.cardTitle}>I Provide a Service</Text>
                   <Text style={styles.cardSubtitle}>मैं कारीगर / काम करता हूँ</Text>
@@ -171,7 +166,7 @@ export default function RoleScreen() {
       </ScrollView>
 
       {/* Bottom Sticky Action Container */}
-      <View style={styles.footerWrap}>
+      <View style={[styles.footerWrap, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <TouchableOpacity style={styles.primaryBtn} onPress={handleContinue} activeOpacity={0.9}>
           <Text style={styles.primaryBtnText}>
             Continue as {role === 'worker' ? 'Worker' : 'Customer'} • आगे बढ़ें
@@ -209,9 +204,11 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e7eeff'
   },
   headerLeft: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10
+    gap: 10,
+    marginRight: 8
   },
   logoBox: {
     width: 36,
@@ -237,46 +234,15 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#00b074'
+    backgroundColor: '#00b074',
+    marginTop: 4
   },
   headerSub: {
+    flex: 1,
     fontSize: 10,
     fontWeight: '600',
     color: '#6c7a70',
     letterSpacing: 0.5
-  },
-  langToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 4,
-    backgroundColor: '#e7eeff',
-    borderRadius: 9999
-  },
-  langPillActive: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 9999,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 1,
-    elevation: 1
-  },
-  langPillActiveText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#006c46'
-  },
-  langPillInactive: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 9999
-  },
-  langPillInactiveText: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#3d4a41'
   },
   scrollContent: {
     padding: 16,
@@ -379,7 +345,14 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start'
+    alignItems: 'flex-start',
+    gap: 8
+  },
+  cardHeaderMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12
   },
   cardIconBox: {
     width: 48,
@@ -438,6 +411,7 @@ const styles = StyleSheet.create({
     borderRadius: 8
   },
   highlightBadgeText: {
+    flexShrink: 1,
     fontSize: 11,
     fontWeight: '600'
   },
@@ -463,7 +437,6 @@ const styles = StyleSheet.create({
     marginTop: 'auto',
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: Platform.OS === 'web' ? 12 : 24,
     alignItems: 'center'
   },
   primaryBtn: {
@@ -482,6 +455,7 @@ const styles = StyleSheet.create({
     elevation: 5
   },
   primaryBtnText: {
+    flexShrink: 1,
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '700'
@@ -493,6 +467,7 @@ const styles = StyleSheet.create({
     marginTop: 12
   },
   reassuranceText: {
+    flexShrink: 1,
     fontSize: 11.5,
     fontWeight: '500',
     color: '#6c7a70'
@@ -504,6 +479,7 @@ const styles = StyleSheet.create({
     marginTop: 8
   },
   trustStampText: {
+    flexShrink: 1,
     fontSize: 11,
     color: '#6c7a70'
   }

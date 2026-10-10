@@ -18,7 +18,7 @@ export default function ActivityScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header Bar */}
       <View style={styles.header}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>
             {isWorker ? 'Worker Earnings & Jobs' : 'My Jobs & Activity'}
           </Text>
@@ -100,7 +100,7 @@ export default function ActivityScreen() {
         {activeTab === 'ongoing' && (
           <View style={[styles.card, styles.ongoingCard]}>
             <View style={styles.ongoingHeader}>
-              <View>
+              <View style={{ flex: 1 }}>
                 <View style={styles.activePill}>
                   <Text style={styles.activePillText}>ACTIVE REPAIR</Text>
                 </View>
@@ -236,6 +236,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: Spacing.sm,
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
     backgroundColor: '#FFFFFF',
@@ -315,7 +316,9 @@ const styles = StyleSheet.create({
   },
   earningsMeta: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
+    gap: 4,
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.2)'
@@ -344,6 +347,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    gap: Spacing.sm,
     marginBottom: Spacing.sm
   },
   activePill: {
@@ -458,9 +462,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: Spacing.sm,
     marginBottom: 4
   },
   pastJobTitle: {
+    flex: 1,
     fontSize: 13,
     fontWeight: '700',
     color: Colors.textMain
@@ -477,8 +483,10 @@ const styles = StyleSheet.create({
   },
   pastJobActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: Spacing.sm,
     paddingTop: Spacing.sm,
     borderTopWidth: 1,
     borderTopColor: Colors.border

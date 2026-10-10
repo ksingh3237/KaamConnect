@@ -1,12 +1,24 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Platform, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, Alert } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Wrench, Volume2, ChevronRight, Check, ArrowRight, ShieldCheck, Info } from 'lucide-react-native';
 import { useStore } from '../store/useStore';
 
 export default function LanguageScreen() {
   const router = useRouter();
   const { language, setLanguage } = useStore();
+  const insets = useSafeAreaInsets();
+  // 'app' when opened from Profile or the Home menu by a signed-in user
+  const { from } = useLocalSearchParams<{ from?: string }>();
+
+  const handleContinue = () => {
+    if (from === 'app' && router.canGoBack()) {
+      router.back();
+    } else {
+      router.push('/login');
+    }
+  };
 
   const handleSpeaker = () => {
     Alert.alert('🔊 Audio Assistance', 'Playing audio instructions in your chosen language.');
@@ -19,7 +31,7 @@ export default function LanguageScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.mainWrapper}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {/* Top Bar: Logo & Tricity Region Badge */}
@@ -173,25 +185,25 @@ export default function LanguageScreen() {
               </View>
             </TouchableOpacity>
           </View>
-          
+
           <View style={{ height: 20 }} />
         </ScrollView>
 
         {/* Bottom Action Sticky Container */}
-        <View style={styles.bottomContainer}>
+        <View style={[styles.bottomContainer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={styles.assuranceWrap}>
             <ShieldCheck color="#00b074" size={16} />
             <Text style={styles.assuranceText}>
               100% Free Direct Connect • ਕੋਈ ਕਮਿਸ਼ਨ ਨਹੀਂ • शून्य कमीशन
             </Text>
           </View>
-          
-          <TouchableOpacity 
-            style={styles.primaryBtn} 
-            onPress={() => router.push('/login')} 
+
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={handleContinue}
             activeOpacity={0.9}
           >
-            <Text style={styles.primaryBtnText}>{ctaLabels[language as keyof typeof ctaLabels]}</Text>
+            <Text style={styles.primaryBtnText}>{ctaLabels[language]}</Text>
             <ArrowRight color="#FFFFFF" size={22} strokeWidth={2.5} />
           </TouchableOpacity>
         </View>
@@ -478,7 +490,6 @@ const styles = StyleSheet.create({
     elevation: 1
   },
   bottomContainer: {
-    paddingBottom: Platform.OS === 'web' ? 16 : 30,
     backgroundColor: '#f9f9ff'
   },
   assuranceWrap: {
@@ -490,12 +501,15 @@ const styles = StyleSheet.create({
     paddingBottom: 12
   },
   assuranceText: {
+    flexShrink: 1,
     fontSize: 12,
     color: '#64748b'
   },
   primaryBtn: {
     width: '100%',
     minHeight: 56,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 12,
     backgroundColor: '#00b074',
     flexDirection: 'row',
@@ -509,6 +523,8 @@ const styles = StyleSheet.create({
     elevation: 10
   },
   primaryBtnText: {
+    flexShrink: 1,
+    textAlign: 'center',
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',

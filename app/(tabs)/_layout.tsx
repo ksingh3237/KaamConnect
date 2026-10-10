@@ -1,13 +1,16 @@
 import React from 'react';
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { View, StyleSheet } from 'react-native';
 import { Home, Compass, Plus, ClipboardList, User } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/theme';
 import { useStore } from '../../store/useStore';
 
 export default function TabLayout() {
   const { role } = useStore();
   const isWorker = role === 'worker';
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
 
   return (
     <Tabs
@@ -18,9 +21,10 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: '#FFFFFF',
           borderTopColor: Colors.border,
-          height: 64,
-          paddingBottom: 8,
-          paddingTop: 8
+          // Icon (28) + label (15) + item padding need ~54px; anything less clips the labels
+          height: 64 + insets.bottom,
+          paddingBottom: insets.bottom + 4,
+          paddingTop: 4
         },
         tabBarLabelStyle: {
           fontSize: 11,
@@ -44,6 +48,15 @@ export default function TabLayout() {
       />
       <Tabs.Screen
         name="post-job"
+        listeners={{
+          // Workers send quotes, they don't post jobs
+          tabPress: (e) => {
+            if (isWorker) {
+              e.preventDefault();
+              router.push('/lead-offer');
+            }
+          }
+        }}
         options={{
           title: isWorker ? 'Quote' : 'Post',
           tabBarIcon: ({ color }) => (

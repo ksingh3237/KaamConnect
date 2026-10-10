@@ -1,18 +1,28 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, SafeAreaView, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Platform } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, MapPin, MailCheck, Edit2, Volume2, Clock, MessageSquare, Verified, Lock } from 'lucide-react-native';
+import { ArrowLeft, MapPin, MailCheck, Edit2, Volume2, Clock, MessageSquare, Verified, Lock, AlertCircle } from 'lucide-react-native';
+import LanguageToggle from '../components/LanguageToggle';
+import { noFocusRing } from '../constants/theme';
 import { useStore } from '../store/useStore';
+
+const OTP_LENGTH = 6;
 
 export default function OtpScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { mobile } = useStore();
-  const [digits, setDigits] = useState(['', '', '', '', '', '']);
-  const [activeIndex, setActiveIndex] = useState(0);
+  // The whole code lives in ONE hidden input; the six boxes only display it.
+  // Six separate inputs need focus hand-offs, which drop keystrokes when typing fast
+  // and leave earlier boxes empty when a box in the middle is tapped first.
+  const [code, setCode] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(28);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [showError, setShowError] = useState(false);
 
-  const inputs = useRef<Array<TextInput | null>>([]);
+  const input = useRef<TextInput>(null);
 
   useEffect(() => {
     if (secondsLeft > 0) {
@@ -21,31 +31,19 @@ export default function OtpScreen() {
     }
   }, [secondsLeft]);
 
-  const handleDigitChange = (val: string, idx: number) => {
-    const updated = [...digits];
-    updated[idx] = val;
-    setDigits(updated);
-    
-    if (val && idx < 5) {
-      setTimeout(() => {
-        inputs.current[idx + 1]?.focus();
-      }, 10);
-    }
-  };
-
-  const handleKeyPress = (e: any, idx: number) => {
-    if (e.nativeEvent.key === 'Backspace' && !digits[idx] && idx > 0) {
-      const updated = [...digits];
-      updated[idx - 1] = '';
-      setDigits(updated);
-      
-      setTimeout(() => {
-        inputs.current[idx - 1]?.focus();
-      }, 10);
-    }
+  // Accepts typing, backspace, paste and SMS autofill alike
+  const handleCodeChange = (text: string) => {
+    setCode(text.replace(/[^0-9]/g, '').slice(0, OTP_LENGTH));
+    setShowError(false);
   };
 
   const handleVerify = () => {
+    if (isVerifying) return;
+    if (code.length < OTP_LENGTH) {
+      setShowError(true);
+      input.current?.focus();
+      return;
+    }
     setIsVerifying(true);
     setTimeout(() => {
       setIsVerifying(false);
@@ -53,36 +51,31 @@ export default function OtpScreen() {
     }, 1200);
   };
 
+  // Box currently receiving the next digit (the last box once the code is complete)
+  const activeIndex = isFocused ? Math.min(code.length, OTP_LENGTH - 1) : -1;
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Top Bar / Navigation */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity 
-            style={styles.backBtn} 
-            onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => router.canGoBack() ? router.back() : router.replace('/login')}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
           >
             <ArrowLeft color="#111c2d" size={22} strokeWidth={2.5} />
           </TouchableOpacity>
-          
+
           <View style={styles.tricityBadge}>
             <MapPin color="#006c46" size={15} strokeWidth={2.5} />
             <Text style={styles.tricityBadgeText}>Tricity Chandigarh • Mohali • Panchkula</Text>
           </View>
         </View>
 
-        <View style={styles.langToggle}>
-          <View style={styles.langPillActive}>
-            <Text style={styles.langPillActiveText}>EN</Text>
-          </View>
-          <View style={styles.langPillInactive}>
-            <Text style={styles.langPillInactiveText}>हिं</Text>
-          </View>
-          <View style={styles.langPillInactive}>
-            <Text style={styles.langPillInactiveText}>ਪੰ</Text>
-          </View>
-        </View>
+        <LanguageToggle variant="soft" />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
@@ -91,7 +84,7 @@ export default function OtpScreen() {
           <View style={styles.iconBox}>
             <MailCheck color="#ffffff" size={26} strokeWidth={2} />
           </View>
-          <View>
+          <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <View style={styles.pingDot} />
               <Text style={styles.iconTitle}>DIRECT WORKER NETWORK</Text>
@@ -108,7 +101,7 @@ export default function OtpScreen() {
           <Text style={styles.subTitle}>
             Enter 6-digit code sent to <Text style={{ fontWeight: '600', color: '#111c2d' }}>+91 {mobile || '98765 43210'}</Text>
           </Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, alignSelf: 'flex-start' }}
             onPress={() => router.canGoBack() ? router.back() : router.replace('/login')}
           >
@@ -119,45 +112,63 @@ export default function OtpScreen() {
 
         {/* 6-Digit OTP Input Boxes */}
         <View style={styles.otpSection}>
-          {digits.map((d, i) => {
+          {Array.from({ length: OTP_LENGTH }, (_, i) => {
+            const digit = code[i] ?? '';
             const isActive = activeIndex === i;
-            const isFilled = d.length > 0;
+            const isFilled = digit.length > 0;
             return (
-              <View 
-                key={i} 
+              <View
+                key={i}
+                pointerEvents="none"
                 style={[
-                  styles.otpBoxWrapper, 
+                  styles.otpBoxWrapper,
                   isFilled && styles.otpBoxFilled,
+                  showError && !isFilled && styles.otpBoxError,
                   isActive && styles.otpBoxActive
                 ]}
               >
-                <TextInput
-                  ref={(el) => (inputs.current[i] = el)}
-                  style={styles.otpInput}
-                  value={d}
-                  onChangeText={(val) => handleDigitChange(val, i)}
-                  onKeyPress={(e) => handleKeyPress(e, i)}
-                  onFocus={() => setActiveIndex(i)}
-                  onBlur={() => setActiveIndex(-1)}
-                  keyboardType="number-pad"
-                  maxLength={1}
-                  selectTextOnFocus
-                  cursorColor="#00b074"
-                />
+                {isFilled && <Text style={styles.otpDigit}>{digit}</Text>}
                 {/* Decorative Bottom Dash */}
-                <View 
-                  pointerEvents="none"
+                <View
                   style={[
                     styles.bottomDash,
                     isFilled ? styles.dashFilled : (isActive ? styles.dashActive : styles.dashEmpty)
-                  ]} 
+                  ]}
                 />
                 {/* Placeholder Dot if empty and not active */}
-                {!isFilled && !isActive && <View pointerEvents="none" style={styles.placeholderDot} />}
+                {!isFilled && !isActive && <View style={styles.placeholderDot} />}
               </View>
             );
           })}
+
+          {/* One invisible input covers the whole row, so a tap on ANY box focuses it */}
+          <TextInput
+            ref={input}
+            style={styles.otpHiddenInput}
+            value={code}
+            onChangeText={handleCodeChange}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            // Caret stays at the end so typing / backspace always act on the last digit
+            selection={{ start: code.length, end: code.length }}
+            keyboardType="number-pad"
+            inputMode="numeric"
+            maxLength={OTP_LENGTH}
+            autoFocus
+            textContentType="oneTimeCode"
+            autoComplete="sms-otp"
+            caretHidden
+            contextMenuHidden
+            accessibilityLabel="Enter 6-digit OTP"
+          />
         </View>
+
+        {showError && (
+          <View style={styles.otpErrorRow}>
+            <AlertCircle color="#ef4444" size={14} />
+            <Text style={styles.otpErrorText}>Enter the 6-digit code / 6 अंकों का कोड डालें</Text>
+          </View>
+        )}
 
         {/* Low-Literacy Audio Assist Pill */}
         <View style={styles.audioWrap}>
@@ -193,10 +204,11 @@ export default function OtpScreen() {
       </ScrollView>
 
       {/* Bottom Action Container */}
-      <View style={styles.footerAction}>
-        <TouchableOpacity 
-          style={[styles.verifyBtn, isVerifying && { backgroundColor: '#006c46' }]} 
+      <View style={[styles.footerAction, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+        <TouchableOpacity
+          style={[styles.verifyBtn, isVerifying && { backgroundColor: '#006c46' }]}
           onPress={handleVerify}
+          disabled={isVerifying}
           activeOpacity={0.9}
         >
           {isVerifying ? (
@@ -208,7 +220,7 @@ export default function OtpScreen() {
             </>
           )}
         </TouchableOpacity>
-        
+
         <View style={styles.securityNote}>
           <Lock color="#006c46" size={15} strokeWidth={2.5} />
           <Text style={styles.securityNoteText}>Automatic SIM reading supported • Safe Tricity Login</Text>
@@ -233,9 +245,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9f9ff'
   },
   headerLeft: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12
+    gap: 12,
+    marginRight: 8
   },
   backBtn: {
     width: 40,
@@ -256,53 +270,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexShrink: 1,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 9999,
+    borderRadius: 20,
     backgroundColor: 'rgba(0, 176, 116, 0.1)',
     borderWidth: 1,
     borderColor: 'rgba(0, 176, 116, 0.2)'
   },
   tricityBadgeText: {
+    flexShrink: 1,
     fontSize: 12,
     fontWeight: '700',
     color: '#006c46',
     letterSpacing: -0.2
-  },
-  langToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 2,
-    backgroundColor: '#e7eeff',
-    borderRadius: 9999,
-    borderWidth: 1,
-    borderColor: 'rgba(188, 202, 191, 0.3)'
-  },
-  langPillActive: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 9999,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 1,
-    elevation: 1
-  },
-  langPillActiveText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#111c2d'
-  },
-  langPillInactive: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 9999
-  },
-  langPillInactiveText: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#3d4a41'
   },
   scrollContent: {
     padding: 20,
@@ -371,6 +352,7 @@ const styles = StyleSheet.create({
     color: '#006c46'
   },
   otpSection: {
+    position: 'relative',
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 8,
@@ -407,14 +389,36 @@ const styles = StyleSheet.create({
     elevation: 1
     // Missing the ring effect, but borderWidth=2 approximates it
   },
-  otpInput: {
-    width: '100%',
-    height: '100%',
-    textAlign: 'center',
+  otpBoxError: {
+    borderColor: '#ef4444'
+  },
+  otpErrorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: -10,
+    marginBottom: 14
+  },
+  otpErrorText: {
+    flexShrink: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ef4444'
+  },
+  otpDigit: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#111c2d',
-    padding: 0
+    color: '#111c2d'
+  },
+  otpHiddenInput: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    opacity: 0,
+    padding: 0,
+    ...noFocusRing
   },
   placeholderDot: {
     position: 'absolute',
@@ -463,6 +467,7 @@ const styles = StyleSheet.create({
     elevation: 1
   },
   audioBtnText: {
+    flexShrink: 1,
     fontSize: 12,
     fontWeight: '700',
     color: '#111c2d'
@@ -477,8 +482,10 @@ const styles = StyleSheet.create({
   },
   resendRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
     marginBottom: 14
   },
   resendLabel: {
@@ -505,7 +512,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     width: '100%',
-    height: 48,
+    minHeight: 48,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     backgroundColor: '#ffffff',
     borderRadius: 12,
     borderWidth: 1,
@@ -517,12 +526,14 @@ const styles = StyleSheet.create({
     elevation: 1
   },
   whatsappBtnText: {
+    flexShrink: 1,
     fontSize: 13.5,
     fontWeight: '700',
     color: '#111c2d'
   },
   footerAction: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
     backgroundColor: '#ffffff',
     borderTopWidth: 1,
     borderTopColor: 'rgba(188, 202, 191, 0.2)',
@@ -561,6 +572,7 @@ const styles = StyleSheet.create({
     gap: 6
   },
   securityNoteText: {
+    flexShrink: 1,
     fontSize: 11,
     color: '#3d4a41',
     textAlign: 'center'

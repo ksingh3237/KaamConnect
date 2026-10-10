@@ -1,18 +1,29 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, SafeAreaView, Switch, Image, Platform } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Switch, Platform } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, User, RefreshCw, Verified, Camera, CameraIcon, BadgeInfo, UserCircle, MapPin, Building, Mic, PhoneCall, ShieldCheck, ArrowRight, CheckCircle2 } from 'lucide-react-native';
+import { ArrowLeft, User, Verified, Camera, CameraIcon, BadgeInfo, UserCircle, MapPin, Building, Mic, PhoneCall, ShieldCheck, ArrowRight, CheckCircle2 } from 'lucide-react-native';
+import LanguageToggle, { FULL_LANG_LABELS } from '../components/LanguageToggle';
+import ModeSwitchCard from '../components/ModeSwitchCard';
 import { useStore } from '../store/useStore';
+import { resetTo } from '../utils/navigation';
 
 export default function CustomerOnboardingScreen() {
   const router = useRouter();
-  const { customerName, mobile, selectedSector, setSelectedSector } = useStore();
+  const insets = useSafeAreaInsets();
+  const { customerName, mobile, selectedSector, setSelectedSector, setRole } = useStore();
   const [name, setName] = useState(customerName || 'Sunita Sharma');
+  const [nameError, setNameError] = useState(false);
   const [address, setAddress] = useState('House #1402, Near Subhash Park');
   const [directCall, setDirectCall] = useState(true);
   const [commLang, setCommLang] = useState('hi');
-  const [langPref, setLangPref] = useState('en');
   const [detectedLoc, setDetectedLoc] = useState(false);
+
+  const scrollRef = useRef<ScrollView>(null);
+  const personalCardY = useRef(0);
+
+  // Store holds "Sector 22, Chandigarh" while the chips are labelled "Sec 22"
+  const activeChip = selectedSector.split(',')[0].replace('Sector', 'Sec').trim();
 
   const handleGpsDetect = () => {
     setDetectedLoc(true);
@@ -20,9 +31,20 @@ export default function CustomerOnboardingScreen() {
     setAddress('Booth 45, Near Kiran Cinema, Sector 22-B');
   };
 
+  // replace (not push) so Back from the other setup screen returns to Role Selection
+  const handleSwitchToWorker = () => {
+    setRole('worker');
+    router.replace('/worker-onboarding');
+  };
+
   const handleComplete = () => {
+    if (!name.trim()) {
+      setNameError(true);
+      scrollRef.current?.scrollTo({ y: personalCardY.current, animated: true });
+      return;
+    }
     // In a real app, save to DB here.
-    router.push('/(tabs)/home');
+    resetTo('/(tabs)/home');
   };
 
   const sectors = {
@@ -32,14 +54,16 @@ export default function CustomerOnboardingScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Top Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity 
-            style={styles.backBtn} 
-            onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => router.canGoBack() ? router.back() : router.replace('/role')}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
           >
             <ArrowLeft color="#111c2d" size={24} strokeWidth={2.5} />
           </TouchableOpacity>
@@ -55,47 +79,18 @@ export default function CustomerOnboardingScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Step Banner & Lang Switcher */}
         <View style={styles.stepBannerRow}>
           <View style={styles.stepBadge}>
             <View style={styles.pingDot} />
             <Text style={styles.stepBadgeText}>STEP 2 OF 2 • ग्राहक प्रोफ़ाइल (Customer Setup)</Text>
           </View>
-          <View style={styles.langToggle}>
-            <TouchableOpacity onPress={() => setLangPref('en')} style={langPref === 'en' ? styles.langPillActive : styles.langPillInactive}>
-              <Text style={langPref === 'en' ? styles.langPillActiveText : styles.langPillInactiveText}>EN</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setLangPref('hi')} style={langPref === 'hi' ? styles.langPillActive : styles.langPillInactive}>
-              <Text style={langPref === 'hi' ? styles.langPillActiveText : styles.langPillInactiveText}>हिंदी</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setLangPref('pa')} style={langPref === 'pa' ? styles.langPillActive : styles.langPillInactive}>
-              <Text style={langPref === 'pa' ? styles.langPillActiveText : styles.langPillInactiveText}>ਪੰਜਾਬੀ</Text>
-            </TouchableOpacity>
-          </View>
+          <LanguageToggle variant="soft" labels={FULL_LANG_LABELS} style={styles.langToggle} />
         </View>
 
         {/* Customer Mode Card */}
-        <View style={styles.modeCard}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <View style={styles.modeIconBox}>
-              <User color="#ffffff" size={20} strokeWidth={2.5} />
-            </View>
-            <View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={styles.modeTitle}>Customer Mode</Text>
-                <View style={styles.modeTag}>
-                  <Text style={styles.modeTagText}>ग्राहक</Text>
-                </View>
-              </View>
-              <Text style={styles.modeSub}>Looking for trusted local handymen</Text>
-            </View>
-          </View>
-          <TouchableOpacity style={styles.switchBtn} onPress={() => router.push('/worker-onboarding')} activeOpacity={0.8}>
-            <Text style={styles.switchBtnText}>Switch</Text>
-            <RefreshCw color="#006c46" size={16} strokeWidth={2.5} />
-          </TouchableOpacity>
-        </View>
+        <ModeSwitchCard mode="customer" onSwitch={handleSwitchToWorker} />
 
         {/* Info Box */}
         <View style={styles.infoBox}>
@@ -104,7 +99,7 @@ export default function CustomerOnboardingScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.infoTitle}>100% Free • No Middleman Fees</Text>
-            <Text style={styles.infoSub} numberOfLines={1}>Direct Cash/UPI to workers • 0% commission forever</Text>
+            <Text style={styles.infoSub}>Direct Cash/UPI to workers • 0% commission forever</Text>
           </View>
         </View>
 
@@ -126,7 +121,12 @@ export default function CustomerOnboardingScreen() {
         </View>
 
         {/* Personal Details */}
-        <View style={styles.formCard}>
+        <View
+          style={styles.formCard}
+          onLayout={(e) => {
+            personalCardY.current = e.nativeEvent.layout.y;
+          }}
+        >
           <View style={styles.cardHeader}>
             <BadgeInfo color="#006c46" size={22} strokeWidth={2} />
             <Text style={styles.cardTitle}>Personal Details (व्यक्तिगत विवरण)</Text>
@@ -139,14 +139,20 @@ export default function CustomerOnboardingScreen() {
             </View>
             <View style={styles.inputWrap}>
               <UserCircle color="#6c7a70" size={20} style={styles.inputIcon} />
-              <TextInput 
-                style={styles.textInput}
+              <TextInput
+                style={[styles.textInput, nameError && styles.textInputError]}
                 value={name}
-                onChangeText={setName}
+                onChangeText={(text) => {
+                  setName(text);
+                  setNameError(false);
+                }}
                 placeholder="Enter full name / ਨਾਮ ਦਰਜ ਕਰੋ"
                 placeholderTextColor="#6c7a70"
               />
             </View>
+            {nameError && (
+              <Text style={styles.errorText}>Please enter your full name / कृपया अपना नाम दर्ज करें</Text>
+            )}
           </View>
 
           <View style={styles.inputGroup}>
@@ -173,7 +179,7 @@ export default function CustomerOnboardingScreen() {
         {/* Primary Address */}
         <View style={styles.formCard}>
           <View style={[styles.cardHeader, { justifyContent: 'space-between' }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
               <MapPin color="#006c46" size={22} strokeWidth={2} />
               <Text style={styles.cardTitle}>Primary Address (घर का पता)</Text>
             </View>
@@ -191,7 +197,7 @@ export default function CustomerOnboardingScreen() {
             <Text style={styles.labelText}>House / Flat / Landmark</Text>
             <View style={styles.inputWrap}>
               <Building color="#6c7a70" size={20} style={styles.inputIcon} />
-              <TextInput 
+              <TextInput
                 style={styles.textInput}
                 value={address}
                 onChangeText={setAddress}
@@ -212,10 +218,10 @@ export default function CustomerOnboardingScreen() {
                 <Text style={styles.cityHeading}>{city}</Text>
                 <View style={styles.chipsWrap}>
                   {list.map(sec => {
-                    const isActive = selectedSector === sec || (selectedSector === '' && sec === 'Sec 22' && detectedLoc);
+                    const isActive = activeChip === sec;
                     return (
-                      <TouchableOpacity 
-                        key={sec} 
+                      <TouchableOpacity
+                        key={sec}
                         style={[styles.sectorChip, isActive && styles.sectorChipActive]}
                         onPress={() => setSelectedSector(sec)}
                         activeOpacity={0.8}
@@ -301,7 +307,7 @@ export default function CustomerOnboardingScreen() {
       </ScrollView>
 
       {/* Bottom Sticky Action Container */}
-      <View style={styles.footerWrap}>
+      <View style={[styles.footerWrap, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <TouchableOpacity style={styles.primaryBtn} onPress={handleComplete} activeOpacity={0.9}>
           <Text style={styles.primaryBtnText}>Save & Go to Marketplace • प्रोफ़ाइल पूरा करें</Text>
           <ArrowRight color="#ffffff" size={22} strokeWidth={2.5} />
@@ -378,12 +384,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   scrollContent: {
-    paddingBottom: Platform.OS === 'web' ? 120 : 140
+    paddingBottom: 16
   },
   stepBannerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
     paddingHorizontal: 16,
     marginTop: 16,
     marginBottom: 16
@@ -392,10 +399,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexShrink: 1,
     paddingHorizontal: 12,
     paddingVertical: 4,
     backgroundColor: '#dee8ff',
-    borderRadius: 9999,
+    borderRadius: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -409,6 +417,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#00b074'
   },
   stepBadgeText: {
+    flexShrink: 1,
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -416,105 +425,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5
   },
   langToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#dee8ff',
-    padding: 4,
-    borderRadius: 9999
-  },
-  langPillActive: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 10,
-    paddingVertical: 2,
-    borderRadius: 9999,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 1,
-    elevation: 1
-  },
-  langPillActiveText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#006c46'
-  },
-  langPillInactive: {
-    paddingHorizontal: 10,
-    paddingVertical: 2,
-    borderRadius: 9999
-  },
-  langPillInactiveText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#3d4a41'
-  },
-  modeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#f0f3ff',
-    marginHorizontal: 16,
-    padding: 12,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 1,
-    elevation: 1,
-    marginBottom: 16
-  },
-  modeIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#00b074',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 1,
-    elevation: 1
-  },
-  modeTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111c2d',
-    lineHeight: 24
-  },
-  modeTag: {
-    backgroundColor: '#d8e3fb',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 9999
-  },
-  modeTagText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#003a23'
-  },
-  modeSub: {
-    fontSize: 12,
-    color: '#3d4a41'
-  },
-  switchBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 1,
-    elevation: 1
-  },
-  switchBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#006c46'
+    backgroundColor: '#dee8ff'
   },
   infoBox: {
     flexDirection: 'row',
@@ -628,6 +539,7 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   cardTitle: {
+    flexShrink: 1,
     fontSize: 18,
     fontWeight: '700',
     color: '#111c2d'
@@ -639,9 +551,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
     marginBottom: 6
   },
   labelText: {
+    flexShrink: 1,
     fontSize: 13,
     fontWeight: '600',
     color: '#111c2d'
@@ -679,6 +593,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#111c2d',
     fontWeight: '500'
+  },
+  textInputError: {
+    borderWidth: 1.5,
+    borderColor: '#ba1a1a'
+  },
+  errorText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ba1a1a',
+    marginTop: 6
   },
   mobileText: {
     fontSize: 16,
@@ -720,12 +644,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     width: '100%',
-    height: 52,
+    minHeight: 52,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     backgroundColor: '#dee8ff',
     borderRadius: 8,
     marginBottom: 16
   },
   gpsBtnText: {
+    flexShrink: 1,
+    textAlign: 'center',
     fontSize: 16,
     fontWeight: '700',
     color: '#006c46'
@@ -797,6 +725,7 @@ const styles = StyleSheet.create({
     gap: 8
   },
   mapText: {
+    flexShrink: 1,
     fontSize: 13,
     fontWeight: '600',
     color: '#ffffff'
@@ -847,6 +776,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 12,
     backgroundColor: '#f0f3ff',
     padding: 12,
     borderRadius: 12,
@@ -882,8 +812,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
-    elevation: 1,
-    marginBottom: 32
+    elevation: 1
   },
   shieldIconBox: {
     width: 40,
@@ -905,14 +834,9 @@ const styles = StyleSheet.create({
     lineHeight: 18
   },
   footerWrap: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: '#ffffff',
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: Platform.OS === 'web' ? 16 : 32,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.08,
@@ -926,7 +850,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     width: '100%',
-    height: 56,
+    minHeight: 56,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     backgroundColor: '#00b074',
     borderRadius: 12,
     shadowColor: '#00b074',
@@ -936,6 +862,8 @@ const styles = StyleSheet.create({
     elevation: 5
   },
   primaryBtnText: {
+    flexShrink: 1,
+    textAlign: 'center',
     fontSize: 16,
     fontWeight: '700',
     color: '#ffffff'
@@ -948,6 +876,7 @@ const styles = StyleSheet.create({
     marginTop: 8
   },
   footerNoteText: {
+    flexShrink: 1,
     fontSize: 12,
     color: '#3d4a41'
   }

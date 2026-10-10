@@ -1,14 +1,18 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Image, Linking, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Linking, Alert } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Phone, AlertTriangle } from 'lucide-react-native';
 import Svg, { Rect, Path, Circle, Text as SvgText, G } from 'react-native-svg';
 import { Colors, Spacing, Radius } from '../constants/theme';
 import { VERIFIED_WORKERS } from '../constants/mockData';
+import { useStore } from '../store/useStore';
 
 export default function TrackingScreen() {
   const router = useRouter();
-  const worker = VERIFIED_WORKERS[0];
+  const insets = useSafeAreaInsets();
+  const { activeBooking } = useStore();
+  const worker = activeBooking ?? VERIFIED_WORKERS[0];
 
   const handleSos = () => {
     Alert.alert('🚨 Emergency SOS', 'Alert dispatched to Tricity Safety Response Desk and designated emergency contact.');
@@ -19,16 +23,21 @@ export default function TrackingScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       {/* Floating Header */}
-      <View style={styles.floatingHeader}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
+      <View style={[styles.floatingHeader, { top: insets.top + 14 }]}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/home')}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <ArrowLeft color={Colors.textMain} size={20} />
         </TouchableOpacity>
         <View style={styles.livePill}>
           <Text style={styles.livePillText}>• LIVE GPS TRACKER</Text>
         </View>
-        <TouchableOpacity style={styles.sosBtn} onPress={handleSos}>
+        <TouchableOpacity style={styles.sosBtn} onPress={handleSos} accessibilityRole="button" accessibilityLabel="Emergency SOS">
           <AlertTriangle color="#FFFFFF" size={18} />
         </TouchableOpacity>
       </View>
@@ -37,7 +46,7 @@ export default function TrackingScreen() {
       <View style={styles.mapCanvas}>
         <Svg viewBox="0 0 400 450" style={styles.svgMap}>
           <Rect width="400" height="450" fill="#E8EEF5" />
-          
+
           {/* Landmarks */}
           <Rect x="20" y="30" width="100" height="70" rx="12" fill="#D1E7DD" />
           <SvgText x="30" y="70" fill="#4A7C59" fontSize="10" fontWeight="bold">Rose Garden</SvgText>
@@ -74,26 +83,26 @@ export default function TrackingScreen() {
         </Svg>
 
         {/* Floating ETA Badge */}
-        <View style={styles.floatingEta}>
+        <View style={[styles.floatingEta, { top: insets.top + 66 }]}>
           <Text style={{ color: Colors.primary, fontWeight: '800' }}>⚡</Text>
           <Text style={styles.floatingEtaText}>Arriving in 11 Mins • 1.1 km away</Text>
         </View>
       </View>
 
       {/* Technician Bottom Drawer Card */}
-      <View style={styles.bottomDrawer}>
+      <View style={[styles.bottomDrawer, { paddingBottom: Math.max(insets.bottom, 24) }]}>
         <View style={styles.drawerHandle} />
 
         <View style={styles.drawerHeader}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
             <Image source={{ uri: worker.avatar }} style={styles.workerAvatar} />
-            <View>
+            <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 <Text style={styles.workerName}>{worker.name}</Text>
                 <Text>🛡️</Text>
               </View>
               <Text style={styles.vehicleText}>{worker.vehicle}</Text>
-              <Text style={styles.workerSub}>Master Electrician • Aadhaar Verified</Text>
+              <Text style={styles.workerSub}>{worker.trade} • Aadhaar Verified</Text>
             </View>
           </View>
 
@@ -120,7 +129,7 @@ export default function TrackingScreen() {
           </TouchableOpacity>
         </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -131,7 +140,6 @@ const styles = StyleSheet.create({
   },
   floatingHeader: {
     position: 'absolute',
-    top: 14,
     left: 16,
     right: 16,
     zIndex: 50,
@@ -179,7 +187,6 @@ const styles = StyleSheet.create({
   },
   floatingEta: {
     position: 'absolute',
-    top: 66,
     alignSelf: 'center',
     backgroundColor: '#1E293B',
     paddingHorizontal: 16,
@@ -200,7 +207,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     padding: Spacing.lg,
-    paddingBottom: 24,
     elevation: 10
   },
   drawerHandle: {
@@ -215,6 +221,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
     marginBottom: 12
   },
   workerAvatar: {
@@ -223,6 +230,7 @@ const styles = StyleSheet.create({
     borderRadius: 25
   },
   workerName: {
+    flexShrink: 1,
     fontSize: 14,
     fontWeight: '800',
     color: Colors.textMain

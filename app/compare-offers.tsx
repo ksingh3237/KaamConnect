@@ -1,14 +1,23 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Image, Linking, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Linking, Alert, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Phone, Check, Star } from 'lucide-react-native';
+import { ArrowLeft, Phone } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../constants/theme';
 import { VERIFIED_WORKERS } from '../constants/mockData';
 import { useStore } from '../store/useStore';
 
+// Optional message a worker attached to their quote
+const OFFER_NOTES: Record<string, string> = {
+  w1: 'Nearby in Sec 22 Market. Carrying standard PVC pipes & sealant tools.'
+};
+
 export default function CompareOffersScreen() {
   const router = useRouter();
   const { setActiveBooking } = useStore();
+
+  const offerCount = VERIFIED_WORKERS.length;
+  const fastestId = VERIFIED_WORKERS.reduce((a, b) => (b.etaMinutes < a.etaMinutes ? b : a)).id;
 
   const handleCall = (phone: string, name: string) => {
     Alert.alert('Direct Phone Call', `Call ${name} directly at ${phone}?`, [
@@ -34,12 +43,17 @@ export default function CompareOffersScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.headerBar}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/post-job')}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
             <ArrowLeft color={Colors.textMain} size={20} />
           </TouchableOpacity>
-          <View>
+          <View style={styles.headerText}>
             <Text style={styles.headerTitle}>Compare Incoming Offers</Text>
-            <Text style={styles.headerSub}>3 Verified Workers Responded</Text>
+            <Text style={styles.headerSub}>{offerCount} Verified Workers Responded</Text>
           </View>
           <View style={styles.liveBadge}><Text style={styles.liveText}>LIVE OFFERS</Text></View>
         </View>
@@ -51,110 +65,69 @@ export default function CompareOffersScreen() {
             <Text style={styles.recapTitle}>Kitchen Sink Under-pipe Burst</Text>
             <Text style={styles.recapSub}>Sector 22-B, Chandigarh • Posted 12m ago</Text>
           </View>
-          <View style={styles.offersTag}><Text style={styles.offersTagText}>3 Offers</Text></View>
+          <View style={styles.offersTag}><Text style={styles.offersTagText}>{offerCount} Offers</Text></View>
         </View>
 
         <Text style={styles.sectionTitle}>Select an Artisan & Confirm Arrival:</Text>
 
-        {/* 3 Offers */}
+        {/* Offers */}
         <View style={{ gap: 14 }}>
-          {/* Pro 1: Rajesh Kumar */}
-          <View style={[styles.workerCard, { borderColor: Colors.primary, borderWidth: 2 }]}>
-            <View style={styles.fastestBadge}>
-              <Text style={styles.fastestText}>FASTEST ARRIVAL (12 MIN)</Text>
-            </View>
+          {VERIFIED_WORKERS.map((worker) => {
+            const isFastest = worker.id === fastestId;
+            const note = OFFER_NOTES[worker.id];
+            return (
+              <View key={worker.id} style={[styles.workerCard, isFastest && styles.workerCardFastest]}>
+                {isFastest && (
+                  <View style={styles.fastestBadge}>
+                    <Text style={styles.fastestText}>FASTEST ARRIVAL ({worker.etaMinutes} MIN)</Text>
+                  </View>
+                )}
 
-            <View style={styles.workerTop}>
-              <Image source={{ uri: VERIFIED_WORKERS[0].avatar }} style={styles.avatar} />
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={styles.workerName}>{VERIFIED_WORKERS[0].name}</Text>
-                  <Text>🛡️</Text>
+                <View style={styles.workerTop}>
+                  <Image source={{ uri: worker.avatar }} style={styles.avatar} />
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={styles.workerName}>{worker.name}</Text>
+                      <Text>🛡️</Text>
+                    </View>
+                    <Text style={styles.workerTrade}>{worker.trade}</Text>
+                    <View style={styles.metaRow}>
+                      <Text style={styles.ratingText}>⭐ {worker.rating} ({worker.reviewsCount})</Text>
+                      <Text style={styles.metaDim}>📍 {worker.distance.replace(' away', '')}</Text>
+                      <Text style={styles.metaDim}>⏱️ {worker.etaMinutes} Min ETA</Text>
+                    </View>
+                  </View>
                 </View>
-                <Text style={styles.workerTrade}>{VERIFIED_WORKERS[0].trade}</Text>
-                <View style={styles.metaRow}>
-                  <Text style={styles.ratingText}>⭐ 4.9 (420)</Text>
-                  <Text style={styles.metaDim}>📍 0.9 km</Text>
-                  <Text style={styles.metaDim}>⏱️ 12 Min ETA</Text>
-                </View>
-              </View>
-            </View>
 
-            <View style={styles.quoteMsgBox}>
-              <Text style={styles.quoteMsgText}>
-                💬 "Nearby in Sec 22 Market. Carrying standard PVC pipes & sealant tools."
-              </Text>
-            </View>
+                {note && (
+                  <View style={styles.quoteMsgBox}>
+                    <Text style={styles.quoteMsgText}>💬 "{note}"</Text>
+                  </View>
+                )}
 
-            <View style={styles.workerBottom}>
-              <View>
-                <Text style={styles.feeLabel}>Offered Visit Fee</Text>
-                <Text style={styles.feeAmount}>
-                  ₹200 <Text style={{ color: Colors.primary, fontSize: 10 }}>(0% App Fee)</Text>
-                </Text>
-              </View>
+                <View style={styles.workerBottom}>
+                  <View>
+                    <Text style={styles.feeLabel}>Offered Visit Fee</Text>
+                    <Text style={styles.feeAmount}>
+                      ₹{worker.visitingFee}
+                      {isFastest && <Text style={{ color: Colors.primary, fontSize: 10 }}> (0% App Fee)</Text>}
+                    </Text>
+                  </View>
 
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <TouchableOpacity
-                  style={styles.callBtn}
-                  onPress={() => handleCall(VERIFIED_WORKERS[0].phone, VERIFIED_WORKERS[0].name)}
-                >
-                  <Phone color="#FFFFFF" size={13} />
-                  <Text style={styles.callBtnText}>Direct Call</Text>
-                </TouchableOpacity>
+                  <View style={styles.actionGroup}>
+                    <TouchableOpacity style={styles.callBtn} onPress={() => handleCall(worker.phone, worker.name)}>
+                      <Phone color="#FFFFFF" size={13} />
+                      <Text style={styles.callBtnText}>{isFastest ? 'Direct Call' : 'Call'}</Text>
+                    </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={styles.acceptBtn}
-                  onPress={() => handleAccept(VERIFIED_WORKERS[0])}
-                >
-                  <Text style={styles.acceptBtnText}>Accept Offer ✓</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-
-          {/* Pro 2: Gurpreet Singh */}
-          <View style={styles.workerCard}>
-            <View style={styles.workerTop}>
-              <Image source={{ uri: VERIFIED_WORKERS[1].avatar }} style={styles.avatar} />
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={styles.workerName}>{VERIFIED_WORKERS[1].name}</Text>
-                  <Text>🛡️</Text>
-                </View>
-                <Text style={styles.workerTrade}>{VERIFIED_WORKERS[1].trade}</Text>
-                <View style={styles.metaRow}>
-                  <Text style={styles.ratingText}>⭐ 4.8 (312)</Text>
-                  <Text style={styles.metaDim}>📍 1.4 km</Text>
-                  <Text style={styles.metaDim}>⏱️ 18 Min ETA</Text>
+                    <TouchableOpacity style={styles.acceptBtn} onPress={() => handleAccept(worker)}>
+                      <Text style={styles.acceptBtnText}>{isFastest ? 'Accept Offer ✓' : 'Accept'}</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
-            </View>
-
-            <View style={styles.workerBottom}>
-              <View>
-                <Text style={styles.feeLabel}>Offered Visit Fee</Text>
-                <Text style={styles.feeAmount}>₹250</Text>
-              </View>
-
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <TouchableOpacity
-                  style={styles.callBtn}
-                  onPress={() => handleCall(VERIFIED_WORKERS[1].phone, VERIFIED_WORKERS[1].name)}
-                >
-                  <Phone color="#FFFFFF" size={13} />
-                  <Text style={styles.callBtnText}>Call</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.acceptBtn}
-                  onPress={() => handleAccept(VERIFIED_WORKERS[1])}
-                >
-                  <Text style={styles.acceptBtnText}>Accept</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
+            );
+          })}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -184,6 +157,10 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     alignItems: 'center',
     justifyContent: 'center'
+  },
+  headerText: {
+    flex: 1,
+    marginHorizontal: 10
   },
   headerTitle: {
     fontSize: 14,
@@ -249,6 +226,10 @@ const styles = StyleSheet.create({
     borderRadius: Radius.xl,
     padding: 14
   },
+  workerCardFastest: {
+    borderColor: Colors.primary,
+    borderWidth: 2
+  },
   fastestBadge: {
     position: 'absolute',
     top: -10,
@@ -274,6 +255,7 @@ const styles = StyleSheet.create({
     borderRadius: 24
   },
   workerName: {
+    flexShrink: 1,
     fontSize: 13,
     fontWeight: '800',
     color: Colors.textMain
@@ -285,7 +267,9 @@ const styles = StyleSheet.create({
   },
   metaRow: {
     flexDirection: 'row',
-    gap: 8,
+    flexWrap: 'wrap',
+    columnGap: 8,
+    rowGap: 2,
     marginTop: 2
   },
   ratingText: {
@@ -310,8 +294,10 @@ const styles = StyleSheet.create({
   },
   workerBottom: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
     paddingTop: 8,
     borderTopWidth: 1,
     borderStyle: 'dashed',
@@ -325,6 +311,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     color: Colors.textMain
+  },
+  actionGroup: {
+    flexDirection: 'row',
+    gap: 8,
+    marginLeft: 'auto'
   },
   callBtn: {
     backgroundColor: Colors.primary,

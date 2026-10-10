@@ -5,16 +5,22 @@ import { useRouter } from 'expo-router';
 import { ArrowLeft, CheckCircle2, QrCode, Phone, ShieldCheck, Zap } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../constants/theme';
 import { VERIFIED_WORKERS } from '../constants/mockData';
+import { useStore } from '../store/useStore';
 
 export default function JobProgressScreen() {
   const router = useRouter();
-  const worker = VERIFIED_WORKERS[0];
+  const { activeBooking } = useStore();
+  const worker = activeBooking ?? VERIFIED_WORKERS[0];
+  const upiId = `${worker.name.split(' ')[0].toLowerCase()}.tricity@upi`;
   const [paymentDone, setPaymentDone] = useState(false);
 
   const handlePayment = (mode: string) => {
+    if (paymentDone) return;
     setPaymentDone(true);
     setTimeout(() => {
       router.push('/rating');
+      // Re-enable the buttons in case the user comes back from the rating screen
+      setPaymentDone(false);
     }, 400);
   };
 
@@ -25,14 +31,16 @@ export default function JobProgressScreen() {
         <View style={styles.headerLeft}>
           <TouchableOpacity
             style={styles.backBtn}
-            onPress={() => router.push('/tracking')}
+            onPress={() => router.canGoBack() ? router.back() : router.replace('/tracking')}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
           >
             <ArrowLeft color="#1E293B" size={20} />
           </TouchableOpacity>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>Job Progress & Completion</Text>
-            <Text style={styles.headerSubtitle}>Booking #KC-88421 • Direct Settlement</Text>
+            <Text style={styles.headerSubtitle} numberOfLines={1}>Booking #KC-88421 • Direct Settlement</Text>
           </View>
         </View>
         <View style={styles.statusPill}>
@@ -136,7 +144,7 @@ export default function JobProgressScreen() {
         {/* Transparent Bill Breakdown */}
         <View style={[styles.card, styles.billCard]}>
           <View style={styles.billHeader}>
-            <Text style={styles.sectionTitle}>Transparent Bill (बिल विवरण)</Text>
+            <Text style={[styles.sectionTitle, { flex: 1, marginBottom: 0 }]}>Transparent Bill (बिल विवरण)</Text>
             <View style={styles.zeroCutBadge}>
               <Text style={styles.zeroCutBadgeText}>0% APP CUT</Text>
             </View>
@@ -172,7 +180,7 @@ export default function JobProgressScreen() {
         <View style={styles.qrCard}>
           <Text style={styles.qrTitle}>Scan & Pay Directly to {worker.name}</Text>
           <Text style={styles.qrSubtitle}>
-            UPI ID: <Text style={{ fontWeight: '800' }}>rajesh.tricity@upi</Text> (GPay / PhonePe / Paytm / Cash)
+            UPI ID: <Text style={{ fontWeight: '800' }}>{upiId}</Text> (GPay / PhonePe / Paytm / Cash)
           </Text>
 
           <View style={styles.qrFrame}>
@@ -182,8 +190,9 @@ export default function JobProgressScreen() {
 
           <View style={styles.actionRow}>
             <TouchableOpacity
-              style={[styles.payBtn, styles.payBtnPrimary]}
+              style={[styles.payBtn, styles.payBtnPrimary, paymentDone && styles.payBtnDisabled]}
               onPress={() => handlePayment('UPI')}
+              disabled={paymentDone}
               activeOpacity={0.8}
             >
               <Zap color="#FFFFFF" size={16} />
@@ -191,8 +200,9 @@ export default function JobProgressScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.payBtn, styles.payBtnCash]}
+              style={[styles.payBtn, styles.payBtnCash, paymentDone && styles.payBtnDisabled]}
               onPress={() => handlePayment('Cash')}
+              disabled={paymentDone}
               activeOpacity={0.8}
             >
               <Text style={styles.payBtnCashText}>Paid Cash 💵</Text>
@@ -213,6 +223,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: Spacing.sm,
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
     backgroundColor: '#FFFFFF',
@@ -220,6 +231,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border
   },
   headerLeft: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md
@@ -284,6 +296,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   workerName: {
+    flexShrink: 1,
     fontSize: 14,
     fontWeight: '800',
     color: Colors.textMain
@@ -399,6 +412,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: Spacing.sm,
     marginBottom: Spacing.sm
   },
   zeroCutBadge: {
@@ -415,9 +429,11 @@ const styles = StyleSheet.create({
   billRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: Spacing.sm,
     paddingVertical: 4
   },
   billItem: {
+    flex: 1,
     fontSize: 12,
     color: Colors.textMain
   },
@@ -429,10 +445,12 @@ const styles = StyleSheet.create({
   billRowHighlight: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: Spacing.sm,
     paddingVertical: 6,
     marginTop: 4
   },
   billHighlightText: {
+    flex: 1,
     fontSize: 12,
     fontWeight: '700',
     color: Colors.primary
@@ -446,12 +464,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: Spacing.sm,
     paddingTop: Spacing.md,
     marginTop: 6,
     borderTopWidth: 2,
     borderTopColor: Colors.border
   },
   totalLabel: {
+    flex: 1,
     fontSize: 14,
     fontWeight: '800',
     color: Colors.textMain
@@ -473,6 +493,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     color: Colors.textMain,
+    textAlign: 'center',
     marginBottom: 2
   },
   qrSubtitle: {
@@ -516,7 +537,11 @@ const styles = StyleSheet.create({
   payBtnPrimary: {
     backgroundColor: Colors.primary
   },
+  payBtnDisabled: {
+    opacity: 0.5
+  },
   payBtnText: {
+    flexShrink: 1,
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '800'

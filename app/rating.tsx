@@ -5,10 +5,13 @@ import { useRouter } from 'expo-router';
 import { ArrowLeft, Star, ArrowRight, ShieldCheck, Check } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../constants/theme';
 import { VERIFIED_WORKERS } from '../constants/mockData';
+import { useStore } from '../store/useStore';
+import { resetTo } from '../utils/navigation';
 
 export default function RatingReviewScreen() {
   const router = useRouter();
-  const worker = VERIFIED_WORKERS[0];
+  const { activeBooking } = useStore();
+  const worker = activeBooking ?? VERIFIED_WORKERS[0];
 
   const [rating, setRating] = useState(5);
   const [selectedTags, setSelectedTags] = useState<string[]>([
@@ -36,7 +39,7 @@ export default function RatingReviewScreen() {
   };
 
   const handleSubmit = () => {
-    router.push('/(tabs)/activity');
+    resetTo('/(tabs)/activity');
   };
 
   return (
@@ -46,12 +49,14 @@ export default function RatingReviewScreen() {
         <View style={styles.headerLeft}>
           <TouchableOpacity
             style={styles.backBtn}
-            onPress={() => router.push('/job-progress')}
+            onPress={() => router.canGoBack() ? router.back() : router.replace('/job-progress')}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
           >
             <ArrowLeft color="#1E293B" size={20} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Rate & Review / रेटिंग दें</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>Rate & Review / रेटिंग दें</Text>
         </View>
         <View style={styles.jobPill}>
           <Text style={styles.jobPillText}>JOB #88421</Text>
@@ -180,6 +185,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: Spacing.sm,
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
     backgroundColor: '#FFFFFF',
@@ -187,6 +193,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border
   },
   headerLeft: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md
@@ -200,6 +207,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   headerTitle: {
+    flex: 1,
     fontSize: 15,
     fontWeight: '800',
     color: Colors.textMain
@@ -252,6 +260,7 @@ const styles = StyleSheet.create({
     marginBottom: 2
   },
   workerName: {
+    flexShrink: 1,
     fontSize: 18,
     fontWeight: '800',
     color: Colors.textMain
@@ -264,6 +273,7 @@ const styles = StyleSheet.create({
   jobSummaryText: {
     fontSize: 11,
     color: Colors.textMuted,
+    textAlign: 'center',
     marginTop: 4
   },
   card: {
@@ -337,6 +347,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: Spacing.sm,
     marginBottom: Spacing.md
   },
   tipTitle: {
@@ -387,6 +398,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     borderRadius: Radius.lg,
     paddingVertical: 16,
+    paddingHorizontal: Spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -398,6 +410,8 @@ const styles = StyleSheet.create({
     elevation: 4
   },
   submitBtnText: {
+    flexShrink: 1,
+    textAlign: 'center',
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '800'

@@ -1,15 +1,16 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ShieldCheck, Zap, Droplet, Wind, Truck, ArrowRight, Check, CheckCircle2, ChevronRight, CheckCircle, Shield } from 'lucide-react-native';
-import { useStore } from '../store/useStore';
+import { ShieldCheck, Zap, Droplet, Wind, Truck, ArrowRight, Check, CheckCircle2, Shield } from 'lucide-react-native';
+import LanguageToggle, { FULL_LANG_LABELS } from '../components/LanguageToggle';
 
 export default function SplashScreen() {
   const router = useRouter();
-  const { language, setLanguage } = useStore();
+  const insets = useSafeAreaInsets();
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Top Header Bar: Status Indicator & Language Pill */}
         <View style={styles.topBar}>
@@ -21,26 +22,7 @@ export default function SplashScreen() {
             <Text style={styles.livePillText}>Tricity Live • चंडीगढ़ • मोहाली • पंचकूला</Text>
           </View>
 
-          <View style={styles.langSelector}>
-            <TouchableOpacity
-              style={[styles.langBtn, language === 'en' && styles.langBtnActive]}
-              onPress={() => setLanguage('en')}
-            >
-              <Text style={[styles.langText, language === 'en' && styles.langTextActive]}>EN</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.langBtn, language === 'hi' && styles.langBtnActive]}
-              onPress={() => setLanguage('hi')}
-            >
-              <Text style={[styles.langText, language === 'hi' && styles.langTextActive]}>हिंदी</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.langBtn, language === 'pa' && styles.langBtnActive]}
-              onPress={() => setLanguage('pa')}
-            >
-              <Text style={[styles.langText, language === 'pa' && styles.langTextActive]}>ਪੰਜਾਬੀ</Text>
-            </TouchableOpacity>
-          </View>
+          <LanguageToggle labels={FULL_LANG_LABELS} />
         </View>
 
         {/* Brand Hero Section */}
@@ -203,13 +185,13 @@ export default function SplashScreen() {
       </ScrollView>
 
       {/* Sticky / Fixed Bottom Action Section */}
-      <View style={styles.footerBar}>
+      <View style={[styles.footerBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <TouchableOpacity style={styles.primaryBtn} onPress={() => router.push('/language')} activeOpacity={0.9}>
           <ShieldCheck color="#d1fae5" size={20} />
           <Text style={styles.primaryBtnText}>Get Started • शुरू करें</Text>
           <ArrowRight color="#FFFFFF" size={20} strokeWidth={2.5} />
         </TouchableOpacity>
-        
+
         <View style={styles.footnoteContainer}>
           <ShieldCheck color="#059669" size={16} strokeWidth={2} />
           <Text style={styles.footnote}>
@@ -235,6 +217,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
     paddingTop: 4,
     paddingBottom: 12
   },
@@ -246,8 +229,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 9999,
+    borderRadius: 16,
     gap: 6,
+    flexShrink: 1,
     shadowColor: '#000',
     shadowOpacity: 0.05,
     shadowOffset: { width: 0, height: 1 },
@@ -271,42 +255,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#065f46',
-    letterSpacing: -0.2
-  },
-  langSelector: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 9999,
-    padding: 2,
-    borderWidth: 1,
-    borderColor: 'rgba(226, 232, 240, 0.9)',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 1 },
-    shadowRadius: 2,
-    elevation: 1
-  },
-  langBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 9999
-  },
-  langBtnActive: {
-    backgroundColor: '#059669',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 1 },
-    shadowRadius: 2,
-    elevation: 1
-  },
-  langText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#475569'
-  },
-  langTextActive: {
-    fontWeight: '700',
-    color: '#FFFFFF'
+    letterSpacing: -0.2,
+    flexShrink: 1
   },
   brandHero: {
     alignItems: 'center',
@@ -416,8 +366,10 @@ const styles = StyleSheet.create({
   },
   prosHeader: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 6,
     marginBottom: 12
   },
   prosTitle: {
@@ -530,9 +482,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
     marginBottom: 2
   },
   bulletTitle: {
+    flex: 1,
     fontSize: 12,
     fontWeight: '700',
     color: '#0f172a'
@@ -560,7 +514,6 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(226, 232, 240, 0.9)',
     paddingTop: 12,
     paddingHorizontal: 16,
-    paddingBottom: Platform.OS === 'web' ? 16 : 30,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.04,
@@ -597,6 +550,7 @@ const styles = StyleSheet.create({
     marginTop: 8
   },
   footnote: {
+    flexShrink: 1,
     fontSize: 11,
     fontWeight: '500',
     color: '#64748b'
