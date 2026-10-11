@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Switch, Platform } from 'react-native';
+import React, { useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Switch, Platform, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, User, Verified, Camera, CameraIcon, BadgeInfo, UserCircle, MapPin, Building, Mic, PhoneCall, ShieldCheck, ArrowRight, CheckCircle2 } from 'lucide-react-native';
@@ -7,28 +7,90 @@ import LanguageToggle, { FULL_LANG_LABELS } from '../components/LanguageToggle';
 import ModeSwitchCard from '../components/ModeSwitchCard';
 import { useStore } from '../store/useStore';
 import { resetTo } from '../utils/navigation';
+import { useSession } from '../store/useSession';
+import { useAsync } from '../api/useAsync';
+import { getLocations, putCustomer } from '../api/endpoints';
+import { isApiError, userMessage } from '../api/errors';
+import { uploadFile } from '../api/upload';
+import { pickImage } from '../utils/pickImage';
+import { currentPosition, type Position } from '../utils/position';
+import { ErrorBlock, LoadingBlock } from '../components/StateBlocks';
 
 export default function CustomerOnboardingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { customerName, mobile, selectedSector, setSelectedSector, setRole } = useStore();
-  const [name, setName] = useState(customerName || 'Sunita Sharma');
+  const { selectedAreaId, setSelectedSector, setRole } = useStore();
+  const { customerProfile, user, refreshMe } = useSession();
+  const locations = useAsync(() => getLocations(), [], { reloadOnFocus: false });
+
+  // Coming back from "Change location" on Home: show what is already saved
+  const existing = customerProfile;
+  const primary = existing?.addresses.find((a) => a.isPrimary) ?? existing?.addresses[0] ?? null;
+
+  const [name, setName] = useState(existing?.fullName ?? '');
   const [nameError, setNameError] = useState(false);
-  const [address, setAddress] = useState('House #1402, Near Subhash Park');
-  const [directCall, setDirectCall] = useState(true);
-  const [commLang, setCommLang] = useState('hi');
-  const [detectedLoc, setDetectedLoc] = useState(false);
+  const [address, setAddress] = useState(primary?.line ?? '');
+  const [areaId, setAreaId] = useState<number | null>(selectedAreaId ?? primary?.area.id ?? null);
+  const [directCall, setDirectCall] = useState(existing?.allowDirectCalls ?? true);
+  const [commLang, setCommLang] = useState<'en' | 'hi' | 'pa'>(existing?.commLanguage ?? 'hi');
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [photoKey, setPhotoKey] = useState<string | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [coords, setCoords] = useState<Position | null>(null);
+  const [gps, setGps] = useState<'idle' | 'busy' | 'done' | 'unavailable'>('idle');
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const scrollRef = useRef<ScrollView>(null);
   const personalCardY = useRef(0);
 
-  // Store holds "Sector 22, Chandigarh" while the chips are labelled "Sec 22"
-  const activeChip = selectedSector.split(',')[0].replace('Sector', 'Sec').trim();
+  // "Sector 22, Chandigarh" for the chosen area, built from the server's list
+  const areaLabel = useMemo(() => {
+    for (const city of locations.data ?? []) {
+      const area = city.areas.find((a) => a.id === areaId);
+      if (area) return `${area.name}, ${city.name.replace(/\s*\(.*\)/, '')}`;
+    }
+    return '';
+  }, [locations.data, areaId]);
 
-  const handleGpsDetect = () => {
-    setDetectedLoc(true);
-    setSelectedSector('Sector 22');
-    setAddress('Booth 45, Near Kiran Cinema, Sector 22-B');
+  const displayPhone = (user?.phone ?? '').replace(/^\+91/, '');
+
+  const chooseArea = (id: number) => {
+    setAreaId(id);
+    setFormError(null);
+    const city = (locations.data ?? []).find((c) => c.areas.some((a) => a.id === id));
+    const area = city?.areas.find((a) => a.id === id);
+    if (city && area) setSelectedSector(`${area.name}, ${city.name.replace(/\s*\(.*\)/, '')}`, id);
+  };
+
+  // Captures real coordinates for the address when the device can give them. It does not pick a sector:
+  // that needs the area's own coordinates, which are not loaded yet, so the person still taps their sector.
+  const handleGpsDetect = async () => {
+    setGps('busy');
+    try {
+      setCoords(await currentPosition());
+      setGps('done');
+    } catch {
+      setGps('unavailable');
+    }
+  };
+
+  const handlePickPhoto = async () => {
+    if (photoBusy) return;
+    setFormError(null);
+    try {
+      const picked = await pickImage();
+      if (!picked) return;
+      setPhotoBusy(true);
+      setPhotoUri(picked.uri);
+      setPhotoKey(await uploadFile('PROFILE_PHOTO', picked));
+    } catch (error) {
+      setPhotoUri(null);
+      setPhotoKey(null);
+      setFormError(error instanceof Error && !isApiError(error) ? error.message : userMessage(error));
+    } finally {
+      setPhotoBusy(false);
+    }
   };
 
   // replace (not push) so Back from the other setup screen returns to Role Selection
@@ -37,21 +99,44 @@ export default function CustomerOnboardingScreen() {
     router.replace('/worker-onboarding');
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
+    if (saving || photoBusy) return;
+    setFormError(null);
     if (!name.trim()) {
       setNameError(true);
       scrollRef.current?.scrollTo({ y: personalCardY.current, animated: true });
       return;
     }
-    // In a real app, save to DB here.
-    resetTo('/(tabs)/home');
+    if (areaId === null) {
+      setFormError('Choose your sector below. / नीचे अपना सेक्टर चुनें');
+      return;
+    }
+    if (!address.trim()) {
+      setFormError('Enter your house / flat / landmark. / घर या फ़्लैट का पता लिखें');
+      return;
+    }
+    setSaving(true);
+    try {
+      await putCustomer({
+        fullName: name.trim(),
+        ...(photoKey ? { photoKey } : {}),
+        commLanguage: commLang,
+        allowDirectCalls: directCall,
+        address: { areaId, line: address.trim(), ...(coords ?? {}) },
+      });
+      await refreshMe();
+      setRole('customer');
+      resetTo('/(tabs)/home');
+    } catch (error) {
+      const fields = isApiError(error) ? error.details.map((d) => `${d.field}: ${d.issue}`).join('; ') : '';
+      setFormError(userMessage(error) + (fields ? ` (${fields})` : ''));
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const sectors = {
-    'CHANDIGARH': ['Sec 35', 'Sec 22', 'Sec 15', 'Sec 43'],
-    'MOHALI (SAS NAGAR)': ['Phase 7', 'Phase 3B2', 'Phase 5', 'Sec 70'],
-    'PANCHKULA': ['Sec 11', 'Sec 20', 'MDC Sec 4']
-  };
+  // The sector chips come from the server (GET /locations), grouped by city
+  const sectors: [string, { id: number; name: string }[]][] = (locations.data ?? []).map((c) => [c.name.toUpperCase(), c.areas]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -105,10 +190,17 @@ export default function CustomerOnboardingScreen() {
 
         {/* Avatar Upload */}
         <View style={styles.avatarCard}>
-          <TouchableOpacity style={styles.avatarCircleWrap} activeOpacity={0.8}>
-            <View style={styles.avatarCircle}>
-              <Camera color="#6c7a70" size={36} strokeWidth={1.5} />
-              <Text style={styles.avatarUploadText}>Upload</Text>
+          <TouchableOpacity style={styles.avatarCircleWrap} activeOpacity={0.8} onPress={() => void handlePickPhoto()} disabled={photoBusy} accessibilityRole="button" accessibilityLabel="Add profile photo">
+            <View style={[styles.avatarCircle, { overflow: 'hidden' }]}>
+              {photoUri ? (
+                <Image source={{ uri: photoUri }} style={{ width: 96, height: 96, opacity: photoBusy ? 0.5 : 1 }} />
+              ) : (
+                <>
+                  <Camera color="#6c7a70" size={36} strokeWidth={1.5} />
+                  <Text style={styles.avatarUploadText}>Upload</Text>
+                </>
+              )}
+              {photoBusy && <ActivityIndicator color="#00b074" style={{ position: 'absolute' }} />}
             </View>
             <View style={styles.avatarBadge}>
               <CameraIcon color="#ffffff" size={18} strokeWidth={2.5} />
@@ -166,7 +258,7 @@ export default function CustomerOnboardingScreen() {
             <View style={[styles.inputWrap, { backgroundColor: '#f0f3ff', padding: 14 }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
                 <Text style={{ fontSize: 20 }}>🇮🇳</Text>
-                <Text style={styles.mobileText}>+91 {mobile || '98765 43210'}</Text>
+                <Text style={styles.mobileText}>+91 {displayPhone}</Text>
                 <View style={styles.primaryBadge}>
                   <Text style={styles.primaryBadgeText}>Primary</Text>
                 </View>
@@ -188,9 +280,17 @@ export default function CustomerOnboardingScreen() {
             </View>
           </View>
 
-          <TouchableOpacity style={styles.gpsBtn} onPress={handleGpsDetect} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.gpsBtn} onPress={() => void handleGpsDetect()} activeOpacity={0.8} disabled={gps === 'busy'}>
             <MapPin color="#006c46" size={20} strokeWidth={2} />
-            <Text style={styles.gpsBtnText}>{detectedLoc ? 'Sector 22-B Detected ✓' : 'Auto-Detect GPS Location / वर्तमान स्थान'}</Text>
+            <Text style={styles.gpsBtnText}>
+              {gps === 'busy'
+                ? 'Finding your location… / स्थान खोज रहे हैं…'
+                : gps === 'done'
+                  ? 'Location captured ✓ (now tap your sector)'
+                  : gps === 'unavailable'
+                    ? 'Location unavailable here — tap your sector below'
+                    : 'Auto-Detect GPS Location / वर्तमान स्थान'}
+            </Text>
           </TouchableOpacity>
 
           <View style={styles.inputGroup}>
@@ -213,21 +313,25 @@ export default function CustomerOnboardingScreen() {
               <Text style={styles.hintText}>Tap to pinpoint</Text>
             </View>
 
-            {Object.entries(sectors).map(([city, list]) => (
+            {locations.loading && <LoadingBlock label="Loading sectors… / सेक्टर लोड हो रहे हैं…" />}
+            {locations.error && !locations.data && <ErrorBlock message={locations.error} onRetry={() => void locations.reload()} />}
+            {sectors.map(([city, list]) => (
               <View key={city} style={{ marginTop: 10 }}>
                 <Text style={styles.cityHeading}>{city}</Text>
                 <View style={styles.chipsWrap}>
-                  {list.map(sec => {
-                    const isActive = activeChip === sec;
+                  {list.map((area) => {
+                    const isActive = areaId === area.id;
                     return (
                       <TouchableOpacity
-                        key={sec}
+                        key={area.id}
                         style={[styles.sectorChip, isActive && styles.sectorChipActive]}
-                        onPress={() => setSelectedSector(sec)}
+                        onPress={() => chooseArea(area.id)}
                         activeOpacity={0.8}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isActive }}
                       >
                         <Text style={[styles.sectorChipText, isActive && styles.sectorChipTextActive]}>
-                          {sec} {isActive ? '✓' : ''}
+                          {area.name.replace('Sector', 'Sec')} {isActive ? '✓' : ''}
                         </Text>
                       </TouchableOpacity>
                     );
@@ -242,7 +346,7 @@ export default function CustomerOnboardingScreen() {
             <View style={styles.mapOverlay}>
               <View style={styles.mapTextRow}>
                 <MapPin color="#53de9e" size={20} strokeWidth={2.5} />
-                <Text style={styles.mapText}>{detectedLoc ? 'Sector 22-B Market Area, Chandigarh' : 'Sector 22, Chandigarh, India'}</Text>
+                <Text style={styles.mapText}>{areaLabel ? `${areaLabel}, India` : 'Select your sector above'}</Text>
               </View>
             </View>
           </View>
@@ -308,8 +412,13 @@ export default function CustomerOnboardingScreen() {
 
       {/* Bottom Sticky Action Container */}
       <View style={[styles.footerWrap, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-        <TouchableOpacity style={styles.primaryBtn} onPress={handleComplete} activeOpacity={0.9}>
-          <Text style={styles.primaryBtnText}>Save & Go to Marketplace • प्रोफ़ाइल पूरा करें</Text>
+        {formError && (
+          <Text style={[styles.errorText, { textAlign: 'center', marginBottom: 8 }]} accessibilityRole="alert">
+            {formError}
+          </Text>
+        )}
+        <TouchableOpacity style={[styles.primaryBtn, (saving || photoBusy) && { opacity: 0.7 }]} onPress={() => void handleComplete()} activeOpacity={0.9} disabled={saving || photoBusy}>
+          <Text style={styles.primaryBtnText}>{saving ? 'Saving… / सहेज रहे हैं…' : 'Save & Go to Marketplace • प्रोफ़ाइल पूरा करें'}</Text>
           <ArrowRight color="#ffffff" size={22} strokeWidth={2.5} />
         </TouchableOpacity>
 

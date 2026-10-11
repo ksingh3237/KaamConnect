@@ -4,16 +4,21 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Wrench, Volume2, ChevronRight, Check, ArrowRight, ShieldCheck, Info } from 'lucide-react-native';
 import { useStore } from '../store/useStore';
+import { useSession } from '../store/useSession';
+import { patchMe } from '../api/endpoints';
 
 export default function LanguageScreen() {
   const router = useRouter();
   const { language, setLanguage } = useStore();
+  const signedIn = useSession((st) => st.status === 'signedIn');
   const insets = useSafeAreaInsets();
   // 'app' when opened from Profile or the Home menu by a signed-in user
   const { from } = useLocalSearchParams<{ from?: string }>();
 
   const handleContinue = () => {
     if (from === 'app' && router.canGoBack()) {
+      // Remember the choice on the account too (best effort: the app already switched)
+      if (signedIn) patchMe({ language }).catch(() => undefined);
       router.back();
     } else {
       router.push('/login');
