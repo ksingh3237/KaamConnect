@@ -1,42 +1,70 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Linking, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Play, Send } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../constants/theme';
-import { WORKER_ACTIVE_LEADS } from '../constants/mockData';
+import { useAsync } from '../api/useAsync';
+import { getLead, sendOffer } from '../api/endpoints';
+import { isApiError, userMessage } from '../api/errors';
+import { notify } from '../utils/dialog';
+import { whenLabel } from '../utils/time';
+import { EmptyBlock, ErrorBlock, LoadingBlock } from '../components/StateBlocks';
+
+const ETAS = [
+  { minutes: 15, label: '15 Mins (Fast)' },
+  { minutes: 30, label: '30 Mins' },
+  { minutes: 45, label: '45 Mins' },
+];
 
 export default function LeadOfferScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();
-  // Show the lead that was tapped on the radar; fall back to the first one for direct links
-  const lead = WORKER_ACTIVE_LEADS.find((l) => l.id === id) ?? WORKER_ACTIVE_LEADS[0];
-  const isFirstLead = lead.id === WORKER_ACTIVE_LEADS[0].id;
-  const initials = lead.customer
+  const leadState = useAsync(() => (id ? getLead(id) : Promise.reject(new Error('No lead selected'))), [id], { reloadOnFocus: false });
+  const lead = leadState.data;
+  const initials = (lead?.customerName ?? '')
     .split(' ')
-    .filter((word) => !word.endsWith('.'))
+    .filter((word) => word && !word.endsWith('.'))
     .map((word) => word[0])
     .join('')
     .slice(0, 2)
     .toUpperCase();
 
-  const [fee, setFee] = useState('250');
+  const [fee, setFee] = useState('');
   const [feeError, setFeeError] = useState(false);
-  const [eta, setEta] = useState('15');
-  const [message, setMessage] = useState(isFirstLead ? 'I have PVC replacement pipes in stock. Can arrive in 15 mins.' : '');
+  const [eta, setEta] = useState(15);
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const alreadyQuoted = !!lead?.myOffer;
 
-  const handleSendOffer = () => {
+  // Start from the category's standard visit fee, or from the quote already sent
+  useEffect(() => {
+    if (!lead) return;
+    setFee(String(lead.myOffer?.visitFee ?? lead.baseVisitFee));
+    if (lead.myOffer) {
+      setEta(lead.myOffer.etaMinutes);
+      setMessage(lead.myOffer.message ?? '');
+    }
+  }, [lead]);
+
+  const handleSendOffer = async () => {
+    if (sending || !lead) return;
+    setFormError(null);
     if (!Number(fee)) {
       setFeeError(true);
       return;
     }
-    if (Platform.OS === 'web') {
-      window.alert(`✅ Quote Sent\n\nYour quote of ₹${fee} has been sent directly to ${lead.customer}. Customer will call or confirm arrival.`);
-      router.push('/tracking');
-    } else {
-      Alert.alert('✅ Quote Sent', `Your quote of ₹${fee} has been sent directly to ${lead.customer}. Customer will call or confirm arrival.`, [
-        { text: 'View Active Job', onPress: () => router.push('/tracking') }
-      ]);
+    setSending(true);
+    try {
+      await sendOffer(lead.id, { visitFee: Number(fee), etaMinutes: eta, ...(message.trim() ? { message: message.trim() } : {}) });
+      notify('✅ Quote Sent', `Your quote of ₹${fee} has been sent to ${lead.customerName}. You will see it here as accepted if they choose you.`);
+      router.replace('/(tabs)/leads');
+    } catch (error) {
+      const fields = isApiError(error) ? error.details.map((d) => `${d.field}: ${d.issue}`).join('; ') : '';
+      setFormError(userMessage(error) + (fields ? ` (${fields})` : ''));
+    } finally {
+      setSending(false);
     }
   };
 
@@ -57,53 +85,59 @@ export default function LeadOfferScreen() {
             <Text style={styles.headerTitle}>Lead Details & Send Quote</Text>
             <Text style={styles.headerSub}>Direct Customer Connect • 0% Fee</Text>
           </View>
-          {lead.urgency.startsWith('Immediate') && (
+          {lead?.urgency === 'IMMEDIATE' && (
             <View style={styles.urgentBadge}><Text style={styles.urgentText}>URGENT</Text></View>
           )}
         </View>
+
+        {!id && <EmptyBlock title="No lead selected" hint="Open a lead from the radar. / रडार से लीड खोलें" />}
+        {id && leadState.loading && <LoadingBlock />}
+        {leadState.error && !leadState.data && <ErrorBlock message={leadState.error} onRetry={() => void leadState.reload()} />}
+        {lead && (
+          <>
 
         {/* Lead Details Card */}
         <View style={styles.card}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
             <View style={{ flex: 1 }}>
-              <View style={styles.catPill}><Text style={styles.catPillText}>{lead.category}</Text></View>
+              <View style={styles.catPill}><Text style={styles.catPillText}>{lead.category.title.en}</Text></View>
               <Text style={styles.leadTitle}>{lead.title}</Text>
             </View>
-            <View style={styles.distPill}><Text style={styles.distText}>{lead.distance}</Text></View>
+            <View style={styles.distPill}><Text style={styles.distText}>{lead.distanceKm !== null ? `${lead.distanceKm} km` : lead.areaName}</Text></View>
           </View>
 
           {/* Customer identity row */}
           <View style={styles.customerRow}>
             <View style={styles.custAvatar}><Text style={{ fontWeight: '800', color: Colors.tertiary }}>{initials}</Text></View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.custName}>{lead.customer}</Text>
-              <Text style={styles.custLoc}>📍 {lead.sector} • {lead.urgency}</Text>
+              <Text style={styles.custName}>{lead.customerName}</Text>
+              <Text style={styles.custLoc}>📍 {lead.areaName} • {lead.urgency === 'IMMEDIATE' ? 'Immediate' : lead.scheduledFor ? whenLabel(lead.scheduledFor) : lead.urgency.toLowerCase()}</Text>
             </View>
             <View style={styles.verifiedCustBadge}><Text style={styles.verifiedCustText}>Verified</Text></View>
           </View>
 
-          {/* Voice Memo Player */}
-          {lead.hasAudio && (
-            <TouchableOpacity
-              style={styles.voicePlayBox}
-              onPress={() => Alert.alert('🔊 Voice Note', 'Playing customer audio memo in Hindi...')}
-            >
+          {/* Voice note: opened in the device's own player */}
+          {lead.voiceNote && (
+            <TouchableOpacity style={styles.voicePlayBox} onPress={() => void Linking.openURL(lead.voiceNote!.url)} accessibilityRole="button">
               <View style={styles.playCircle}><Play color="#FFFFFF" size={16} /></View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.voicePlayTitle}>Customer Voice Note (14s)</Text>
-                <Text style={styles.voicePlaySub}>Recorded in Hindi • "Under sink pipe cracked..."</Text>
+                <Text style={styles.voicePlayTitle}>Customer Voice Note{lead.voiceNote.durationSec ? ` (${lead.voiceNote.durationSec}s)` : ''}</Text>
+                <Text style={styles.voicePlaySub}>Tap to listen</Text>
               </View>
             </TouchableOpacity>
           )}
 
-          <Text style={styles.leadNotes}>"{lead.notes}"</Text>
+          {lead.notes ? <Text style={styles.leadNotes}>"{lead.notes}"</Text> : null}
 
-          {/* Photo */}
-          <Text style={[styles.formLabel, { marginTop: 10, marginBottom: 4 }]}>Customer Attached Photo:</Text>
-          <Image
-            source={{ uri: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=400&auto=format&fit=crop&q=80' }}
-            style={styles.leadImg}
-          />
+          {/* Photos the customer attached */}
+          {lead.photoUrls.length > 0 && (
+            <>
+              <Text style={[styles.formLabel, { marginTop: 10, marginBottom: 4 }]}>Customer Attached Photos:</Text>
+              {lead.photoUrls.map((url) => (
+                <Image key={url} source={{ uri: url }} style={[styles.leadImg, { marginBottom: 8 }]} />
+              ))}
+            </>
+          )}
         </View>
 
         {/* Worker Quote Form */}
@@ -136,24 +170,11 @@ export default function LeadOfferScreen() {
           <View style={styles.formGroup}>
             <Text style={styles.formLabel}>How quickly can you arrive?</Text>
             <View style={{ flexDirection: 'row', gap: 6 }}>
-              <TouchableOpacity
-                style={[styles.etaBtn, eta === '15' && styles.etaBtnActive]}
-                onPress={() => setEta('15')}
-              >
-                <Text style={[styles.etaText, eta === '15' && styles.etaTextActive]}>15 Mins (Fast)</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.etaBtn, eta === '30' && styles.etaBtnActive]}
-                onPress={() => setEta('30')}
-              >
-                <Text style={[styles.etaText, eta === '30' && styles.etaTextActive]}>30 Mins</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.etaBtn, eta === '45' && styles.etaBtnActive]}
-                onPress={() => setEta('45')}
-              >
-                <Text style={[styles.etaText, eta === '45' && styles.etaTextActive]}>45 Mins</Text>
-              </TouchableOpacity>
+              {ETAS.map((e) => (
+                <TouchableOpacity key={e.minutes} style={[styles.etaBtn, eta === e.minutes && styles.etaBtnActive]} onPress={() => setEta(e.minutes)} accessibilityRole="button" accessibilityState={{ selected: eta === e.minutes }}>
+                  <Text style={[styles.etaText, eta === e.minutes && styles.etaTextActive]}>{e.label}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
 
@@ -170,10 +191,14 @@ export default function LeadOfferScreen() {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.sendQuoteBtn} onPress={handleSendOffer}>
-          <Send color="#FFFFFF" size={18} />
-          <Text style={styles.sendQuoteBtnText}>Send Direct Quote to Customer (0% Commission)</Text>
+        {formError && <Text style={[styles.errorText, { textAlign: 'center', marginBottom: 8 }]} accessibilityRole="alert">{formError}</Text>}
+        {lead.leadState === 'ACCEPTED' && <EmptyBlock title="This request is now yours" hint="Open it from Your active jobs on the leads page." />}
+        <TouchableOpacity style={[styles.sendQuoteBtn, (sending || lead.leadState !== 'NEW') && { opacity: 0.7 }]} onPress={() => void handleSendOffer()} disabled={sending || lead.leadState !== 'NEW'} accessibilityRole="button">
+          {sending ? <ActivityIndicator color="#FFFFFF" /> : <Send color="#FFFFFF" size={18} />}
+          <Text style={styles.sendQuoteBtnText}>{sending ? 'Sending…' : alreadyQuoted ? 'Update Quote (0% Commission)' : 'Send Direct Quote to Customer (0% Commission)'}</Text>
         </TouchableOpacity>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

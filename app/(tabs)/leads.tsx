@@ -1,27 +1,91 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, RefreshCw, Compass, Play, ChevronRight, Zap, Droplet, Wind, Hammer, Paintbrush, Sparkles, Tv, Truck } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../../constants/theme';
-import { WORKER_ACTIVE_LEADS, SERVICE_CATEGORIES, CustomerLead } from '../../constants/mockData';
 import { useStore } from '../../store/useStore';
+import { useSession } from '../../store/useSession';
+import { useAsync } from '../../api/useAsync';
+import { acceptDirect, declineDirect, getCategories, listLeads, listWorkerJobs, putWorkerLocation } from '../../api/endpoints';
+import { userMessage } from '../../api/errors';
+import { currentPosition } from '../../utils/position';
+import { notify } from '../../utils/dialog';
+import { timeAgo, whenLabel } from '../../utils/time';
+import { EmptyBlock, ErrorBlock, LoadingBlock } from '../../components/StateBlocks';
 
-const LEAD_FILTERS: { id: string; label: string; showCount?: boolean; match: (lead: CustomerLead) => boolean }[] = [
-  { id: 'all', label: 'All Leads', showCount: true, match: () => true },
-  { id: 'immediate', label: 'Immediate', showCount: true, match: (lead) => lead.urgency.startsWith('Immediate') },
-  { id: 'plumbing', label: 'Plumbing', match: (lead) => lead.category === 'Plumbing' },
-  { id: 'electrician', label: 'Electrician', match: (lead) => lead.category === 'Electrician' }
+const LEAD_FILTERS: { id: 'all' | 'immediate' | 'scheduled'; label: string }[] = [
+  { id: 'all', label: 'All Leads' },
+  { id: 'immediate', label: 'Immediate' },
+  { id: 'scheduled', label: 'Scheduled' },
 ];
+const LEADS_POLL_MS = 15000; // new requests show up while the radar is open
+const PING_MS = 20000; // while a job is on the way, the customer sees the worker move
 
 export default function LeadsScreen() {
   const router = useRouter();
-  const { role, toggleRole, setSelectedCategory } = useStore();
+  const { role, setRole, setSelectedCategory, setActiveJobId } = useStore();
+  const { me } = useSession();
   const isWorker = role === 'worker';
-  const [leadFilter, setLeadFilter] = useState('all');
+  const [leadFilter, setLeadFilter] = useState<'all' | 'immediate' | 'scheduled'>('all');
+  const [directBusy, setDirectBusy] = useState<string | null>(null);
 
-  const activeFilter = LEAD_FILTERS.find((f) => f.id === leadFilter) ?? LEAD_FILTERS[0];
-  const visibleLeads = WORKER_ACTIVE_LEADS.filter(activeFilter.match);
+  const categories = useAsync(() => getCategories(), [], { reloadOnFocus: false });
+  const leads = useAsync(() => (isWorker ? listLeads({ filter: leadFilter }) : Promise.resolve(null)), [isWorker, leadFilter], { pollMs: isWorker ? LEADS_POLL_MS : undefined });
+  const myJobs = useAsync(() => (isWorker ? listWorkerJobs('ongoing') : Promise.resolve(null)), [isWorker], { pollMs: isWorker ? LEADS_POLL_MS : undefined });
+  const visibleLeads = leads.data?.items ?? [];
+  const activeJobs = myJobs.data?.items ?? [];
+  const onTheWay = activeJobs.some((j) => j.status === 'ASSIGNED');
+
+  // Best effort: share the device position while a job is on the way, so the customer's tracker can move
+  useEffect(() => {
+    if (!isWorker || !onTheWay) return undefined;
+    let stopped = false;
+    const ping = () => {
+      currentPosition(5000)
+        .then((p) => (stopped ? undefined : putWorkerLocation(p.lat, p.lng)))
+        .catch(() => undefined);
+    };
+    ping();
+    const timer = setInterval(ping, PING_MS);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [isWorker, onTheWay]);
+
+  const switchRole = () => {
+    const next = isWorker ? 'customer' : 'worker';
+    const hasProfile = next === 'worker' ? me?.worker : me?.customer;
+    setRole(next);
+    if (!hasProfile) router.push(next === 'worker' ? '/worker-onboarding' : '/customer-onboarding');
+  };
+
+  const answerDirect = async (jobId: string, accept: boolean) => {
+    if (directBusy) return;
+    setDirectBusy(jobId);
+    try {
+      if (accept) {
+        await acceptDirect(jobId);
+        setActiveJobId(jobId);
+        router.push('/job-progress');
+      } else {
+        await declineDirect(jobId);
+      }
+      void leads.reload();
+      void myJobs.reload();
+    } catch (error) {
+      notify(accept ? 'Could not accept' : 'Could not decline', userMessage(error));
+      void leads.reload();
+    } finally {
+      setDirectBusy(null);
+    }
+  };
+
+  const openJob = (jobId: string) => {
+    setActiveJobId(jobId);
+    router.push('/job-progress');
+  };
 
   const renderIcon = (name: string, color: string) => {
     switch (name) {
@@ -39,7 +103,11 @@ export default function LeadsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={isWorker ? <RefreshControl refreshing={leads.refreshing} onRefresh={() => { void leads.reload(); void myJobs.reload(); }} /> : undefined}
+      >
         {/* Header */}
         <View style={styles.headerBar}>
           <View style={{ flex: 1 }}>
@@ -48,7 +116,7 @@ export default function LeadsScreen() {
             </Text>
             <Text style={styles.headerSub}>Chandigarh • Mohali • Panchkula</Text>
           </View>
-          <TouchableOpacity style={styles.toggleBtn} onPress={toggleRole}>
+          <TouchableOpacity style={styles.toggleBtn} onPress={switchRole} accessibilityRole="button">
             <RefreshCw color={Colors.textMain} size={14} />
             <Text style={styles.toggleBtnText}>{isWorker ? 'Switch Customer' : 'Switch Worker'}</Text>
           </TouchableOpacity>
@@ -68,9 +136,28 @@ export default function LeadsScreen() {
                 </View>
               </View>
               <Text style={styles.radarHeroSub}>
-                Real-time repair requests within 5 km of your location. Tap to quote directly!
+                Repair requests near your base area. Tap to quote directly!
               </Text>
             </View>
+
+            {/* Jobs the worker is already on */}
+            {activeJobs.length > 0 && (
+              <View style={{ marginBottom: Spacing.md }}>
+                <Text style={[styles.leadTitle, { marginBottom: 6 }]}>Your active jobs</Text>
+                {activeJobs.map((job) => (
+                  <TouchableOpacity key={job.id} style={[styles.leadCard, { marginBottom: 8 }]} onPress={() => openJob(job.id)} accessibilityRole="button">
+                    <View style={styles.leadHeader}>
+                      <View style={{ flex: 1 }}>
+                        <View style={styles.catPill}><Text style={styles.catPillText}>{job.category.title}</Text></View>
+                        <Text style={styles.leadTitle}>{job.title}</Text>
+                        <Text style={styles.leadLoc}>{job.customerName} • {job.area}</Text>
+                      </View>
+                      <View style={styles.timeTag}><Text style={styles.timeTagText}>{job.status.replace('_', ' ')}</Text></View>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
 
             {/* Filter Chips */}
             <ScrollView
@@ -93,16 +180,18 @@ export default function LeadsScreen() {
                   >
                     <Text style={[styles.chipText, isActive && styles.chipTextActive]}>
                       {filter.label}
-                      {filter.showCount ? ` (${WORKER_ACTIVE_LEADS.filter(filter.match).length})` : ''}
                     </Text>
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
 
-            {visibleLeads.length === 0 && (
+            {leads.loading && <LoadingBlock label="Looking for requests… / अनुरोध खोज रहे हैं…" />}
+            {leads.error && !leads.data && <ErrorBlock message={leads.error} onRetry={() => void leads.reload()} />}
+            {leads.errorCode === 'WORKER_NOT_VERIFIED' && <EmptyBlock title="Profile under review" hint="Leads open up once the team has verified your Aadhaar. / सत्यापन के बाद लीड दिखेंगे" />}
+            {leads.data && visibleLeads.length === 0 && (
               <View style={styles.emptyCard}>
-                <Text style={styles.emptyText}>No {activeFilter.label.toLowerCase()} leads right now. New requests appear here live.</Text>
+                <Text style={styles.emptyText}>No {LEAD_FILTERS.find((x) => x.id === leadFilter)?.label.toLowerCase()} right now. New requests appear here by themselves.</Text>
               </View>
             )}
 
@@ -111,32 +200,43 @@ export default function LeadsScreen() {
               <View key={lead.id} style={styles.leadCard}>
                 <View style={styles.leadHeader}>
                   <View style={{ flex: 1 }}>
-                    <View style={styles.catPill}><Text style={styles.catPillText}>{lead.category}</Text></View>
+                    <View style={styles.catPill}><Text style={styles.catPillText}>{lead.category.title.en}{lead.isDirect ? ' • Direct request' : ''}</Text></View>
                     <Text style={styles.leadTitle}>{lead.title}</Text>
                   </View>
-                  <View style={styles.timeTag}><Text style={styles.timeTagText}>{lead.postedAgo}</Text></View>
+                  <View style={styles.timeTag}><Text style={styles.timeTagText}>{timeAgo(lead.postedAt)}</Text></View>
                 </View>
 
-                <Text style={styles.leadNotes}>"{lead.notes}"</Text>
+                {lead.notes ? <Text style={styles.leadNotes}>"{lead.notes}"</Text> : null}
 
-                {lead.hasAudio && (
-                  <TouchableOpacity
-                    style={styles.audioBox}
-                    onPress={() => Alert.alert('🔊 Voice Note', 'Playing customer audio memo in Hindi: "Under-sink pipe burst..."')}
-                  >
+                {lead.hasVoiceNote && (
+                  <View style={styles.audioBox}>
                     <Play color="#0284C7" size={14} />
-                    <Text style={styles.audioBoxText}>Customer Voice Note (14s) • Tap to listen</Text>
-                  </TouchableOpacity>
+                    <Text style={styles.audioBoxText}>Customer left a voice note • open the lead to listen</Text>
+                  </View>
                 )}
 
                 <View style={styles.leadFooter}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.leadLoc}>📍 {lead.sector} ({lead.distance})</Text>
-                    <Text style={styles.leadBudget}>Budget: {lead.budget}</Text>
+                    <Text style={styles.leadLoc}>📍 {lead.areaName}{lead.distanceKm !== null ? ` (${lead.distanceKm} km)` : ''}</Text>
+                    <Text style={styles.leadBudget}>
+                      {lead.urgency === 'IMMEDIATE' ? 'Immediate' : lead.scheduledFor ? whenLabel(lead.scheduledFor) : lead.urgency.toLowerCase()} • Visit from ₹{lead.baseVisitFee}
+                    </Text>
+                    {lead.myOffer && <Text style={styles.leadBudget}>Your quote: ₹{lead.myOffer.visitFee} • {lead.myOffer.etaMinutes} min</Text>}
                   </View>
-                  <TouchableOpacity style={styles.quoteBtn} onPress={() => router.push({ pathname: '/lead-offer', params: { id: lead.id } })}>
-                    <Text style={styles.quoteBtnText}>Send Quote →</Text>
-                  </TouchableOpacity>
+                  {lead.isDirect && lead.leadState === 'NEW' ? (
+                    <View style={{ flexDirection: 'row', gap: 6 }}>
+                      <TouchableOpacity style={[styles.quoteBtn, directBusy !== null && { opacity: 0.6 }]} disabled={directBusy !== null} onPress={() => void answerDirect(lead.id, true)} accessibilityRole="button">
+                        <Text style={styles.quoteBtnText}>{directBusy === lead.id ? '…' : 'Accept'}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.quoteBtn, { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: Colors.borderDark }, directBusy !== null && { opacity: 0.6 }]} disabled={directBusy !== null} onPress={() => void answerDirect(lead.id, false)} accessibilityRole="button">
+                        <Text style={[styles.quoteBtnText, { color: Colors.textMain }]}>Decline</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity style={styles.quoteBtn} onPress={() => router.push({ pathname: '/lead-offer', params: { id: lead.id } })} accessibilityRole="button">
+                      <Text style={styles.quoteBtnText}>{lead.myOffer ? 'View Quote →' : 'Send Quote →'}</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
             ))}
@@ -144,7 +244,9 @@ export default function LeadsScreen() {
         ) : (
           /* CUSTOMER MODE: Service Category Directory */
           <View style={styles.catDirectory}>
-            {SERVICE_CATEGORIES.map((cat) => (
+            {categories.loading && <LoadingBlock label="Loading services… / सेवाएँ लोड हो रही हैं…" />}
+            {categories.error && !categories.data && <ErrorBlock message={categories.error} onRetry={() => void categories.reload()} />}
+            {(categories.data ?? []).map((cat) => (
               <TouchableOpacity
                 key={cat.id}
                 style={styles.catDirCard}
@@ -154,14 +256,14 @@ export default function LeadsScreen() {
                 }}
               >
                 <View style={[styles.catDirIcon, { backgroundColor: cat.bgColor }]}>
-                  {renderIcon(cat.iconName, cat.color)}
+                  {renderIcon(cat.iconKey, cat.color)}
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                    <Text style={styles.catDirTitle}>{cat.title}</Text>
-                    <Text style={styles.catDirFee}>From {cat.baseFee}</Text>
+                    <Text style={styles.catDirTitle}>{cat.title.en}</Text>
+                    <Text style={styles.catDirFee}>From ₹{cat.baseVisitFee}</Text>
                   </View>
-                  <Text style={styles.catDirVernacular}>{cat.hindi} • {cat.punjabi}</Text>
+                  <Text style={styles.catDirVernacular}>{cat.title.hi} • {cat.title.pa}</Text>
                   <Text style={styles.catDirExamples}>{cat.examples}</Text>
                 </View>
                 <ChevronRight color={Colors.textSubtle} size={18} />

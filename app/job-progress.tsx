@@ -1,37 +1,138 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, ActivityIndicator, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, CheckCircle2, QrCode, Phone, ShieldCheck, Zap } from 'lucide-react-native';
+import { ArrowLeft, CheckCircle2, Phone, ShieldCheck, Zap } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../constants/theme';
-import { VERIFIED_WORKERS } from '../constants/mockData';
 import { useStore } from '../store/useStore';
+import { useAsync } from '../api/useAsync';
+import { addWorkPhoto, approveBill, completeWork, getBill, getJob, payJob, putBillItems, verifyArrival } from '../api/endpoints';
+import { isApiError, userMessage } from '../api/errors';
+import { uploadFile } from '../api/upload';
+import { pickImage } from '../utils/pickImage';
+import { confirmAction } from '../utils/dialog';
+import type { BillItemKind, BillView, JobView, PaymentMethod } from '../api/types';
+import Avatar from '../components/Avatar';
+import { EmptyBlock, ErrorBlock, LoadingBlock } from '../components/StateBlocks';
+
+const POLL_MS = 6000;
+const PHOTO_PLACEHOLDER = require('../assets/images/photo-placeholder.png');
+const KINDS: Exclude<BillItemKind, 'VISIT_FEE'>[] = ['PARTS', 'LABOUR', 'OTHER'];
+const STATUS_PILL: Record<string, string> = {
+  OPEN: 'WAITING',
+  ASSIGNED: 'ON THE WAY',
+  ARRIVED: 'ARRIVED',
+  IN_PROGRESS: 'IN PROGRESS',
+  WORK_COMPLETED: 'BILL READY',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+};
+const money = (n: number) => `₹${n.toFixed(2)}`;
+const timeOf = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '');
+
+interface Loaded {
+  job: JobView;
+  bill: BillView | null;
+}
+interface DraftItem {
+  kind: Exclude<BillItemKind, 'VISIT_FEE'>;
+  description: string;
+  amount: string;
+}
 
 export default function JobProgressScreen() {
   const router = useRouter();
-  const { activeBooking } = useStore();
-  const worker = activeBooking ?? VERIFIED_WORKERS[0];
-  const upiId = `${worker.name.split(' ')[0].toLowerCase()}.tricity@upi`;
-  const [paymentDone, setPaymentDone] = useState(false);
+  const { activeJobId } = useStore();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [code, setCode] = useState('');
+  const [draft, setDraft] = useState<DraftItem[] | null>(null);
 
-  const handlePayment = (mode: string) => {
-    if (paymentDone) return;
-    setPaymentDone(true);
-    setTimeout(() => {
-      router.push('/rating');
-      // Re-enable the buttons in case the user comes back from the rating screen
-      setPaymentDone(false);
-    }, 400);
+  const state = useAsync<Loaded | null>(
+    async () => {
+      if (!activeJobId) return null;
+      const job = await getJob(activeJobId);
+      // The bill exists once the worker has arrived; before that the call is simply not applicable
+      const bill = ['ARRIVED', 'IN_PROGRESS', 'WORK_COMPLETED', 'COMPLETED'].includes(job.status) ? await getBill(activeJobId).catch(() => null) : null;
+      return { job, bill };
+    },
+    [activeJobId],
+    { pollMs: POLL_MS },
+  );
+  const job = state.data?.job ?? null;
+  const bill = state.data?.bill ?? null;
+  const isWorker = job?.viewer === 'worker';
+  const other = isWorker ? job?.customer : job?.worker;
+
+  // Runs one server action, shows its error under the buttons, and refreshes the screen on success
+  const run = async (name: string, action: () => Promise<unknown>, after?: () => void) => {
+    if (busy) return;
+    setBusy(name);
+    setActionError(null);
+    try {
+      await action();
+      await state.reload();
+      after?.();
+    } catch (error) {
+      const fields = isApiError(error) ? error.details.map((d) => `${d.field}: ${d.issue}`).join('; ') : '';
+      setActionError(userMessage(error) + (fields ? ` (${fields})` : ''));
+    } finally {
+      setBusy(null);
+    }
   };
+
+  const items: DraftItem[] =
+    draft ?? (bill?.items.filter((i) => i.kind !== 'VISIT_FEE').map((i) => ({ kind: i.kind as DraftItem['kind'], description: i.description, amount: String(i.amount) })) ?? []);
+  const updateItem = (index: number, patch: Partial<DraftItem>) => setDraft(items.map((it, i) => (i === index ? { ...it, ...patch } : it)));
+
+  const saveItems = () =>
+    run('items', async () => {
+      const parsed = items.map((it) => ({ kind: it.kind, description: it.description.trim(), amount: Number(it.amount) }));
+      if (parsed.some((it) => !it.description || !Number.isFinite(it.amount) || it.amount < 0)) throw new Error('Each line needs a description and an amount in rupees. / हर लाइन में विवरण और राशि लिखें');
+      await putBillItems(activeJobId!, parsed);
+      setDraft(null);
+    });
+
+  const addPhoto = (kind: 'BEFORE' | 'AFTER') =>
+    run('photo', async () => {
+      const picked = await pickImage();
+      if (!picked) return;
+      await addWorkPhoto(activeJobId!, kind, await uploadFile('WORK_PROOF', picked));
+    });
+
+  // Only possible once the customer approved the cost (IN_PROGRESS); the server refuses it before that
+  const finishWork = () => run('complete', () => completeWork(activeJobId!));
+
+  const pay = async (method: PaymentMethod) => {
+    if (!bill) return;
+    const ok = await confirmAction('Confirm payment', `Mark ${money(bill.total)} as paid to ${bill.payTo.name} by ${method === 'UPI' ? 'UPI' : 'cash'}? Only do this after the payment is made.`, 'Yes, I paid');
+    if (!ok) return;
+    await run('pay', () => payJob(activeJobId!, method), () => router.replace('/rating'));
+  };
+
+  const call = () => {
+    const phone = other?.phone;
+    if (phone) void Linking.openURL(`tel:${phone.replace(/\s+/g, '')}`);
+  };
+
+  const timeline = job
+    ? [
+        { title: 'Worker accepted the job', desc: job.assignedAt ? `At ${timeOf(job.assignedAt)}` : 'Waiting', done: !!job.assignedAt },
+        { title: 'Technician arrived at location', desc: job.arrivedAt ? `Arrival code verified at ${timeOf(job.arrivedAt)}` : 'Share the arrival code when the worker reaches you', done: !!job.arrivedAt },
+        { title: 'Cost approved, work started', desc: job.status === 'ARRIVED' ? 'Waiting for the customer to approve the cost' : 'Approved', done: ['IN_PROGRESS', 'WORK_COMPLETED', 'COMPLETED'].includes(job.status) },
+        { title: 'Work completed', desc: ['WORK_COMPLETED', 'COMPLETED'].includes(job.status) ? 'Bill is ready' : 'In progress', done: ['WORK_COMPLETED', 'COMPLETED'].includes(job.status) },
+        { title: 'Paid & closed', desc: job.completedAt ? `At ${timeOf(job.completedAt)}` : 'Settled directly with the worker', done: job.status === 'COMPLETED' },
+      ]
+    : [];
+  const nextIndex = timeline.findIndex((t) => !t.done);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Header Bar */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <TouchableOpacity
             style={styles.backBtn}
-            onPress={() => router.canGoBack() ? router.back() : router.replace('/tracking')}
+            onPress={() => (router.canGoBack() ? router.back() : router.replace(isWorker ? '/(tabs)/leads' : '/tracking'))}
             activeOpacity={0.7}
             accessibilityRole="button"
             accessibilityLabel="Go back"
@@ -40,175 +141,247 @@ export default function JobProgressScreen() {
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>Job Progress & Completion</Text>
-            <Text style={styles.headerSubtitle} numberOfLines={1}>Booking #KC-88421 • Direct Settlement</Text>
+            <Text style={styles.headerSubtitle} numberOfLines={1}>{job ? `Booking ${job.reference} • Direct Settlement` : 'Loading…'}</Text>
           </View>
         </View>
         <View style={styles.statusPill}>
-          <Text style={styles.statusPillText}>IN PROGRESS</Text>
+          <Text style={styles.statusPillText}>{job ? STATUS_PILL[job.status] ?? job.status : '…'}</Text>
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Worker Summary Card */}
-        <View style={styles.card}>
-          <View style={styles.workerRow}>
-            <Image source={{ uri: worker.avatar }} style={styles.workerAvatar} />
-            <View style={{ flex: 1 }}>
-              <View style={styles.nameRow}>
-                <Text style={styles.workerName}>{worker.name}</Text>
-                <ShieldCheck color={Colors.primary} size={15} />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        {!activeJobId && <EmptyBlock title="No job selected" hint="Open a job from Activity. / गतिविधि से जॉब खोलें" />}
+        {activeJobId && state.loading && <LoadingBlock label="Loading job… / जॉब लोड हो रहा है…" />}
+        {state.error && !state.data && <ErrorBlock message={state.error} onRetry={() => void state.reload()} />}
+
+        {job && (
+          <>
+            {/* The other party */}
+            {other && (
+              <View style={styles.card}>
+                <View style={styles.workerRow}>
+                  <Avatar uri={isWorker ? null : job.worker?.photoUrl} size={44} style={styles.workerAvatar} />
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.nameRow}>
+                      <Text style={styles.workerName}>{other.name}</Text>
+                      {!isWorker && <ShieldCheck color={Colors.primary} size={15} />}
+                    </View>
+                    <Text style={styles.workerTrade}>{isWorker ? job.title : job.worker?.trade}</Text>
+                    {!isWorker && job.worker?.vehicle ? <Text style={styles.workerVehicle}>🛵 {job.worker.vehicle}</Text> : null}
+                  </View>
+                  {other.phone ? (
+                    <TouchableOpacity style={styles.callSmallBtn} onPress={call} activeOpacity={0.8} accessibilityRole="button">
+                      <Phone color="#065F46" size={14} />
+                      <Text style={styles.callSmallText}>Call</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
               </View>
-              <Text style={styles.workerTrade}>{worker.trade} • {worker.sector}</Text>
-              <Text style={styles.workerVehicle}>🛵 {worker.vehicle}</Text>
+            )}
+
+            {/* Milestones */}
+            <View style={styles.card}>
+              <Text style={styles.sectionTitle}>Service Milestones (कार्य प्रगति)</Text>
+              <View style={styles.timeline}>
+                {timeline.map((t, i) => (
+                  <React.Fragment key={t.title}>
+                    <View style={styles.timelineItem}>
+                      <View style={[styles.timelineIcon, t.done ? styles.timelineDone : i === nextIndex ? styles.timelineActive : null]}>
+                        {t.done ? <CheckCircle2 color="#FFFFFF" size={15} /> : <Text style={styles.timelineStepNumber}>{i + 1}</Text>}
+                      </View>
+                      <View style={styles.timelineContent}>
+                        <Text style={[styles.timelineTitle, i === nextIndex && { color: Colors.tertiary }]}>{t.title}</Text>
+                        <Text style={styles.timelineDesc}>{t.desc}</Text>
+                      </View>
+                    </View>
+                    {i < timeline.length - 1 && <View style={styles.timelineLine} />}
+                  </React.Fragment>
+                ))}
+              </View>
             </View>
-            <TouchableOpacity
-              style={styles.callSmallBtn}
-              onPress={() => alert(`Calling ${worker.name} directly at ${worker.phone}`)}
-              activeOpacity={0.8}
-            >
-              <Phone color="#065F46" size={14} />
-              <Text style={styles.callSmallText}>Call</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
 
-        {/* Live Milestones Stepper */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Service Milestones (कार्य प्रगति)</Text>
+            {/* Worker: arrival code */}
+            {isWorker && job.status === 'ASSIGNED' && (
+              <View style={styles.card}>
+                <Text style={styles.sectionTitle}>Arrival Code (आगमन कोड)</Text>
+                <Text style={styles.hint}>Ask the customer for the 4-digit code shown in their app to confirm you have arrived.</Text>
+                <View style={styles.inputRow}>
+                  <TextInput
+                    style={styles.input}
+                    value={code}
+                    onChangeText={(t) => setCode(t.replace(/\D/g, '').slice(0, 4))}
+                    placeholder="• • • •"
+                    placeholderTextColor={Colors.textSubtle}
+                    keyboardType="number-pad"
+                    maxLength={4}
+                    accessibilityLabel="Arrival code"
+                  />
+                  <TouchableOpacity
+                    style={[styles.smallBtn, (code.length !== 4 || busy !== null) && { opacity: 0.6 }]}
+                    disabled={code.length !== 4 || busy !== null}
+                    onPress={() => void run('arrival', () => verifyArrival(activeJobId!, code), () => setCode(''))}
+                    accessibilityRole="button"
+                  >
+                    {busy === 'arrival' ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.smallBtnText}>Verify arrival</Text>}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
-          <View style={styles.timeline}>
-            {/* Step 1 */}
-            <View style={styles.timelineItem}>
-              <View style={[styles.timelineIcon, styles.timelineDone]}>
-                <CheckCircle2 color="#FFFFFF" size={15} />
+            {/* Work proof photos */}
+            {['ARRIVED', 'IN_PROGRESS', 'WORK_COMPLETED', 'COMPLETED'].includes(job.status) && (
+              <View style={styles.card}>
+                <Text style={styles.sectionTitle}>Work Proof Photos (मरम्मत फ़ोटो)</Text>
+                <View style={styles.photosGrid}>
+                  {(['before', 'after'] as const).map((side) => {
+                    const urls = job.workPhotos?.[side] ?? [];
+                    return (
+                      <View key={side} style={styles.photoCol}>
+                        <Text style={side === 'before' ? styles.photoLabelBefore : styles.photoLabelAfter}>{side === 'before' ? 'BEFORE (पहले)' : 'AFTER (बाद में)'}</Text>
+                        <View style={styles.photoThumbRow}>
+                          {urls.length === 0 && <Image source={PHOTO_PLACEHOLDER} style={styles.proofImage} />}
+                          {urls.map((u) => (
+                            <Image key={u} source={{ uri: u }} style={styles.proofImage} />
+                          ))}
+                        </View>
+                        {isWorker && ['ARRIVED', 'IN_PROGRESS'].includes(job.status) && (
+                          <TouchableOpacity style={[styles.ghostBtn, { marginTop: 6 }]} onPress={() => void addPhoto(side === 'before' ? 'BEFORE' : 'AFTER')} disabled={busy !== null} accessibilityRole="button">
+                            <Text style={styles.ghostBtnText}>{busy === 'photo' ? 'Uploading…' : '+ Add photo'}</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
               </View>
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineTitle}>Technician Arrived at Location</Text>
-                <Text style={styles.timelineDesc}>Sector 22-B • OTP 8421 Verified at 11:42 AM</Text>
-              </View>
-            </View>
-            <View style={styles.timelineLine} />
+            )}
 
-            {/* Step 2 */}
-            <View style={styles.timelineItem}>
-              <View style={[styles.timelineIcon, styles.timelineDone]}>
-                <CheckCircle2 color="#FFFFFF" size={15} />
-              </View>
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineTitle}>Fault Inspected & Cost Approved</Text>
-                <Text style={styles.timelineDesc}>Replaced Cracked PVC Drainage Pipe</Text>
-              </View>
-            </View>
-            <View style={styles.timelineLine} />
+            {/* Bill */}
+            {bill && (
+              <View style={[styles.card, styles.billCard]}>
+                <View style={styles.billHeader}>
+                  <Text style={[styles.sectionTitle, { flex: 1, marginBottom: 0 }]}>Transparent Bill (बिल विवरण)</Text>
+                  <View style={styles.zeroCutBadge}>
+                    <Text style={styles.zeroCutBadgeText}>0% APP CUT</Text>
+                  </View>
+                </View>
 
-            {/* Step 3 */}
-            <View style={styles.timelineItem}>
-              <View style={[styles.timelineIcon, styles.timelineActive]}>
-                <Text style={styles.timelineStepNumber}>3</Text>
+                {isWorker && job.status === 'ARRIVED' ? (
+                  <>
+                    {bill.items.filter((i) => i.kind === 'VISIT_FEE').map((i) => (
+                      <View key={i.id} style={styles.billRow}>
+                        <Text style={styles.billItem}>{i.description}</Text>
+                        <Text style={styles.billAmount}>{money(i.amount)}</Text>
+                      </View>
+                    ))}
+                    {items.map((it, index) => (
+                      <View key={index} style={styles.itemBox}>
+                        <View style={styles.chipRow}>
+                          {KINDS.map((k) => (
+                            <TouchableOpacity key={k} style={[styles.chip, it.kind === k && styles.chipOn]} onPress={() => updateItem(index, { kind: k })} accessibilityRole="button" accessibilityState={{ selected: it.kind === k }}>
+                              <Text style={[styles.chipText, it.kind === k && styles.chipTextOn]}>{k === 'PARTS' ? 'Parts' : k === 'LABOUR' ? 'Labour' : 'Other'}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                        <View style={styles.inputRow}>
+                          <TextInput style={[styles.input, { flex: 2 }]} value={it.description} onChangeText={(t) => updateItem(index, { description: t.slice(0, 120) })} placeholder="What was done / part used" placeholderTextColor={Colors.textSubtle} />
+                          <TextInput style={styles.input} value={it.amount} onChangeText={(t) => updateItem(index, { amount: t.replace(/[^0-9.]/g, '').slice(0, 8) })} placeholder="₹" placeholderTextColor={Colors.textSubtle} keyboardType="decimal-pad" />
+                          <TouchableOpacity style={styles.ghostBtn} onPress={() => setDraft(items.filter((_, i) => i !== index))} accessibilityRole="button" accessibilityLabel="Remove this line">
+                            <Text style={styles.ghostBtnText}>✕</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ))}
+                    <View style={[styles.inputRow, { justifyContent: 'space-between' }]}>
+                      <TouchableOpacity style={styles.ghostBtn} onPress={() => setDraft([...items, { kind: 'PARTS', description: '', amount: '' }])} accessibilityRole="button">
+                        <Text style={styles.ghostBtnText}>+ Add line</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.smallBtn, (busy !== null || !draft) && { opacity: 0.6 }]} onPress={() => void saveItems()} disabled={busy !== null || !draft} accessibilityRole="button">
+                        {busy === 'items' ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.smallBtnText}>Save bill</Text>}
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={styles.hint}>Current total: {money(bill.total)}. Save it, then the customer approves the cost before you start the work.</Text>
+                  </>
+                ) : (
+                  <>
+                    {bill.items.map((i) => (
+                      <View key={i.id} style={styles.billRow}>
+                        <Text style={styles.billItem}>{i.description}</Text>
+                        <Text style={styles.billAmount}>{money(i.amount)}</Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+
+                <View style={styles.billRowHighlight}>
+                  <Text style={styles.billHighlightText}>KaamConnect Platform Commission</Text>
+                  <Text style={styles.billHighlightAmount}>₹0.00 (FREE)</Text>
+                </View>
+                <View style={styles.billTotalRow}>
+                  <Text style={styles.totalLabel}>{isWorker ? 'Total Payable by Customer' : 'Total Payable to Worker'}</Text>
+                  <Text style={styles.totalAmount}>{money(bill.total)}</Text>
+                </View>
               </View>
-              <View style={styles.timelineContent}>
-                <Text style={[styles.timelineTitle, { color: Colors.tertiary }]}>
-                  Water Pressure Testing Complete
+            )}
+
+            {/* Worker: finish */}
+            {isWorker && job.status === 'ARRIVED' && (
+              <EmptyBlock title="Waiting for the customer to approve the cost" hint="Save the bill above. Start the work once they approve. This page refreshes by itself." />
+            )}
+            {isWorker && job.status === 'IN_PROGRESS' && (
+              <TouchableOpacity style={[styles.smallBtn, { paddingVertical: 14 }, busy !== null && { opacity: 0.6 }]} onPress={() => void finishWork()} disabled={busy !== null} accessibilityRole="button">
+                {busy === 'complete' ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.smallBtnText}>Work finished — send bill to customer</Text>}
+              </TouchableOpacity>
+            )}
+            {isWorker && job.status === 'WORK_COMPLETED' && <EmptyBlock title="Waiting for the payment" hint="The customer pays you directly and then marks it paid. This page refreshes by itself." />}
+            {isWorker && job.status === 'COMPLETED' && (
+              <TouchableOpacity style={[styles.smallBtn, { paddingVertical: 14 }]} onPress={() => router.replace('/(tabs)/leads')} accessibilityRole="button">
+                <Text style={styles.smallBtnText}>Paid — back to leads</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Customer: approve, then pay */}
+            {!isWorker && bill && job.status === 'ARRIVED' && !bill.approved && (
+              <TouchableOpacity
+                style={[styles.smallBtn, { paddingVertical: 14 }, busy !== null && { opacity: 0.6 }]}
+                onPress={() => void run('approve', () => approveBill(activeJobId!, bill.total))}
+                disabled={busy !== null}
+                accessibilityRole="button"
+              >
+                {busy === 'approve' ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.smallBtnText}>Approve cost {money(bill.total)} and start the work</Text>}
+              </TouchableOpacity>
+            )}
+            {!isWorker && bill && job.status === 'WORK_COMPLETED' && (
+              <View style={styles.qrCard}>
+                <Text style={styles.qrTitle}>Pay Directly to {bill.payTo.name}</Text>
+                <Text style={styles.qrSubtitle}>
+                  {bill.payTo.upiId ? (
+                    <>UPI ID: <Text style={{ fontWeight: '800' }}>{bill.payTo.upiId}</Text> (GPay / PhonePe / Paytm) or pay cash</>
+                  ) : (
+                    'Pay the worker in cash, or ask for their UPI ID'
+                  )}
                 </Text>
-                <Text style={styles.timelineDesc}>Ready for direct bill settlement</Text>
+                <Text style={styles.hint}>KaamConnect does not touch the money. Pay the worker first, then confirm below.</Text>
+                <View style={[styles.actionRow, { marginTop: 12 }]}>
+                  <TouchableOpacity style={[styles.payBtn, styles.payBtnPrimary, busy !== null && styles.payBtnDisabled]} onPress={() => void pay('UPI')} disabled={busy !== null} activeOpacity={0.8} accessibilityRole="button">
+                    <Zap color="#FFFFFF" size={16} />
+                    <Text style={styles.payBtnText}>{busy === 'pay' ? 'Saving…' : `Paid ${money(bill.total)} via UPI ✓`}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.payBtn, styles.payBtnCash, busy !== null && styles.payBtnDisabled]} onPress={() => void pay('CASH')} disabled={busy !== null} activeOpacity={0.8} accessibilityRole="button">
+                    <Text style={styles.payBtnCashText}>Paid Cash 💵</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-          </View>
-        </View>
+            )}
+            {!isWorker && job.status === 'COMPLETED' && (
+              <TouchableOpacity style={[styles.smallBtn, { paddingVertical: 14 }]} onPress={() => router.replace('/rating')} accessibilityRole="button">
+                <Text style={styles.smallBtnText}>{job.review ? 'Thanks for rating' : 'Rate this job'}</Text>
+              </TouchableOpacity>
+            )}
 
-        {/* Before & After Work Photos */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Work Proof Photos (मरम्मत फ़ोटो)</Text>
-          <View style={styles.photosGrid}>
-            <View style={styles.photoCol}>
-              <Text style={styles.photoLabelBefore}>BEFORE (लीकेज)</Text>
-              <Image
-                source={{
-                  uri: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=400&auto=format&fit=crop&q=80'
-                }}
-                style={styles.proofImage}
-              />
-            </View>
-            <View style={styles.photoCol}>
-              <Text style={styles.photoLabelAfter}>AFTER (मरम्मत पूर्ण)</Text>
-              <Image
-                source={{
-                  uri: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=400&auto=format&fit=crop&q=80'
-                }}
-                style={styles.proofImage}
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Transparent Bill Breakdown */}
-        <View style={[styles.card, styles.billCard]}>
-          <View style={styles.billHeader}>
-            <Text style={[styles.sectionTitle, { flex: 1, marginBottom: 0 }]}>Transparent Bill (बिल विवरण)</Text>
-            <View style={styles.zeroCutBadge}>
-              <Text style={styles.zeroCutBadgeText}>0% APP CUT</Text>
-            </View>
-          </View>
-
-          <View style={styles.billRow}>
-            <Text style={styles.billItem}>Visiting & Inspection Fee</Text>
-            <Text style={styles.billAmount}>₹200.00</Text>
-          </View>
-
-          <View style={styles.billRow}>
-            <Text style={styles.billItem}>Heavy-Duty PVC Drain Pipe (New)</Text>
-            <Text style={styles.billAmount}>₹180.00</Text>
-          </View>
-
-          <View style={styles.billRow}>
-            <Text style={styles.billItem}>Teflon Sealant & Labour</Text>
-            <Text style={styles.billAmount}>₹50.00</Text>
-          </View>
-
-          <View style={styles.billRowHighlight}>
-            <Text style={styles.billHighlightText}>KaamConnect Platform Commission</Text>
-            <Text style={styles.billHighlightAmount}>₹0.00 (FREE)</Text>
-          </View>
-
-          <View style={styles.billTotalRow}>
-            <Text style={styles.totalLabel}>Total Payable to Worker</Text>
-            <Text style={styles.totalAmount}>₹430.00</Text>
-          </View>
-        </View>
-
-        {/* Direct UPI / Cash QR Payment Card */}
-        <View style={styles.qrCard}>
-          <Text style={styles.qrTitle}>Scan & Pay Directly to {worker.name}</Text>
-          <Text style={styles.qrSubtitle}>
-            UPI ID: <Text style={{ fontWeight: '800' }}>{upiId}</Text> (GPay / PhonePe / Paytm / Cash)
-          </Text>
-
-          <View style={styles.qrFrame}>
-            <QrCode color="#1E293B" size={100} strokeWidth={1.5} />
-            <Text style={styles.qrCodeLabel}>SCAN ANY UPI APP</Text>
-          </View>
-
-          <View style={styles.actionRow}>
-            <TouchableOpacity
-              style={[styles.payBtn, styles.payBtnPrimary, paymentDone && styles.payBtnDisabled]}
-              onPress={() => handlePayment('UPI')}
-              disabled={paymentDone}
-              activeOpacity={0.8}
-            >
-              <Zap color="#FFFFFF" size={16} />
-              <Text style={styles.payBtnText}>Paid ₹430 via UPI ✓</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.payBtn, styles.payBtnCash, paymentDone && styles.payBtnDisabled]}
-              onPress={() => handlePayment('Cash')}
-              disabled={paymentDone}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.payBtnCashText}>Paid Cash 💵</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+            {actionError && <Text style={styles.errorLine} accessibilityRole="alert">{actionError}</Text>}
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -555,5 +728,20 @@ const styles = StyleSheet.create({
     color: Colors.textMain,
     fontSize: 12,
     fontWeight: '800'
-  }
+  },
+  inputRow: { flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 8 },
+  input: { flex: 1, minWidth: 0, borderWidth: 1.5, borderColor: Colors.borderDark, borderRadius: Radius.md, paddingHorizontal: 12, paddingVertical: 8, fontSize: 13, color: Colors.textMain, backgroundColor: '#FFFFFF' },
+  smallBtn: { backgroundColor: Colors.primary, paddingHorizontal: 14, paddingVertical: 10, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
+  smallBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+  ghostBtn: { borderWidth: 1.5, borderColor: Colors.borderDark, paddingHorizontal: 12, paddingVertical: 8, borderRadius: Radius.md, backgroundColor: '#FFFFFF' },
+  ghostBtnText: { color: Colors.textMain, fontSize: 12, fontWeight: '700' },
+  hint: { fontSize: 11, color: Colors.textMuted, marginTop: 6, lineHeight: 16 },
+  errorLine: { fontSize: 12, fontWeight: '600', color: Colors.error, marginTop: 8, textAlign: 'center' },
+  chipRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginTop: 6 },
+  chip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.borderDark, backgroundColor: '#FFFFFF' },
+  chipOn: { backgroundColor: Colors.primaryContainer, borderColor: Colors.primary },
+  chipText: { fontSize: 11, fontWeight: '700', color: Colors.textMuted },
+  chipTextOn: { color: Colors.primaryDark },
+  itemBox: { borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, padding: 10, marginTop: 8, backgroundColor: '#FAFCFE' },
+  photoThumbRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
 });

@@ -6,6 +6,8 @@ import { ArrowLeft, ArrowRight, ShieldCheck, Phone, Lock, ChevronDown, CheckCirc
 import LanguageToggle from '../components/LanguageToggle';
 import { noFocusRing } from '../constants/theme';
 import { useStore } from '../store/useStore';
+import { useSession } from '../store/useSession';
+import { isApiError, userMessage } from '../api/errors';
 
 // Format exactly as "98765 43210"
 const formatPhone = (text: string) => {
@@ -23,30 +25,48 @@ export default function LoginScreen() {
   const [isFocused, setIsFocused] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showError, setShowError] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const requestOtp = useSession((st) => st.requestOtp);
 
   const handlePhoneChange = (text: string) => {
     setPhoneVal(formatPhone(text));
     setShowError(false);
+    setApiError(null);
   };
 
-  const triggerOtpFlow = () => {
+  const triggerOtpFlow = async () => {
     if (isLoading) return;
     const digits = phoneVal.replace(/\D/g, '');
-    if (digits.length !== 10) {
+    // Indian mobile numbers start with 6-9 (the server enforces the same rule)
+    if (digits.length !== 10 || !/^[6-9]/.test(digits)) {
       setShowError(true);
       return;
     }
     setIsLoading(true);
+    setApiError(null);
     setMobile(phoneVal);
-
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      await requestOtp(phoneVal);
       router.push('/otp');
-    }, 900);
+    } catch (error) {
+      // OTP_COOLDOWN means a code was sent a moment ago: the OTP screen can still take it
+      if (isApiError(error) && error.code === 'OTP_COOLDOWN') router.push('/otp');
+      else setApiError(userMessage(error));
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const getValidationMessage = () => {
     const digits = phoneVal.replace(/\D/g, '');
+    if (apiError) {
+      return (
+        <View style={styles.safeNotice} accessibilityRole="alert">
+          <AlertCircle color="#ef4444" size={14} />
+          <Text style={[styles.safeNoticeText, styles.errorText]}>{apiError}</Text>
+        </View>
+      );
+    }
     if (showError) {
       return (
         <View style={styles.safeNotice}>
@@ -236,12 +256,12 @@ export default function LoginScreen() {
       <View style={[styles.footerAction, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <TouchableOpacity
           style={[styles.primaryBtn, isLoading && { backgroundColor: '#006c46' }]}
-          onPress={triggerOtpFlow}
+          onPress={() => void triggerOtpFlow()}
           disabled={isLoading}
           activeOpacity={0.9}
         >
           {isLoading ? (
-            <Text style={styles.primaryBtnText}>OTP Sent! Redirecting...</Text>
+            <Text style={styles.primaryBtnText}>Sending OTP… / भेज रहे हैं…</Text>
           ) : (
             <>
               <Text style={styles.primaryBtnText}>Get OTP / ओटीपी प्राप्त करें</Text>

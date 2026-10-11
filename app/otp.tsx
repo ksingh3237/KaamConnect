@@ -6,6 +6,8 @@ import { ArrowLeft, MapPin, MailCheck, Edit2, Volume2, Clock, MessageSquare, Ver
 import LanguageToggle from '../components/LanguageToggle';
 import { noFocusRing } from '../constants/theme';
 import { useStore } from '../store/useStore';
+import { useSession } from '../store/useSession';
+import { isApiError, userMessage } from '../api/errors';
 
 const OTP_LENGTH = 6;
 
@@ -13,16 +15,26 @@ export default function OtpScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { mobile } = useStore();
+  const { verifyOtp, requestOtp, devNotice, resendAfterSec } = useSession();
   // The whole code lives in ONE hidden input; the six boxes only display it.
   // Six separate inputs need focus hand-offs, which drop keystrokes when typing fast
   // and leave earlier boxes empty when a box in the middle is tapped first.
   const [code, setCode] = useState('');
   const [isFocused, setIsFocused] = useState(false);
-  const [secondsLeft, setSecondsLeft] = useState(28);
+  const [secondsLeft, setSecondsLeft] = useState(resendAfterSec);
   const [isVerifying, setIsVerifying] = useState(false);
   const [showError, setShowError] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [isResending, setIsResending] = useState(false);
+  // The development notice names the fixed code; the button below only fills it in, it never signs anyone in
+  const devCode = devNotice?.match(/\b(\d{6})\b/)?.[1] ?? null;
 
   const input = useRef<TextInput>(null);
+
+  useEffect(() => {
+    if (!mobile) router.replace('/login');
+  }, [mobile, router]);
 
   useEffect(() => {
     if (secondsLeft > 0) {
@@ -35,9 +47,12 @@ export default function OtpScreen() {
   const handleCodeChange = (text: string) => {
     setCode(text.replace(/[^0-9]/g, '').slice(0, OTP_LENGTH));
     setShowError(false);
+    setApiError(null);
   };
 
-  const handleVerify = () => {
+  // On success the session store flips to "signed in" and the root layout moves the person to the right screen
+  // (role selection for a new account, the marketplace otherwise), so there is nothing to navigate to here.
+  const handleVerify = async () => {
     if (isVerifying) return;
     if (code.length < OTP_LENGTH) {
       setShowError(true);
@@ -45,10 +60,33 @@ export default function OtpScreen() {
       return;
     }
     setIsVerifying(true);
-    setTimeout(() => {
+    setApiError(null);
+    try {
+      await verifyOtp(mobile, code);
+    } catch (error) {
+      setApiError(userMessage(error));
+      if (isApiError(error) && (error.code === 'OTP_INVALID' || error.code === 'OTP_LOCKED')) setCode('');
+      input.current?.focus();
+    } finally {
       setIsVerifying(false);
-      router.push('/role');
-    }, 1200);
+    }
+  };
+
+  const handleResend = async () => {
+    if (isResending) return;
+    setIsResending(true);
+    setApiError(null);
+    setNotice(null);
+    try {
+      const result = await requestOtp(mobile);
+      setSecondsLeft(result.resendAfterSec);
+      setNotice('A new code has been sent. / नया कोड भेज दिया गया');
+    } catch (error) {
+      if (isApiError(error) && error.retryAfterSec) setSecondsLeft(error.retryAfterSec);
+      setApiError(userMessage(error));
+    } finally {
+      setIsResending(false);
+    }
   };
 
   // Box currently receiving the next digit (the last box once the code is complete)
@@ -99,7 +137,7 @@ export default function OtpScreen() {
             Verify Phone Number <Text style={{ color: '#006c46' }}>/</Text> <Text style={{ fontSize: 20, color: '#3d4a41', fontWeight: '700' }}>ओटीपी सत्यापन</Text>
           </Text>
           <Text style={styles.subTitle}>
-            Enter 6-digit code sent to <Text style={{ fontWeight: '600', color: '#111c2d' }}>+91 {mobile || '98765 43210'}</Text>
+            Enter 6-digit code sent to <Text style={{ fontWeight: '600', color: '#111c2d' }}>+91 {mobile}</Text>
           </Text>
           <TouchableOpacity
             style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, alignSelf: 'flex-start' }}
@@ -109,6 +147,18 @@ export default function OtpScreen() {
             <Text style={styles.editLink}>Edit Number (बदलें)</Text>
           </TouchableOpacity>
         </View>
+
+        {devNotice && (
+          <View style={{ backgroundColor: '#FEF3C7', borderColor: '#F59E0B', borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 12, gap: 6 }} accessibilityRole="alert">
+            <Text style={{ color: '#92400E', fontWeight: '800', fontSize: 12, letterSpacing: 0.5 }}>DEVELOPMENT MODE</Text>
+            <Text style={{ color: '#92400E', fontSize: 13, lineHeight: 18 }}>{devNotice}</Text>
+            {devCode && (
+              <TouchableOpacity onPress={() => handleCodeChange(devCode)} accessibilityRole="button" style={{ alignSelf: 'flex-start', backgroundColor: '#F59E0B', borderRadius: 999, paddingVertical: 6, paddingHorizontal: 14 }}>
+                <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 12 }}>Fill test code {devCode}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
         {/* 6-Digit OTP Input Boxes */}
         <View style={styles.otpSection}>
@@ -170,6 +220,18 @@ export default function OtpScreen() {
           </View>
         )}
 
+        {apiError && (
+          <View style={styles.otpErrorRow} accessibilityRole="alert">
+            <AlertCircle color="#ef4444" size={14} />
+            <Text style={styles.otpErrorText}>{apiError}</Text>
+          </View>
+        )}
+        {notice && !apiError && (
+          <View style={styles.otpErrorRow}>
+            <Text style={[styles.otpErrorText, { color: '#006c46' }]}>{notice}</Text>
+          </View>
+        )}
+
         {/* Low-Literacy Audio Assist Pill */}
         <View style={styles.audioWrap}>
           <TouchableOpacity style={styles.audioBtn} activeOpacity={0.8} onPress={() => Alert.alert('🔊', 'Playing OTP Audio...')}>
@@ -189,14 +251,14 @@ export default function OtpScreen() {
               {secondsLeft > 0 ? (
                 <Text style={styles.timerPillText}>Resend OTP in 0:{secondsLeft < 10 ? `0${secondsLeft}` : secondsLeft}s</Text>
               ) : (
-                <TouchableOpacity onPress={() => setSecondsLeft(28)}>
-                  <Text style={[styles.timerPillText, { textDecorationLine: 'underline' }]}>Resend OTP Now</Text>
+                <TouchableOpacity onPress={() => void handleResend()} disabled={isResending}>
+                  <Text style={[styles.timerPillText, { textDecorationLine: 'underline' }]}>{isResending ? 'Sending…' : 'Resend OTP Now'}</Text>
                 </TouchableOpacity>
               )}
             </View>
           </View>
 
-          <TouchableOpacity style={styles.whatsappBtn} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.whatsappBtn} activeOpacity={0.8} onPress={() => setNotice('WhatsApp OTP is not available yet. Please use the SMS code. / व्हाट्सएप ओटीपी अभी उपलब्ध नहीं है')}>
             <MessageSquare color="#25D366" size={20} strokeWidth={2.5} />
             <Text style={styles.whatsappBtnText}>Get OTP on WhatsApp / व्हाट्सएप पर पाएं 💬</Text>
           </TouchableOpacity>
@@ -207,7 +269,7 @@ export default function OtpScreen() {
       <View style={[styles.footerAction, { paddingBottom: Math.max(insets.bottom, 20) }]}>
         <TouchableOpacity
           style={[styles.verifyBtn, isVerifying && { backgroundColor: '#006c46' }]}
-          onPress={handleVerify}
+          onPress={() => void handleVerify()}
           disabled={isVerifying}
           activeOpacity={0.9}
         >

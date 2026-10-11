@@ -1,44 +1,97 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Image, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Mic, Camera, Send } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../../constants/theme';
-import { SERVICE_CATEGORIES } from '../../constants/mockData';
 import { useStore } from '../../store/useStore';
+import { useSession } from '../../store/useSession';
+import { useAsync } from '../../api/useAsync';
+import { createJob, getCategories } from '../../api/endpoints';
+import { isApiError, userMessage } from '../../api/errors';
+import { uploadFile, type PickedFile } from '../../api/upload';
+import { pickImage } from '../../utils/pickImage';
+import type { JobTiming } from '../../api/types';
+import { ErrorBlock, LoadingBlock } from '../../components/StateBlocks';
+
+const MAX_PHOTOS = 4;
+const TIMINGS: { id: JobTiming; label: string }[] = [
+  { id: 'IMMEDIATE', label: 'Immediate (30m)' },
+  { id: 'AFTERNOON', label: 'Afternoon' },
+  { id: 'TOMORROW', label: 'Tomorrow' },
+];
+
 
 export default function PostJobScreen() {
   const router = useRouter();
-  const { selectedCategory } = useStore();
-  const [title, setTitle] = useState('Kitchen Sink Under-pipe Burst & Water Flow');
-  const [desc, setDesc] = useState('PVC pipe under the kitchen sink cracked suddenly, water is spreading on floor. Need replacement pipe immediately.');
-  const [isRecording, setIsRecording] = useState(false);
-  const [timing, setTiming] = useState('immediate');
+  const { selectedCategory, setSelectedCategory, setActiveJobId } = useStore();
+  const { customerProfile } = useSession();
+  const categories = useAsync(() => getCategories(), [], { reloadOnFocus: false });
+  const address = customerProfile?.addresses.find((a) => a.isPrimary) ?? customerProfile?.addresses[0] ?? null;
+
+  const [title, setTitle] = useState('');
+  const [desc, setDesc] = useState('');
+  const [timing, setTiming] = useState<JobTiming>('IMMEDIATE');
   const [titleError, setTitleError] = useState(false);
+  const [photos, setPhotos] = useState<{ file: PickedFile; key: string | null; failed?: boolean }[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const category = SERVICE_CATEGORIES.find((cat) => cat.id === selectedCategory) ?? SERVICE_CATEGORIES[1];
+  const category = (categories.data ?? []).find((c) => c.id === selectedCategory) ?? categories.data?.[0] ?? null;
 
-  const handleToggleRecord = () => {
-    setIsRecording(!isRecording);
-    if (!isRecording) {
-      Alert.alert('🎙️ Recording Started', 'Recording 15s audio memo in Hindi/Punjabi for nearby mistris...');
-    } else {
-      Alert.alert('✅ Recording Saved', 'Voice memo attached to request!');
+  const handleAddPhoto = async () => {
+    if (uploading || photos.length >= MAX_PHOTOS) return;
+    setFormError(null);
+    try {
+      const picked = await pickImage();
+      if (!picked) return;
+      setUploading(true);
+      const key = await uploadFile('JOB_PHOTO', picked);
+      setPhotos((prev) => [...prev, { file: picked, key }]);
+    } catch (error) {
+      setFormError(error instanceof Error && !isApiError(error) ? error.message : userMessage(error));
+    } finally {
+      setUploading(false);
     }
   };
 
-  const handleBroadcast = () => {
+  const handleBroadcast = async () => {
+    if (posting || uploading) return;
+    setFormError(null);
     if (!title.trim()) {
       setTitleError(true);
       return;
     }
-    if (Platform.OS === 'web') {
-      window.alert('🎉 Job Broadcasted\n\nRequest sent to 24 nearby Tricity technicians in Sector 22 & Mohali! Receiving quotes now...');
+    if (!category) {
+      setFormError('Choose a service first. / पहले सेवा चुनें');
+      return;
+    }
+    if (!address) {
+      setFormError('Add your address first. / पहले अपना पता जोड़ें');
+      router.push('/customer-onboarding');
+      return;
+    }
+    setPosting(true);
+    try {
+      const job = await createJob({
+          categoryId: category.id,
+          title: title.trim(),
+          ...(desc.trim() ? { description: desc.trim() } : {}),
+          timing,
+          addressId: address.id,
+          ...(photos.length ? { photoKeys: photos.flatMap((p) => (p.key ? [p.key] : [])) } : {}),
+      });
+      setActiveJobId(job.id);
+      setTitle('');
+      setDesc('');
+      setPhotos([]);
       router.push('/compare-offers');
-    } else {
-      Alert.alert('🎉 Job Broadcasted', 'Request sent to 24 nearby Tricity technicians in Sector 22 & Mohali! Receiving quotes now...', [
-        { text: 'View Bids', onPress: () => router.push('/compare-offers') }
-      ]);
+    } catch (error) {
+      const fields = isApiError(error) ? error.details.map((d) => `${d.field}: ${d.issue}`).join('; ') : '';
+      setFormError(userMessage(error) + (fields ? ` (${fields})` : ''));
+    } finally {
+      setPosting(false);
     }
   };
 
@@ -53,8 +106,23 @@ export default function PostJobScreen() {
         {/* Category Picker */}
         <View style={styles.card}>
           <Text style={styles.label}>Service Type / सेवा का प्रकार *</Text>
-          <View style={styles.pickerBox}>
-            <Text style={styles.pickerText} numberOfLines={1}>{category.title} ({category.hindi})</Text>
+          {categories.loading && <LoadingBlock label="Loading services… / सेवाएँ लोड हो रही हैं…" />}
+          {categories.error && !categories.data && <ErrorBlock message={categories.error} onRetry={() => void categories.reload()} />}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {(categories.data ?? []).map((c) => {
+              const on = category?.id === c.id;
+              return (
+                <TouchableOpacity
+                  key={c.id}
+                  style={[styles.timingBtn, on && styles.timingBtnActive]}
+                  onPress={() => setSelectedCategory(c.id)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                >
+                  <Text style={[styles.timingText, on && styles.timingTextActive]} numberOfLines={1}>{c.title.en} ({c.title.hi})</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
@@ -76,31 +144,10 @@ export default function PostJobScreen() {
           )}
         </View>
 
-        {/* Interactive Voice Note Card */}
+        {/* Voice notes need a recorder that is not part of this build yet; the server supports them (JOB_VOICE). */}
         <View style={styles.voiceCard}>
-          <Text style={styles.voiceTitle}>🎙️ Record Voice Note (बोलकर बताएं)</Text>
-          <Text style={styles.voiceSub}>Help technicians understand the issue faster in Hindi or Punjabi</Text>
-
-          <View style={styles.voiceRow}>
-            <TouchableOpacity
-              style={[styles.recordBtn, isRecording && styles.recordBtnActive]}
-              onPress={handleToggleRecord}
-            >
-              <Mic color="#FFFFFF" size={24} />
-            </TouchableOpacity>
-
-            <View style={styles.waveformWrap}>
-              <View style={[styles.waveBar, { height: isRecording ? 24 : 10 }]} />
-              <View style={[styles.waveBar, { height: isRecording ? 18 : 14 }]} />
-              <View style={[styles.waveBar, { height: isRecording ? 28 : 8 }]} />
-              <View style={[styles.waveBar, { height: isRecording ? 16 : 12 }]} />
-              <View style={[styles.waveBar, { height: isRecording ? 22 : 6 }]} />
-            </View>
-
-            <Text style={styles.timerText}>{isRecording ? 'REC 0:18' : '0:14 ✓'}</Text>
-          </View>
-
-          <Text style={styles.voiceAttached}>Audio Attached: "Under sink PVC pipe cracked, need emergency fix" ✓</Text>
+          <Text style={styles.voiceTitle}>🎙️ Voice Note (बोलकर बताएं)</Text>
+          <Text style={styles.voiceSub}>Voice notes are coming soon. For now, write the problem below or add photos.</Text>
         </View>
 
         {/* Description */}
@@ -117,46 +164,40 @@ export default function PostJobScreen() {
         {/* Attach Photos */}
         <View style={styles.card}>
           <Text style={styles.label}>Attach Photos (फ़ोटो जोड़ें)</Text>
-          <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
-            <TouchableOpacity style={styles.addPhotoBox} onPress={() => Alert.alert('Add Photo', 'Camera selected')}>
-              <Camera color={Colors.textMuted} size={20} />
-              <Text style={{ fontSize: 9, color: Colors.textMuted, marginTop: 2 }}>Add</Text>
-            </TouchableOpacity>
-            <Image
-              source={{ uri: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=150&auto=format&fit=crop&q=80' }}
-              style={styles.photoThumb}
-            />
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>
+            {photos.length < MAX_PHOTOS && (
+              <TouchableOpacity style={styles.addPhotoBox} onPress={() => void handleAddPhoto()} disabled={uploading} accessibilityRole="button" accessibilityLabel="Add a photo of the problem">
+                {uploading ? <ActivityIndicator color={Colors.primary} /> : <Camera color={Colors.textMuted} size={20} />}
+                <Text style={{ fontSize: 9, color: Colors.textMuted, marginTop: 2 }}>{uploading ? 'Uploading' : 'Add'}</Text>
+              </TouchableOpacity>
+            )}
+            {photos.map((p, i) => (
+              <TouchableOpacity key={p.key ?? i} onPress={() => setPhotos((prev) => prev.filter((_, j) => j !== i))} accessibilityRole="button" accessibilityLabel="Remove this photo">
+                <Image source={{ uri: p.file.uri }} style={styles.photoThumb} />
+              </TouchableOpacity>
+            ))}
           </View>
+          {photos.length > 0 && <Text style={{ fontSize: 9, color: Colors.textMuted, marginTop: 4 }}>Tap a photo to remove it.</Text>}
         </View>
 
         {/* Timing Selector */}
         <View style={styles.card}>
           <Text style={styles.label}>Preferred Timing / कब चाहिए? *</Text>
           <View style={styles.timingRow}>
-            <TouchableOpacity
-              style={[styles.timingBtn, timing === 'immediate' && styles.timingBtnActive]}
-              onPress={() => setTiming('immediate')}
-            >
-              <Text style={[styles.timingText, timing === 'immediate' && styles.timingTextActive]}>Immediate (30m)</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.timingBtn, timing === 'afternoon' && styles.timingBtnActive]}
-              onPress={() => setTiming('afternoon')}
-            >
-              <Text style={[styles.timingText, timing === 'afternoon' && styles.timingTextActive]}>Afternoon</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.timingBtn, timing === 'tomorrow' && styles.timingBtnActive]}
-              onPress={() => setTiming('tomorrow')}
-            >
-              <Text style={[styles.timingText, timing === 'tomorrow' && styles.timingTextActive]}>Tomorrow</Text>
-            </TouchableOpacity>
+            {TIMINGS.map((t) => (
+              <TouchableOpacity key={t.id} style={[styles.timingBtn, timing === t.id && styles.timingBtnActive]} onPress={() => setTiming(t.id)} accessibilityRole="button" accessibilityState={{ selected: timing === t.id }}>
+                <Text style={[styles.timingText, timing === t.id && styles.timingTextActive]}>{t.label}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
 
-        <TouchableOpacity style={styles.broadcastBtn} onPress={handleBroadcast}>
-          <Send color="#FFFFFF" size={18} />
-          <Text style={styles.broadcastBtnText}>Broadcast Request to Nearby Pros (Free)</Text>
+        {formError && (
+          <Text style={[styles.errorText, { textAlign: 'center', marginBottom: 8 }]} accessibilityRole="alert">{formError}</Text>
+        )}
+        <TouchableOpacity style={[styles.broadcastBtn, (posting || uploading) && { opacity: 0.7 }]} onPress={() => void handleBroadcast()} disabled={posting || uploading} accessibilityRole="button">
+          {posting ? <ActivityIndicator color="#FFFFFF" /> : <Send color="#FFFFFF" size={18} />}
+          <Text style={styles.broadcastBtnText}>{posting ? 'Posting…' : 'Broadcast Request to Nearby Pros (Free)'}</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

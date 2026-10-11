@@ -1,93 +1,235 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Phone, FileText, RotateCcw, ArrowRight, ShieldCheck } from 'lucide-react-native';
+import { Phone, FileText, RotateCcw } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../../constants/theme';
 import { useStore } from '../../store/useStore';
-import { VERIFIED_WORKERS } from '../../constants/mockData';
+import { useAsync } from '../../api/useAsync';
+import { cancelJob, getEarnings, getReceipt, listMyJobs, listWorkerJobs } from '../../api/endpoints';
+import { userMessage } from '../../api/errors';
+import type { JobListItem, JobListPage, JobStatus, JobTab, PendingQuote, WorkerJobItem, WorkerJobsPage } from '../../api/types';
+import { confirmAction, notify } from '../../utils/dialog';
+import { timeAgo, whenLabel } from '../../utils/time';
+import { EmptyBlock, ErrorBlock, LoadingBlock } from '../../components/StateBlocks';
+
+const POLL_MS = 12000;
+const STATUS_TEXT: Record<JobStatus, string> = {
+  OPEN: 'WAITING FOR QUOTES',
+  ASSIGNED: 'WORKER ON THE WAY',
+  ARRIVED: 'WORKER ARRIVED',
+  IN_PROGRESS: 'WORK IN PROGRESS',
+  WORK_COMPLETED: 'BILL READY',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+};
+const money = (n: number) => `₹${n.toLocaleString('en-IN')}`;
 
 export default function ActivityScreen() {
   const router = useRouter();
-  const { role } = useStore();
+  const { role, setActiveJobId, setSelectedCategory } = useStore();
   const isWorker = role === 'worker';
+  const [activeTab, setActiveTab] = useState<JobTab>('ongoing');
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'ongoing' | 'completed' | 'cancelled'>('ongoing');
+  const jobs = useAsync<JobListPage | WorkerJobsPage>(
+    () => (isWorker ? listWorkerJobs(activeTab) : listMyJobs(activeTab)),
+    [isWorker, activeTab],
+    { pollMs: POLL_MS },
+  );
+  const earnings = useAsync(() => (isWorker ? getEarnings('today') : Promise.resolve(null)), [isWorker]);
+
+  const counts = jobs.data?.meta.counts;
+  const list: (JobListItem | WorkerJobItem)[] = jobs.data?.items ?? [];
+  const pendingQuotes: PendingQuote[] = isWorker && activeTab === 'ongoing' && jobs.data && 'pendingQuotes' in jobs.data ? jobs.data.pendingQuotes ?? [] : [];
+
+  const open = (jobId: string, path: '/tracking' | '/job-progress' | '/compare-offers' | '/rating') => {
+    setActiveJobId(jobId);
+    router.push(path);
+  };
+
+  const handleCancel = async (jobId: string) => {
+    if (busyId) return;
+    const ok = await confirmAction('Cancel this request?', 'Workers who already quoted will be told. You can post it again any time.', 'Yes, cancel', true);
+    if (!ok) return;
+    setBusyId(jobId);
+    try {
+      await cancelJob(jobId);
+      await jobs.reload();
+    } catch (error) {
+      notify('Could not cancel', userMessage(error));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const showReceipt = async (jobId: string) => {
+    if (busyId) return;
+    setBusyId(jobId);
+    try {
+      const r = await getReceipt(jobId);
+      const lines = r.items.map((i) => `${i.description}: ${money(i.amount)}`).join('\n');
+      notify(`Receipt ${r.receiptNo}`, `${r.jobTitle}\n${r.worker.name} → ${r.customer.name}\n\n${lines}\nPlatform fee: ₹0\nTotal: ${money(r.total)} (${r.method === 'UPI' ? 'UPI' : 'cash'})`);
+    } catch (error) {
+      notify('Receipt not available', userMessage(error));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const callNumber = (phone: string) => void Linking.openURL(`tel:${phone.replace(/\s+/g, '')}`);
+
+  const tabLabel = (tab: JobTab, label: string) => `${label}${counts ? ` (${counts[tab]})` : ''}`;
+
+  const renderCustomerCard = (job: JobListItem) => {
+    const ongoing = activeTab === 'ongoing';
+    return (
+      <View key={job.id} style={[styles.card, ongoing && styles.ongoingCard]}>
+        <View style={styles.ongoingHeader}>
+          <View style={{ flex: 1 }}>
+            {ongoing && (
+              <View style={styles.activePill}>
+                <Text style={styles.activePillText}>{STATUS_TEXT[job.status]}</Text>
+              </View>
+            )}
+            <Text style={ongoing ? styles.jobTitle : styles.pastJobTitle}>{job.title}</Text>
+            <Text style={ongoing ? styles.jobSubtitle : styles.pastJobMeta}>
+              {job.area} • {job.category.title} • {job.bookedStartAt ? whenLabel(job.bookedStartAt) : timeAgo(job.createdAt)}
+              {!ongoing && job.worker ? ` • ${job.worker.name}` : ''}
+              {!ongoing && job.rating ? ` • Rated ${job.rating.toFixed(1)} ★` : ''}
+            </Text>
+          </View>
+        </View>
+
+        {ongoing && job.worker && (
+          <View style={styles.workerStrip}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.stripName}>{job.worker.name}</Text>
+            </View>
+            <TouchableOpacity style={styles.stripCallBtn} onPress={() => callNumber(job.worker!.phone)} activeOpacity={0.8} accessibilityRole="button">
+              <Phone color="#065F46" size={13} />
+              <Text style={styles.stripCallText}>Call</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <View style={ongoing ? styles.actionRow : styles.pastJobActions}>
+          {ongoing && job.status === 'OPEN' && !job.isDirect && (
+            <TouchableOpacity style={styles.actionBtnPrimary} onPress={() => open(job.id, '/compare-offers')} activeOpacity={0.8} accessibilityRole="button">
+              <Text style={styles.actionBtnPrimaryText}>View quotes ({job.offersCount})</Text>
+            </TouchableOpacity>
+          )}
+          {ongoing && job.status === 'OPEN' && job.isDirect && (
+            <TouchableOpacity style={styles.actionBtnSecondary} onPress={() => open(job.id, '/tracking')} activeOpacity={0.8} accessibilityRole="button">
+              <Text style={styles.actionBtnSecondaryText}>Waiting for worker →</Text>
+            </TouchableOpacity>
+          )}
+          {ongoing && ['ASSIGNED', 'ARRIVED', 'IN_PROGRESS'].includes(job.status) && (
+            <TouchableOpacity style={styles.actionBtnSecondary} onPress={() => open(job.id, '/tracking')} activeOpacity={0.8} accessibilityRole="button">
+              <Text style={styles.actionBtnSecondaryText}>Track Status →</Text>
+            </TouchableOpacity>
+          )}
+          {ongoing && ['ARRIVED', 'IN_PROGRESS', 'WORK_COMPLETED'].includes(job.status) && (
+            <TouchableOpacity style={styles.actionBtnPrimary} onPress={() => open(job.id, '/job-progress')} activeOpacity={0.8} accessibilityRole="button">
+              <Text style={styles.actionBtnPrimaryText}>{job.status === 'WORK_COMPLETED' ? 'Review bill & pay' : 'Job progress'}</Text>
+            </TouchableOpacity>
+          )}
+          {ongoing && ['OPEN', 'ASSIGNED'].includes(job.status) && (
+            <TouchableOpacity style={styles.actionBtnSecondary} onPress={() => void handleCancel(job.id)} disabled={busyId !== null} activeOpacity={0.8} accessibilityRole="button">
+              <Text style={styles.actionBtnSecondaryText}>{busyId === job.id ? 'Cancelling…' : 'Cancel'}</Text>
+            </TouchableOpacity>
+          )}
+          {activeTab === 'completed' && (
+            <>
+              <TouchableOpacity style={styles.receiptBtn} onPress={() => void showReceipt(job.id)} disabled={busyId !== null} activeOpacity={0.7} accessibilityRole="button">
+                <FileText color={Colors.tertiary} size={14} />
+                <Text style={styles.receiptBtnText}>View Receipt</Text>
+              </TouchableOpacity>
+              {!job.reviewed && (
+                <TouchableOpacity style={styles.rebookBtn} onPress={() => open(job.id, '/rating')} activeOpacity={0.7} accessibilityRole="button">
+                  <Text style={styles.rebookBtnText}>Leave Review</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={styles.rebookBtn} onPress={() => { setSelectedCategory(job.category.id); router.push('/(tabs)/post-job'); }} activeOpacity={0.7} accessibilityRole="button">
+                <RotateCcw color={Colors.primary} size={14} />
+                <Text style={styles.rebookBtnText}>Re-Book ↻</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </View>
+    );
+  };
+
+  const renderWorkerCard = (job: WorkerJobItem) => {
+    const ongoing = activeTab === 'ongoing';
+    return (
+      <TouchableOpacity key={job.id} style={[styles.card, ongoing && styles.ongoingCard]} onPress={() => open(job.id, '/job-progress')} activeOpacity={0.85} accessibilityRole="button">
+        <View style={styles.ongoingHeader}>
+          <View style={{ flex: 1 }}>
+            {ongoing && (
+              <View style={styles.activePill}>
+                <Text style={styles.activePillText}>{STATUS_TEXT[job.status]}</Text>
+              </View>
+            )}
+            <Text style={ongoing ? styles.jobTitle : styles.pastJobTitle}>{job.title}</Text>
+            <Text style={ongoing ? styles.jobSubtitle : styles.pastJobMeta}>
+              {job.area} • {job.customerName} • {job.bookedStartAt ? whenLabel(job.bookedStartAt) : timeAgo(job.createdAt)}
+              {job.rating ? ` • Rated ${job.rating.toFixed(1)} ★` : ''}
+            </Text>
+          </View>
+          {job.total > 0 && (
+            <View style={styles.amountPill}>
+              <Text style={styles.amountPillText}>{money(job.total)}</Text>
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header Bar */}
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>
-            {isWorker ? 'Worker Earnings & Jobs' : 'My Jobs & Activity'}
-          </Text>
+          <Text style={styles.headerTitle}>{isWorker ? 'Worker Earnings & Jobs' : 'My Jobs & Activity'}</Text>
           <Text style={styles.headerSubtitle}>Chandigarh Tricity Bookings</Text>
         </View>
         <View style={styles.headerPill}>
-          <Text style={styles.headerPillText}>
-            {isWorker ? '₹1,450 Earned Today' : '0% App Fees'}
-          </Text>
+          <Text style={styles.headerPillText}>{isWorker ? `${money(earnings.data?.amount ?? 0)} Earned Today` : '0% App Fees'}</Text>
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={jobs.refreshing} onRefresh={() => { void jobs.reload(); void earnings.reload(); }} />}
+      >
         {/* Segmented Filter Tabs */}
         <View style={styles.segmentContainer}>
-          <TouchableOpacity
-            style={[styles.segmentBtn, activeTab === 'ongoing' && styles.segmentBtnActive]}
-            onPress={() => setActiveTab('ongoing')}
-            activeOpacity={0.7}
-          >
-            <Text
-              style={[
-                styles.segmentText,
-                activeTab === 'ongoing' && styles.segmentTextActive
-              ]}
+          {([['ongoing', 'Ongoing'], ['completed', 'Completed'], ['cancelled', 'Cancelled']] as const).map(([tab, label]) => (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.segmentBtn, activeTab === tab && styles.segmentBtnActive]}
+              onPress={() => setActiveTab(tab)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityState={{ selected: activeTab === tab }}
             >
-              Ongoing (1)
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.segmentBtn, activeTab === 'completed' && styles.segmentBtnActive]}
-            onPress={() => setActiveTab('completed')}
-            activeOpacity={0.7}
-          >
-            <Text
-              style={[
-                styles.segmentText,
-                activeTab === 'completed' && styles.segmentTextActive
-              ]}
-            >
-              Completed (8)
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.segmentBtn, activeTab === 'cancelled' && styles.segmentBtnActive]}
-            onPress={() => setActiveTab('cancelled')}
-            activeOpacity={0.7}
-          >
-            <Text
-              style={[
-                styles.segmentText,
-                activeTab === 'cancelled' && styles.segmentTextActive
-              ]}
-            >
-              Cancelled (0)
-            </Text>
-          </TouchableOpacity>
+              <Text style={[styles.segmentText, activeTab === tab && styles.segmentTextActive]}>{tabLabel(tab, label)}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         {/* Worker Earnings Metrics Card */}
         {isWorker && (
           <View style={styles.earningsCard}>
             <Text style={styles.earningsSub}>TODAY'S DIRECT EARNINGS (सीधी कमाई)</Text>
-            <Text style={styles.earningsValue}>₹1,450.00</Text>
+            <Text style={styles.earningsValue}>{earnings.data ? `${money(earnings.data.amount)}.00` : earnings.error ? '—' : '…'}</Text>
             <View style={styles.earningsMeta}>
               <Text style={styles.earningsMetaItem}>
-                Jobs Done: <Text style={{ fontWeight: '800' }}>4</Text>
+                Jobs Done: <Text style={{ fontWeight: '800' }}>{earnings.data?.jobsDone ?? 0}</Text>
               </Text>
               <Text style={styles.earningsMetaItem}>
                 Platform Fee: <Text style={{ fontWeight: '800' }}>₹0.00 (Zero Cut)</Text>
@@ -96,132 +238,33 @@ export default function ActivityScreen() {
           </View>
         )}
 
-        {/* Active/Ongoing Job Card */}
-        {activeTab === 'ongoing' && (
-          <View style={[styles.card, styles.ongoingCard]}>
-            <View style={styles.ongoingHeader}>
-              <View style={{ flex: 1 }}>
-                <View style={styles.activePill}>
-                  <Text style={styles.activePillText}>ACTIVE REPAIR</Text>
-                </View>
-                <Text style={styles.jobTitle}>Kitchen Pipe Leakage & Replacement</Text>
-                <Text style={styles.jobSubtitle}>Sector 22-B • Today at 11:30 AM</Text>
-              </View>
-              <View style={styles.amountPill}>
-                <Text style={styles.amountPillText}>₹430 Settled</Text>
-              </View>
-            </View>
+        {jobs.loading && <LoadingBlock label="Loading your jobs… / जॉब लोड हो रहे हैं…" />}
+        {jobs.error && !jobs.data && <ErrorBlock message={jobs.error} onRetry={() => void jobs.reload()} />}
 
-            <View style={styles.workerStrip}>
-              <Image source={{ uri: VERIFIED_WORKERS[0].avatar }} style={styles.stripAvatar} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.stripName}>
-                  {VERIFIED_WORKERS[0].name} (Master Electrician & Plumber)
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.stripCallBtn}
-                onPress={() =>
-                  alert(`Calling ${VERIFIED_WORKERS[0].name} at ${VERIFIED_WORKERS[0].phone}`)
-                }
-                activeOpacity={0.8}
-              >
-                <Phone color="#065F46" size={13} />
-                <Text style={styles.stripCallText}>Call</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.actionRow}>
-              <TouchableOpacity
-                style={styles.actionBtnSecondary}
-                onPress={() => router.push('/tracking')}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.actionBtnSecondaryText}>Track Status →</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.actionBtnPrimary}
-                onPress={() => router.push('/rating')}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.actionBtnPrimaryText}>Leave Review</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* Past Completed Jobs */}
-        {(activeTab === 'ongoing' || activeTab === 'completed') && (
+        {/* Quotes the worker sent that are still waiting for an answer */}
+        {pendingQuotes.length > 0 && (
           <>
-            <Text style={styles.sectionHeading}>PAST COMPLETED JOBS (पिछले काम)</Text>
-
-            {/* Past Job 1 */}
-            <View style={styles.card}>
-              <View style={styles.pastJobHeader}>
-                <Text style={styles.pastJobTitle}>Split AC Filter Cleaning & Gas Check</Text>
-                <Text style={styles.pastJobPrice}>₹299</Text>
+            <Text style={styles.sectionHeading}>QUOTES WAITING FOR A REPLY (जवाब का इंतज़ार)</Text>
+            {pendingQuotes.map((q) => (
+              <View key={q.offerId} style={styles.card}>
+                <View style={styles.pastJobHeader}>
+                  <Text style={styles.pastJobTitle}>{q.title}</Text>
+                  <Text style={styles.pastJobPrice}>{money(q.visitFee)}</Text>
+                </View>
+                <Text style={styles.pastJobMeta}>{q.reference} • ETA {q.etaMinutes} min • sent {timeAgo(q.createdAt)}</Text>
               </View>
-              <Text style={styles.pastJobMeta}>
-                Completed by Amit Sharma on Oct 4 • Rated 5.0 ★
-              </Text>
-              <View style={styles.pastJobActions}>
-                <TouchableOpacity
-                  style={styles.receiptBtn}
-                  onPress={() => alert('Downloading official GST/Direct invoice #KC-99238')}
-                  activeOpacity={0.7}
-                >
-                  <FileText color={Colors.tertiary} size={14} />
-                  <Text style={styles.receiptBtnText}>Download Receipt (0% Tax)</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.rebookBtn}
-                  onPress={() => router.push('/(tabs)/post-job')}
-                  activeOpacity={0.7}
-                >
-                  <RotateCcw color={Colors.primary} size={14} />
-                  <Text style={styles.rebookBtnText}>Re-Book Worker ↻</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Past Job 2 */}
-            <View style={styles.card}>
-              <View style={styles.pastJobHeader}>
-                <Text style={styles.pastJobTitle}>Main Switchboard MCB Trip Fix</Text>
-                <Text style={styles.pastJobPrice}>₹200</Text>
-              </View>
-              <Text style={styles.pastJobMeta}>
-                Completed by Rajesh Kumar on Sep 28 • Rated 5.0 ★
-              </Text>
-              <View style={styles.pastJobActions}>
-                <TouchableOpacity
-                  style={styles.receiptBtn}
-                  onPress={() => alert('Downloading official invoice #KC-98114')}
-                  activeOpacity={0.7}
-                >
-                  <FileText color={Colors.tertiary} size={14} />
-                  <Text style={styles.receiptBtnText}>Download Receipt</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.rebookBtn}
-                  onPress={() => router.push('/(tabs)/post-job')}
-                  activeOpacity={0.7}
-                >
-                  <RotateCcw color={Colors.primary} size={14} />
-                  <Text style={styles.rebookBtnText}>Re-Book Worker ↻</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+            ))}
           </>
         )}
 
-        {activeTab === 'cancelled' && (
-          <View style={[styles.card, { alignItems: 'center', paddingVertical: 40 }]}>
-            <Text style={{ fontSize: 13, color: Colors.textMuted }}>
-              No cancelled jobs found. You have a 100% completion record!
-            </Text>
-          </View>
+        {jobs.data && list.length === 0 && pendingQuotes.length === 0 && (
+          <EmptyBlock
+            title={activeTab === 'ongoing' ? 'Nothing ongoing' : activeTab === 'completed' ? 'No completed jobs yet' : 'No cancelled jobs'}
+            hint={isWorker ? 'Jobs you win show up here. / जीते हुए काम यहाँ दिखेंगे' : 'Post a job or book a pro from Home. / होम से काम पोस्ट करें'}
+          />
         )}
+
+        {list.map((job) => (isWorker ? renderWorkerCard(job as WorkerJobItem) : renderCustomerCard(job as JobListItem)))}
       </ScrollView>
     </SafeAreaView>
   );
