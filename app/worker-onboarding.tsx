@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, SafeAreaView, Image, Modal } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Modal } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
   ArrowLeft, ShieldCheck, User, Wrench, Zap, Monitor, Droplet, Hammer,
-  Medal, Minus, Plus, X, Globe, CheckCircle2, PlusCircle, MapPin, Lock, CreditCard, Save, Camera, Badge, Phone, Shield
+  Medal, Minus, Plus, X, Globe, Check, CheckCircle2, PlusCircle, MapPin, Lock, CreditCard, Save, Camera, IdCard, Phone, Shield
 } from 'lucide-react-native';
+import ModeSwitchCard from '../components/ModeSwitchCard';
 import { useStore } from '../store/useStore';
+import { resetTo } from '../utils/navigation';
 
 // We map HTML colors to local constants to match the design perfectly
 const HtmlColors = {
@@ -20,21 +23,39 @@ const HtmlColors = {
   surfaceContainerHigh: '#dee8ff',
   onSurface: '#111c2d',
   onSurfaceVariant: '#3d4a41',
-  outline: '#6c7a70'
+  outline: '#6c7a70',
+  error: '#ba1a1a'
 };
+
+const TRADES = [
+  { id: 'electrician', label: 'Electrician (इलेक्ट्रीशियन)', Icon: Zap },
+  { id: 'appliance', label: 'Appliance Repair (उपकरण मरम्मत)', Icon: Monitor },
+  { id: 'plumber', label: 'Plumber (प्लंबर)', Icon: Droplet },
+  { id: 'carpenter', label: 'Carpenter (बढ़ई)', Icon: Hammer }
+];
+const MAX_TRADES = 2;
 
 export default function WorkerOnboardingScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { setRole } = useStore();
-  
-  const [roleMode, setRoleMode] = useState('worker');
-  const [trade, setTrade] = useState('electrician');
-  const [secondaryTrade, setSecondaryTrade] = useState('appliance');
+  const scrollRef = useRef<ScrollView>(null);
+
+  // First entry is the primary trade, the optional second one is the secondary
+  const [trades, setTrades] = useState(['electrician', 'appliance']);
   const [exp, setExp] = useState(8);
   const [skills, setSkills] = useState(['Wiring (वायरिंग)', 'MCB Box Repair', 'Inverter / Battery', 'Fan Repair / पंखा']);
   const [radius, setRadius] = useState('6 km');
   const [agreed, setAgreed] = useState(true);
+  const [agreeError, setAgreeError] = useState(false);
   const [showModal, setShowModal] = useState(false);
+
+  const toggleTrade = (id: string) => {
+    setTrades((prev) => {
+      if (prev.includes(id)) return prev.length > 1 ? prev.filter((t) => t !== id) : prev;
+      return prev.length < MAX_TRADES ? [...prev, id] : [prev[0], id];
+    });
+  };
 
   const adjustExp = (delta: number) => {
     setExp(prev => Math.max(1, Math.min(40, prev + delta)));
@@ -45,28 +66,42 @@ export default function WorkerOnboardingScreen() {
   };
 
   const handleSubmit = () => {
+    if (!agreed) {
+      setAgreeError(true);
+      scrollRef.current?.scrollToEnd({ animated: true });
+      return;
+    }
     setShowModal(true);
+  };
+
+  // replace (not push) so Back from the other setup screen returns to Role Selection
+  const handleSwitchToCustomer = () => {
+    setRole('customer');
+    router.replace('/customer-onboarding');
   };
 
   const handleGoDashboard = () => {
     setShowModal(false);
-    setRole(roleMode as any);
-    router.push('/(tabs)/leads');
+    setRole('worker');
+    resetTo('/(tabs)/leads');
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Top Bar */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => router.canGoBack() ? router.back() : router.replace('/role')}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
             <ArrowLeft color={HtmlColors.onSurface} size={24} />
           </TouchableOpacity>
-          <Image 
-            source={{ uri: 'https://lh3.googleusercontent.com/aida/AEtjO1XczmBh09k5wl0Bntxdg-AlI03bx6carDUzphbv1rmSMDMeqKs0CIa718aK9D21tnLHJLzuICvzkeSV4m2glCf9q2wZs9VeADkSRvpmL-n-xJHGm1jLAH4RPNwyNIGp0LhJK_fCGv34DAK-KNXh_7uHTuV9PrUP3UC5r7WrTc9dwj06y1sc0JTSByNjRzDTIQsK9goI8LaUcUD2PX0VvJB0Tsgvr935sfromAw1Rjpq' }} 
-            style={styles.logo} 
-            resizeMode="contain" 
-          />
+          <View style={styles.logo}>
+            <Wrench color={HtmlColors.onPrimary} size={18} />
+          </View>
           <Text style={styles.headerTitle} numberOfLines={1}>Worker Detail Direct Call</Text>
         </View>
         <View style={styles.headerRight}>
@@ -75,7 +110,7 @@ export default function WorkerOnboardingScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Subtle Trust Banner Header */}
         <View style={styles.trustBanner}>
           <View style={styles.trustBannerLeft}>
@@ -85,23 +120,8 @@ export default function WorkerOnboardingScreen() {
           <View style={styles.tricityVerified}><Text style={styles.tricityVerifiedText}>Tricity Verified</Text></View>
         </View>
 
-        {/* Role Selector Switch */}
-        <View style={styles.roleSwitchContainer}>
-          <TouchableOpacity 
-            style={[styles.roleBtn, roleMode === 'worker' && styles.roleBtnActive]} 
-            onPress={() => setRoleMode('worker')}
-          >
-            <Wrench color={roleMode === 'worker' ? HtmlColors.onPrimary : HtmlColors.onSurfaceVariant} size={18} />
-            <Text style={[styles.roleBtnText, roleMode === 'worker' && styles.roleBtnTextActive]}>Worker (कारीगर)</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.roleBtn, roleMode === 'customer' && styles.roleBtnActive]} 
-            onPress={() => setRoleMode('customer')}
-          >
-            <User color={roleMode === 'customer' ? HtmlColors.onPrimary : HtmlColors.onSurfaceVariant} size={18} />
-            <Text style={[styles.roleBtnText, roleMode === 'customer' && styles.roleBtnTextActive]}>Customer (ग्राहक)</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Worker Mode Card */}
+        <ModeSwitchCard mode="worker" onSwitch={handleSwitchToCustomer} />
 
         {/* Header Section & Public Privacy Trust Pill */}
         <View style={styles.formHeader}>
@@ -110,11 +130,11 @@ export default function WorkerOnboardingScreen() {
             <View style={styles.freePill}><Text style={styles.freePillText}>100% Free</Text></View>
           </View>
           <Text style={styles.formHeaderSub}>कारीगर प्रोफाइल एवं पहचान सत्यापन</Text>
-          
+
           <View style={styles.securityBadge}>
             <View style={styles.securityIconBg}><Shield color={HtmlColors.primary} size={18} /></View>
             <View style={{ flex: 1, marginLeft: 12 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
                 <Text style={styles.securityTitle}>Identity Verified on KaamConnect</Text>
                 <View style={styles.pulseDot} />
               </View>
@@ -127,9 +147,9 @@ export default function WorkerOnboardingScreen() {
         <View style={styles.card}>
           <View style={styles.photoContainer}>
             <View style={styles.avatarWrap}>
-              <Image 
-                source={{ uri: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB-dO-2vCzTdR8J3qa4fwcozHNi1Y2k7GAEOQZ8861mCG-0lPq-EqMhT4I0eqB_TXWzLfWheKQTLFYkdjIhvG3l0Kg6YgbYrdiOesAqnW0QHqoTi9LHyeUN2-cwFcrTmETSG9xZR75QB-EaOEC2H0jlgzVSsNjzO6q797nt2vUYMTh6LMfyYHClkq6eOIVMzMrXc22cp2xBnswFRkDdVJCj9ijs9pfs9HLhEItxCsJr' }} 
-                style={styles.avatarImage} 
+              <Image
+                source={{ uri: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB-dO-2vCzTdR8J3qa4fwcozHNi1Y2k7GAEOQZ8861mCG-0lPq-EqMhT4I0eqB_TXWzLfWheKQTLFYkdjIhvG3l0Kg6YgbYrdiOesAqnW0QHqoTi9LHyeUN2-cwFcrTmETSG9xZR75QB-EaOEC2H0jlgzVSsNjzO6q797nt2vUYMTh6LMfyYHClkq6eOIVMzMrXc22cp2xBnswFRkDdVJCj9ijs9pfs9HLhEItxCsJr' }}
+                style={styles.avatarImage}
               />
               <View style={styles.cameraBtn}><Camera color={HtmlColors.onPrimary} size={16} /></View>
             </View>
@@ -145,7 +165,7 @@ export default function WorkerOnboardingScreen() {
         {/* Section 2: Personal Details */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
-            <Badge color={HtmlColors.primary} size={20} />
+            <IdCard color={HtmlColors.primary} size={20} />
             <Text style={styles.cardTitle}>Personal Details (निजी विवरण)</Text>
           </View>
           <View style={styles.inputGroup}>
@@ -174,47 +194,48 @@ export default function WorkerOnboardingScreen() {
         {/* Section 3: Primary Trade */}
         <View style={styles.card}>
           <View style={[styles.cardHeader, { justifyContent: 'space-between' }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={styles.cardHeaderMain}>
               <Wrench color={HtmlColors.primary} size={20} />
               <Text style={styles.cardTitle}>Primary Trade (मुख्य काम)</Text>
             </View>
             <Text style={styles.maxText}>Max 2</Text>
           </View>
           <View style={styles.chipsWrap}>
-            <TouchableOpacity style={[styles.tradeChip, trade === 'electrician' && styles.tradeChipActive]} onPress={() => setTrade('electrician')}>
-              <Zap color={trade === 'electrician' ? HtmlColors.onPrimary : HtmlColors.onSurfaceVariant} size={18} />
-              <Text style={[styles.tradeChipText, trade === 'electrician' && styles.tradeChipTextActive]}>Electrician (इलेक्ट्रीशियन)</Text>
-              {trade === 'electrician' && <CheckCircle2 color={HtmlColors.onPrimary} size={16} />}
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={[styles.tradeChip, secondaryTrade === 'appliance' ? styles.tradeChipSecondary : null]} onPress={() => setSecondaryTrade(secondaryTrade === 'appliance' ? '' : 'appliance')}>
-              <Monitor color={secondaryTrade === 'appliance' ? HtmlColors.onSurface : HtmlColors.onSurfaceVariant} size={18} />
-              <Text style={[styles.tradeChipText, secondaryTrade === 'appliance' ? { color: HtmlColors.onSurface } : null]}>Appliance Repair (उपकरण मरम्मत)</Text>
-              <Plus color={HtmlColors.primary} size={16} />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.tradeChip}>
-              <Droplet color={HtmlColors.onSurfaceVariant} size={18} />
-              <Text style={styles.tradeChipText}>Plumber (प्लंबर)</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.tradeChip}>
-              <Hammer color={HtmlColors.onSurfaceVariant} size={18} />
-              <Text style={styles.tradeChipText}>Carpenter (बढ़ई)</Text>
-            </TouchableOpacity>
+            {TRADES.map(({ id, label, Icon }) => {
+              const isPrimary = trades[0] === id;
+              const isSecondary = !isPrimary && trades.includes(id);
+              return (
+                <TouchableOpacity
+                  key={id}
+                  style={[styles.tradeChip, isPrimary && styles.tradeChipActive, isSecondary && styles.tradeChipSecondary]}
+                  onPress={() => toggleTrade(id)}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  aria-selected={isPrimary || isSecondary}
+                >
+                  <Icon color={isPrimary ? HtmlColors.onPrimary : isSecondary ? HtmlColors.onSurface : HtmlColors.onSurfaceVariant} size={18} />
+                  <Text style={[styles.tradeChipText, isPrimary && styles.tradeChipTextActive, isSecondary && { color: HtmlColors.onSurface }]}>
+                    {label}
+                  </Text>
+                  {isPrimary && <CheckCircle2 color={HtmlColors.onPrimary} size={16} />}
+                  {isSecondary && <CheckCircle2 color={HtmlColors.primary} size={16} />}
+                  {!isPrimary && !isSecondary && <Plus color={HtmlColors.primary} size={16} />}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
         {/* Section 4: Experience & Skills */}
         <View style={styles.card}>
           <View style={[styles.cardHeader, { justifyContent: 'space-between' }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={styles.cardHeaderMain}>
               <Medal color={HtmlColors.primary} size={20} />
               <Text style={styles.cardTitle}>Experience & Skills</Text>
             </View>
             <View style={styles.expBadge}><Text style={styles.expBadgeText}>{exp} Years Exp</Text></View>
           </View>
-          
+
           <View style={styles.expStepperRow}>
             <Text style={styles.expStepperLabel}>Total Field Experience:</Text>
             <View style={styles.stepper}>
@@ -268,7 +289,7 @@ export default function WorkerOnboardingScreen() {
         {/* Section 6: Radius */}
         <View style={styles.card}>
           <View style={[styles.cardHeader, { justifyContent: 'space-between' }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={styles.cardHeaderMain}>
               <MapPin color={HtmlColors.primary} size={20} />
               <Text style={styles.cardTitle}>Service Base & Radius</Text>
             </View>
@@ -276,14 +297,14 @@ export default function WorkerOnboardingScreen() {
           </View>
 
           <View style={styles.baseSector}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
               <View style={styles.mapPinBg}><MapPin color={HtmlColors.primary} size={18} /></View>
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.baseTitle}>Base: Sector 35 Chandigarh</Text>
                 <Text style={styles.baseSub}>Includes Mohali Phase 7 & 3B2 border</Text>
               </View>
             </View>
-            <TouchableOpacity><Text style={styles.changeLink}>Change</Text></TouchableOpacity>
+            <TouchableOpacity hitSlop={12}><Text style={styles.changeLink}>Change</Text></TouchableOpacity>
           </View>
 
           <View style={[styles.labelRow, { marginTop: 12, marginBottom: 8 }]}>
@@ -292,7 +313,7 @@ export default function WorkerOnboardingScreen() {
           </View>
           <View style={styles.radiusGrid}>
             {['3 km', '6 km', '12 km'].map((r) => (
-              <TouchableOpacity 
+              <TouchableOpacity
                 key={r}
                 style={[styles.radiusBtn, radius === r && styles.radiusBtnActive]}
                 onPress={() => setRadius(r)}
@@ -309,7 +330,7 @@ export default function WorkerOnboardingScreen() {
         {/* Section 7: ID Verification */}
         <View style={styles.card}>
           <View style={[styles.cardHeader, { justifyContent: 'space-between' }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={styles.cardHeaderMain}>
               <ShieldCheck color={HtmlColors.primary} size={20} />
               <Text style={styles.cardTitle}>Govt ID Verification</Text>
             </View>
@@ -343,14 +364,14 @@ export default function WorkerOnboardingScreen() {
           </View>
 
           <View style={styles.aadhaarVisual}>
-            <Image 
-              source={{ uri: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB95ASKMHdYWtIJYp-3Om9pmSGyOwy-c5-Q9RG9TAKTPVXRk2zEk_U7m5wDxuyX3HsnLyUsP17ltI4TehSx6pb96mutmOejnzTS_tiWq0KY1SUzN1tHerhfarejpEZL1TfeoAoaGL8Wt7n5ONbV_ZMwuv6i8FN02eBTSBHGaSkXpg9UwgRoZsTXM8u2sIjecAif1pr5-zAg-XZuQznN4Fgyv6LZMJwd-S-I9VSEaW9f' }} 
-              style={styles.aadhaarImg} 
+            <Image
+              source={{ uri: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB95ASKMHdYWtIJYp-3Om9pmSGyOwy-c5-Q9RG9TAKTPVXRk2zEk_U7m5wDxuyX3HsnLyUsP17ltI4TehSx6pb96mutmOejnzTS_tiWq0KY1SUzN1tHerhfarejpEZL1TfeoAoaGL8Wt7n5ONbV_ZMwuv6i8FN02eBTSBHGaSkXpg9UwgRoZsTXM8u2sIjecAif1pr5-zAg-XZuQznN4Fgyv6LZMJwd-S-I9VSEaW9f' }}
+              style={styles.aadhaarImg}
             />
             <View style={styles.aadhaarOverlay}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 <ShieldCheck color="#73fbb8" size={16} />
-                <Text style={styles.aadhaarOverlayTitle}>Instant 5-min Auto Verification</Text>
+                <Text style={[styles.aadhaarOverlayTitle, { flexShrink: 1 }]}>Instant 5-min Auto Verification</Text>
               </View>
               <Text style={styles.aadhaarOverlaySub}>UIDAI secure portal integration</Text>
             </View>
@@ -358,18 +379,32 @@ export default function WorkerOnboardingScreen() {
         </View>
 
         {/* Section 8: Agreement Box */}
-        <TouchableOpacity style={styles.agreeBox} onPress={() => setAgreed(!agreed)} activeOpacity={0.8}>
-          <View style={[styles.checkbox, agreed && styles.checkboxActive]}>
-            {agreed && <CheckCircle2 color={HtmlColors.onPrimary} size={14} />}
+        <TouchableOpacity
+          style={[styles.agreeBox, agreeError && styles.agreeBoxError]}
+          onPress={() => {
+            setAgreed(!agreed);
+            setAgreeError(false);
+          }}
+          activeOpacity={0.8}
+          accessibilityRole="checkbox"
+          aria-checked={agreed}
+        >
+          <View style={[styles.checkbox, agreed && styles.checkboxActive, agreeError && { borderColor: HtmlColors.error }]}>
+            {agreed && <Check color={HtmlColors.onPrimary} size={14} strokeWidth={3} />}
           </View>
-          <Text style={styles.agreeText}>
-            I agree to receive direct calls from Tricity residents and keep 100% of my earnings without any middleman commission.
-          </Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.agreeText}>
+              I agree to receive direct calls from Tricity residents and keep 100% of my earnings without any middleman commission.
+            </Text>
+            {agreeError && (
+              <Text style={styles.agreeErrorText}>Please tick this box to continue / आगे बढ़ने के लिए सहमति दें</Text>
+            )}
+          </View>
         </TouchableOpacity>
       </ScrollView>
 
       {/* Footer CTA */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <TouchableOpacity style={styles.saveBtn} onPress={handleSubmit}>
           <Save color={HtmlColors.onPrimary} size={22} />
           <Text style={styles.saveBtnText}>Save & Go to Dashboard • प्रोफाइल सेव करें</Text>
@@ -378,13 +413,13 @@ export default function WorkerOnboardingScreen() {
       </View>
 
       {/* Success Modal */}
-      <Modal visible={showModal} transparent animationType="fade">
+      <Modal visible={showModal} transparent animationType="fade" onRequestClose={() => setShowModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalIconBox}><CheckCircle2 color={HtmlColors.primary} size={36} /></View>
             <Text style={styles.modalTitle}>Badhai Ho! (बधाई हो)</Text>
             <Text style={styles.modalDesc}>Your profile is verified. You are now live on the Tricity Artisan Radar for direct customer calls!</Text>
-            
+
             <View style={styles.modalInfoBox}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                 <Phone color={HtmlColors.primary} size={16} />
@@ -435,7 +470,11 @@ const styles = StyleSheet.create({
   },
   logo: {
     width: 32,
-    height: 32
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: HtmlColors.primaryContainer,
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   headerTitle: {
     fontSize: 18,
@@ -468,7 +507,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   scrollContent: {
-    paddingBottom: 100
+    paddingBottom: 0
   },
   trustBanner: {
     marginHorizontal: 16,
@@ -479,14 +518,17 @@ const styles = StyleSheet.create({
     padding: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between'
+    justifyContent: 'space-between',
+    gap: 8
   },
   trustBannerLeft: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4
   },
   trustBannerText: {
+    flexShrink: 1,
     fontSize: 11,
     fontWeight: '700',
     color: HtmlColors.onPrimaryContainer
@@ -502,34 +544,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: HtmlColors.primary
   },
-  roleSwitchContainer: {
-    marginHorizontal: 16,
-    marginVertical: 4,
-    backgroundColor: HtmlColors.surfaceContainerLow,
-    padding: 4,
-    borderRadius: 12,
-    flexDirection: 'row'
-  },
-  roleBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8
-  },
-  roleBtnActive: {
-    backgroundColor: HtmlColors.primary,
-  },
-  roleBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: HtmlColors.onSurfaceVariant
-  },
-  roleBtnTextActive: {
-    color: HtmlColors.onPrimary
-  },
   formHeader: {
     paddingHorizontal: 16,
     marginTop: 8,
@@ -538,9 +552,11 @@ const styles = StyleSheet.create({
   formHeaderTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between'
+    justifyContent: 'space-between',
+    gap: 8
   },
   formHeaderTitle: {
+    flex: 1,
     fontSize: 20,
     fontWeight: '700',
     color: HtmlColors.onSurface
@@ -579,6 +595,7 @@ const styles = StyleSheet.create({
     marginTop: 2
   },
   securityTitle: {
+    flexShrink: 1,
     fontSize: 13,
     fontWeight: '600',
     color: HtmlColors.onSurface
@@ -659,7 +676,14 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 16
   },
+  cardHeaderMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
   cardTitle: {
+    flexShrink: 1,
     fontSize: 18,
     fontWeight: '700',
     color: HtmlColors.onSurface
@@ -677,9 +701,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
     marginBottom: 4
   },
   label: {
+    flexShrink: 1,
     fontSize: 13,
     fontWeight: '600',
     color: HtmlColors.onSurfaceVariant
@@ -701,6 +727,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
+    minWidth: 0,
     height: 48,
     fontSize: 16,
     fontWeight: '500',
@@ -734,6 +761,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    maxWidth: '100%',
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 12,
@@ -746,6 +774,7 @@ const styles = StyleSheet.create({
     backgroundColor: HtmlColors.surfaceContainer
   },
   tradeChipText: {
+    flexShrink: 1,
     fontSize: 13,
     fontWeight: '600',
     color: HtmlColors.onSurfaceVariant
@@ -774,6 +803,7 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   expStepperLabel: {
+    flexShrink: 1,
     fontSize: 13,
     fontWeight: '600',
     color: HtmlColors.onSurface,
@@ -871,6 +901,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 12,
     backgroundColor: HtmlColors.surfaceContainerLow,
     padding: 12,
     borderRadius: 12
@@ -899,6 +930,7 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline'
   },
   radiusLabelHighlight: {
+    flexShrink: 0,
     fontSize: 13,
     fontWeight: '700',
     color: HtmlColors.primary
@@ -1061,7 +1093,18 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     padding: 12,
     borderRadius: 12,
-    marginBottom: 24
+    marginBottom: 24,
+    borderWidth: 1.5,
+    borderColor: 'transparent'
+  },
+  agreeBoxError: {
+    borderColor: HtmlColors.error
+  },
+  agreeErrorText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: HtmlColors.error,
+    marginTop: 4
   },
   checkbox: {
     width: 20,
@@ -1078,22 +1121,21 @@ const styles = StyleSheet.create({
     borderColor: HtmlColors.primary
   },
   agreeText: {
-    flex: 1,
     fontSize: 12,
     color: HtmlColors.onSurfaceVariant,
     lineHeight: 18
   },
   footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 16,
-    paddingBottom: 24, // SafeArea padding
-    backgroundColor: 'rgba(249,249,255,0.95)'
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    backgroundColor: HtmlColors.surface,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.04)'
   },
   saveBtn: {
-    height: 54,
+    minHeight: 54,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     backgroundColor: HtmlColors.primaryContainer,
     borderRadius: 8,
     flexDirection: 'row',
@@ -1102,6 +1144,8 @@ const styles = StyleSheet.create({
     gap: 8
   },
   saveBtnText: {
+    flexShrink: 1,
+    textAlign: 'center',
     fontSize: 16,
     fontWeight: '700',
     color: HtmlColors.onPrimary

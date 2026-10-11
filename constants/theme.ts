@@ -1,5 +1,6 @@
 // KaamConnect Theme Tokens
 // Matches exact Stitch Design Tokens
+import { Platform, TextStyle } from 'react-native';
 
 export const Colors = {
   // Tricity Emerald Primary
@@ -59,3 +60,7 @@ export const Radius = {
   xxl: 28,
   full: 9999
 };
+
+// Web only: hides the browser focus ring on inputs whose wrapper already shows a focus state.
+// 'none' is valid CSS for react-native-web but missing from React Native's style types.
+export const noFocusRing = (Platform.OS === 'web' ? { outlineStyle: 'none' } : {}) as TextStyle;

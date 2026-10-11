@@ -1,35 +1,44 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, SafeAreaView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, useWindowDimensions } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, ArrowRight, ShieldCheck, Phone, CheckCircle, Lock, ChevronDown, CheckCircle2, Shield, MapPin, AlertCircle, Smartphone } from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, ShieldCheck, Phone, Lock, ChevronDown, CheckCircle2, Shield, MapPin, AlertCircle, Smartphone, XCircle } from 'lucide-react-native';
+import LanguageToggle from '../components/LanguageToggle';
+import { noFocusRing } from '../constants/theme';
 import { useStore } from '../store/useStore';
+
+// Format exactly as "98765 43210"
+const formatPhone = (text: string) => {
+  const digits = text.replace(/\D/g, '').substring(0, 10);
+  return digits.length > 5 ? digits.substring(0, 5) + ' ' + digits.substring(5) : digits;
+};
 
 export default function LoginScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  // Below 360dp the header can't hold brand + badge + language switcher
+  const isCompact = useWindowDimensions().width < 360;
   const { mobile, setMobile } = useStore();
-  const [phoneVal, setPhoneVal] = useState(mobile || '');
+  const [phoneVal, setPhoneVal] = useState(formatPhone(mobile || ''));
   const [isFocused, setIsFocused] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showError, setShowError] = useState(false);
 
-  // Format exactly as "98765 43210"
   const handlePhoneChange = (text: string) => {
-    let val = text.replace(/\D/g, '');
-    if (val.length > 10) val = val.substring(0, 10);
-    
-    if (val.length > 5) {
-      val = val.substring(0, 5) + ' ' + val.substring(5);
-    }
-    setPhoneVal(val);
+    setPhoneVal(formatPhone(text));
+    setShowError(false);
   };
 
   const triggerOtpFlow = () => {
+    if (isLoading) return;
     const digits = phoneVal.replace(/\D/g, '');
     if (digits.length !== 10) {
+      setShowError(true);
       return;
     }
     setIsLoading(true);
     setMobile(phoneVal);
-    
+
     setTimeout(() => {
       setIsLoading(false);
       router.push('/otp');
@@ -38,6 +47,14 @@ export default function LoginScreen() {
 
   const getValidationMessage = () => {
     const digits = phoneVal.replace(/\D/g, '');
+    if (showError) {
+      return (
+        <View style={styles.safeNotice}>
+          <AlertCircle color="#ef4444" size={14} />
+          <Text style={[styles.safeNoticeText, styles.errorText]}>Enter a valid 10-digit mobile number / सही नंबर डालें</Text>
+        </View>
+      );
+    }
     if (digits.length === 10) {
       return (
         <View style={styles.safeNotice}>
@@ -55,14 +72,16 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Top Fixed App Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity 
-            style={styles.backBtn} 
-            onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => router.canGoBack() ? router.back() : router.replace('/language')}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
           >
             <ArrowLeft color="#475569" size={22} strokeWidth={2.5} />
           </TouchableOpacity>
@@ -73,28 +92,20 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.headerRight}>
-          <View style={styles.commBadge}>
-            <ShieldCheck color="#00875a" size={13} strokeWidth={2.5} />
-            <Text style={styles.commBadgeText}>0% Commission</Text>
-          </View>
-          <View style={styles.langPillWrap}>
-            <View style={styles.langPillActive}>
-              <Text style={styles.langPillActiveText}>EN</Text>
+          {!isCompact && (
+            <View style={styles.commBadge}>
+              <ShieldCheck color="#00875a" size={13} strokeWidth={2.5} style={{ flexShrink: 0 }} />
+              <Text style={styles.commBadgeText}>0% Commission</Text>
             </View>
-            <View style={styles.langPillInactive}>
-              <Text style={styles.langPillInactiveText}>हिं</Text>
-            </View>
-            <View style={styles.langPillInactive}>
-              <Text style={styles.langPillInactiveText}>ਪੰ</Text>
-            </View>
-          </View>
+          )}
+          <LanguageToggle style={styles.langToggle} />
         </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Tricity Verified Banner */}
         <View style={styles.verifiedBanner}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
             <Text style={{ fontSize: 16 }}>🇮🇳</Text>
             <Text style={styles.verifiedBannerText}>Direct Local Connect • Verified Workers</Text>
           </View>
@@ -127,14 +138,14 @@ export default function LoginScreen() {
             <Text style={styles.inputHint}>10-Digit Indian Mobile</Text>
           </View>
 
-          <View style={[styles.inputShell, isFocused && styles.inputShellFocused]}>
+          <View style={[styles.inputShell, isFocused && styles.inputShellFocused, showError && styles.inputShellError]}>
             <View style={styles.countryCodeWrap}>
               <Text style={{ fontSize: 18 }}>🇮🇳</Text>
               <Text style={styles.countryCodeText}>+91</Text>
               <ChevronDown color="#64748b" size={14} strokeWidth={3} />
             </View>
             <TextInput
-              style={styles.textInput}
+              style={[styles.textInput, isCompact && styles.textInputCompact]}
               keyboardType="phone-pad"
               maxLength={11} // 10 digits + 1 space
               value={phoneVal}
@@ -145,8 +156,14 @@ export default function LoginScreen() {
               onBlur={() => setIsFocused(false)}
             />
             {phoneVal.length > 0 && (
-              <TouchableOpacity onPress={() => setPhoneVal('')} style={{ padding: 4 }}>
-                <AlertCircle color="#94a3b8" size={18} />
+              <TouchableOpacity
+                onPress={() => handlePhoneChange('')}
+                style={{ padding: 4 }}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Clear phone number"
+              >
+                <XCircle color="#94a3b8" size={18} />
               </TouchableOpacity>
             )}
           </View>
@@ -157,7 +174,7 @@ export default function LoginScreen() {
         {/* Why Mobile Login / Trust & Security Card */}
         <View style={styles.whyCard}>
           <View style={styles.whyHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 }}>
               <ShieldCheck color="#006398" size={16} strokeWidth={2.5} />
               <Text style={styles.whyTitle}>Why Mobile Login? / क्यों ज़रूरी है?</Text>
             </View>
@@ -200,7 +217,7 @@ export default function LoginScreen() {
 
           {/* Tricity Coverage Pill inside Card */}
           <View style={styles.coverageRow}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 }}>
               <MapPin color="#00b074" size={14} strokeWidth={2} />
               <Text style={styles.coverageText}>Coverage: CHD • Mohali • Panchkula</Text>
             </View>
@@ -216,10 +233,11 @@ export default function LoginScreen() {
       </ScrollView>
 
       {/* Sticky Bottom Action Container */}
-      <View style={styles.footerAction}>
-        <TouchableOpacity 
-          style={[styles.primaryBtn, isLoading && { backgroundColor: '#006c46' }]} 
+      <View style={[styles.footerAction, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        <TouchableOpacity
+          style={[styles.primaryBtn, isLoading && { backgroundColor: '#006c46' }]}
           onPress={triggerOtpFlow}
+          disabled={isLoading}
           activeOpacity={0.9}
         >
           {isLoading ? (
@@ -231,7 +249,7 @@ export default function LoginScreen() {
             </>
           )}
         </TouchableOpacity>
-        
+
         <Text style={styles.termsText}>
           By proceeding, you agree to KaamConnect's <Text style={styles.termsLink}>Terms of Service</Text> & Direct Payment Charter. No hidden commission, ever.
         </Text>
@@ -249,7 +267,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingTop: Platform.OS === 'web' ? 8 : 16,
     paddingBottom: 12,
     backgroundColor: '#ffffff',
@@ -260,7 +278,7 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10
+    gap: 6
   },
   backBtn: {
     width: 36,
@@ -284,60 +302,34 @@ const styles = StyleSheet.create({
     lineHeight: 14
   },
   headerRight: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8
+    justifyContent: 'flex-end',
+    gap: 6,
+    marginLeft: 6
   },
   commBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 1,
     gap: 4,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 9999,
+    borderRadius: 16,
     backgroundColor: '#e8fbf3',
     borderWidth: 1,
     borderColor: '#a3e9cc'
   },
   commBadgeText: {
+    flexShrink: 1,
     fontSize: 11,
     fontWeight: '700',
     color: '#00875a'
   },
-  langPillWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 2,
+  langToggle: {
     backgroundColor: '#f0f3ff',
-    borderRadius: 9999,
-    borderWidth: 1,
     borderColor: 'rgba(203, 213, 225, 0.6)'
-  },
-  langPillActive: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 9999,
-    backgroundColor: '#00b074',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 1,
-    elevation: 1
-  },
-  langPillActiveText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#ffffff'
-  },
-  langPillInactive: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 9999
-  },
-  langPillInactiveText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#475569'
   },
   scrollContent: {
     padding: 20
@@ -352,9 +344,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#e6f8f0',
     borderWidth: 1,
     borderColor: '#a6ebd0',
+    gap: 8,
     marginBottom: 16
   },
   verifiedBannerText: {
+    flex: 1,
     fontSize: 12,
     fontWeight: '600',
     color: '#005a39'
@@ -431,9 +425,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
     marginBottom: 8
   },
   inputLabel: {
+    flexShrink: 1,
     fontSize: 12,
     fontWeight: '700',
     color: '#1e293b',
@@ -441,6 +437,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5
   },
   inputHint: {
+    flexShrink: 0,
     fontSize: 11,
     fontWeight: '600',
     color: '#00b074'
@@ -459,6 +456,9 @@ const styles = StyleSheet.create({
     borderColor: '#00b074',
     backgroundColor: '#ffffff'
   },
+  inputShellError: {
+    borderColor: '#ef4444'
+  },
   countryCodeWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -475,13 +475,20 @@ const styles = StyleSheet.create({
   },
   textInput: {
     flex: 1,
+    // Web inputs have an intrinsic min width that pushes them out of the shell
+    minWidth: 0,
     fontSize: 18,
     fontWeight: '700',
     color: '#1e293b',
     letterSpacing: 1,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    outlineStyle: 'none'
+    ...noFocusRing
+  },
+  textInputCompact: {
+    fontSize: 16,
+    letterSpacing: 0,
+    paddingHorizontal: 8
   },
   safeNotice: {
     flexDirection: 'row',
@@ -490,8 +497,13 @@ const styles = StyleSheet.create({
     marginTop: 8
   },
   safeNoticeText: {
+    flexShrink: 1,
     fontSize: 11,
     color: '#64748b'
+  },
+  errorText: {
+    color: '#ef4444',
+    fontWeight: '600'
   },
   whyCard: {
     backgroundColor: '#f0f3ff',
@@ -505,9 +517,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
     marginBottom: 8
   },
   whyTitle: {
+    flexShrink: 1,
     fontSize: 12,
     fontWeight: '700',
     color: '#006398',
@@ -558,12 +572,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
     marginTop: 14,
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: '#d8e3fb'
   },
   coverageText: {
+    flexShrink: 1,
     fontSize: 11,
     fontWeight: '500',
     color: '#475569'
@@ -581,6 +597,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4
   },
   footerRibbonText: {
+    flexShrink: 1,
     fontSize: 11,
     fontWeight: '600',
     color: '#64748b'
@@ -591,7 +608,6 @@ const styles = StyleSheet.create({
     borderTopColor: '#e2e8f0',
     paddingHorizontal: 20,
     paddingTop: 12,
-    paddingBottom: Platform.OS === 'web' ? 12 : 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.05,

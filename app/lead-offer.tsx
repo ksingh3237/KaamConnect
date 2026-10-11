@@ -1,17 +1,35 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, SafeAreaView, Image, Alert, Platform } from 'react-native';
-import { useRouter } from 'expo-router';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Play, Send } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../constants/theme';
 import { WORKER_ACTIVE_LEADS } from '../constants/mockData';
 
 export default function LeadOfferScreen() {
   const router = useRouter();
-  const lead = WORKER_ACTIVE_LEADS[0];
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  // Show the lead that was tapped on the radar; fall back to the first one for direct links
+  const lead = WORKER_ACTIVE_LEADS.find((l) => l.id === id) ?? WORKER_ACTIVE_LEADS[0];
+  const isFirstLead = lead.id === WORKER_ACTIVE_LEADS[0].id;
+  const initials = lead.customer
+    .split(' ')
+    .filter((word) => !word.endsWith('.'))
+    .map((word) => word[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
   const [fee, setFee] = useState('250');
+  const [feeError, setFeeError] = useState(false);
   const [eta, setEta] = useState('15');
+  const [message, setMessage] = useState(isFirstLead ? 'I have PVC replacement pipes in stock. Can arrive in 15 mins.' : '');
 
   const handleSendOffer = () => {
+    if (!Number(fee)) {
+      setFeeError(true);
+      return;
+    }
     if (Platform.OS === 'web') {
       window.alert(`✅ Quote Sent\n\nYour quote of ₹${fee} has been sent directly to ${lead.customer}. Customer will call or confirm arrival.`);
       router.push('/tracking');
@@ -24,23 +42,30 @@ export default function LeadOfferScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Header */}
         <View style={styles.headerBar}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/')}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/leads')}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
             <ArrowLeft color={Colors.textMain} size={20} />
           </TouchableOpacity>
-          <View>
+          <View style={styles.headerText}>
             <Text style={styles.headerTitle}>Lead Details & Send Quote</Text>
             <Text style={styles.headerSub}>Direct Customer Connect • 0% Fee</Text>
           </View>
-          <View style={styles.urgentBadge}><Text style={styles.urgentText}>URGENT</Text></View>
+          {lead.urgency.startsWith('Immediate') && (
+            <View style={styles.urgentBadge}><Text style={styles.urgentText}>URGENT</Text></View>
+          )}
         </View>
 
         {/* Lead Details Card */}
         <View style={styles.card}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-            <View>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
+            <View style={{ flex: 1 }}>
               <View style={styles.catPill}><Text style={styles.catPillText}>{lead.category}</Text></View>
               <Text style={styles.leadTitle}>{lead.title}</Text>
             </View>
@@ -49,10 +74,10 @@ export default function LeadOfferScreen() {
 
           {/* Customer identity row */}
           <View style={styles.customerRow}>
-            <View style={styles.custAvatar}><Text style={{ fontWeight: '800', color: Colors.tertiary }}>SS</Text></View>
+            <View style={styles.custAvatar}><Text style={{ fontWeight: '800', color: Colors.tertiary }}>{initials}</Text></View>
             <View style={{ flex: 1 }}>
               <Text style={styles.custName}>{lead.customer}</Text>
-              <Text style={styles.custLoc}>📍 {lead.sector} • House #1402</Text>
+              <Text style={styles.custLoc}>📍 {lead.sector} • {lead.urgency}</Text>
             </View>
             <View style={styles.verifiedCustBadge}><Text style={styles.verifiedCustText}>Verified</Text></View>
           </View>
@@ -91,13 +116,21 @@ export default function LeadOfferScreen() {
             <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
               <View style={styles.rupeeBox}><Text style={{ fontSize: 16, fontWeight: '800' }}>₹</Text></View>
               <TextInput
-                style={[styles.formInput, { flex: 1, fontSize: 18, fontWeight: '800', color: Colors.primaryDark }]}
+                style={[styles.formInput, styles.feeInput, feeError && styles.formInputError]}
                 value={fee}
-                onChangeText={setFee}
+                onChangeText={(text) => {
+                  setFee(text.replace(/\D/g, ''));
+                  setFeeError(false);
+                }}
                 keyboardType="numeric"
+                maxLength={5}
               />
             </View>
-            <Text style={styles.hintText}>Material/parts costs will be extra with customer approval.</Text>
+            {feeError ? (
+              <Text style={[styles.hintText, styles.errorText]}>Enter your visiting fee to send the quote / फीस दर्ज करें</Text>
+            ) : (
+              <Text style={styles.hintText}>Material/parts costs will be extra with customer approval.</Text>
+            )}
           </View>
 
           <View style={styles.formGroup}>
@@ -127,8 +160,12 @@ export default function LeadOfferScreen() {
           <View style={styles.formGroup}>
             <Text style={styles.formLabel}>Message to Customer (Optional)</Text>
             <TextInput
-              style={styles.formInput}
-              defaultValue="I have PVC replacement pipes in stock. Can arrive in 15 mins."
+              style={[styles.formInput, styles.messageInput]}
+              value={message}
+              onChangeText={setMessage}
+              placeholder="Add a short note for the customer"
+              placeholderTextColor={Colors.textSubtle}
+              multiline
             />
           </View>
         </View>
@@ -165,6 +202,10 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     alignItems: 'center',
     justifyContent: 'center'
+  },
+  headerText: {
+    flex: 1,
+    marginHorizontal: 10
   },
   headerTitle: {
     fontSize: 14,
@@ -337,6 +378,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textMain
   },
+  feeInput: {
+    flex: 1,
+    // Web inputs have an intrinsic min width that pushes them out of the card
+    minWidth: 0,
+    fontSize: 18,
+    fontWeight: '800',
+    color: Colors.primaryDark
+  },
+  messageInput: {
+    height: 64,
+    paddingVertical: 8,
+    textAlignVertical: 'top'
+  },
+  formInputError: {
+    borderColor: Colors.error
+  },
+  errorText: {
+    color: Colors.error,
+    fontWeight: '600'
+  },
   hintText: {
     fontSize: 9,
     color: Colors.textMuted,
@@ -365,7 +426,9 @@ const styles = StyleSheet.create({
   },
   sendQuoteBtn: {
     backgroundColor: Colors.primary,
-    height: 52,
+    minHeight: 52,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: 8,
     borderRadius: Radius.lg,
     flexDirection: 'row',
     alignItems: 'center',
@@ -374,6 +437,8 @@ const styles = StyleSheet.create({
     marginBottom: 20
   },
   sendQuoteBtnText: {
+    flexShrink: 1,
+    textAlign: 'center',
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '800'

@@ -13,44 +13,28 @@ import {
   LogOut
 } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../../constants/theme';
-import { useStore, Language } from '../../store/useStore';
+import LanguageToggle from '../../components/LanguageToggle';
+import { useStore } from '../../store/useStore';
+import { resetTo } from '../../utils/navigation';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { role, toggleRole, language, setLanguage, commissionSaved } = useStore();
+  const { role, toggleRole, language, commissionSaved } = useStore();
   const isWorker = role === 'worker';
+
+  // Reset the stack so Back can't return to a signed-in screen
+  const handleLogout = () => resetTo('/');
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header Bar */}
       <View style={styles.header}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Profile & Settings</Text>
           <Text style={styles.headerSubtitle}>KaamConnect Direct Account</Text>
         </View>
         {/* Vernacular Mini Selector */}
-        <View style={styles.langSelector}>
-          {(['en', 'hi', 'pa'] as Language[]).map((lang) => (
-            <TouchableOpacity
-              key={lang}
-              style={[
-                styles.langBtn,
-                language === lang && styles.langBtnActive
-              ]}
-              onPress={() => setLanguage(lang)}
-              activeOpacity={0.7}
-            >
-              <Text
-                style={[
-                  styles.langBtnText,
-                  language === lang && styles.langBtnTextActive
-                ]}
-              >
-                {lang === 'en' ? 'EN' : lang === 'hi' ? 'हिं' : 'ਪੰ'}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <LanguageToggle style={styles.langSelector} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -136,7 +120,7 @@ export default function ProfileScreen() {
           {/* Change Language */}
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => router.push('/language')}
+            onPress={() => router.push({ pathname: '/language', params: { from: 'app' } })}
             activeOpacity={0.7}
           >
             <View style={styles.menuLeft}>
@@ -184,7 +168,7 @@ export default function ProfileScreen() {
         {/* Logout Button */}
         <TouchableOpacity
           style={styles.logoutBtn}
-          onPress={() => router.push('/')}
+          onPress={handleLogout}
           activeOpacity={0.8}
         >
           <LogOut color={Colors.error} size={16} />
@@ -204,6 +188,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: Spacing.sm,
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
     backgroundColor: '#FFFFFF',
@@ -220,26 +205,8 @@ const styles = StyleSheet.create({
     color: Colors.textMuted
   },
   langSelector: {
-    flexDirection: 'row',
     backgroundColor: '#F1F5F9',
-    borderRadius: Radius.full,
-    padding: 2
-  },
-  langBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: Radius.full
-  },
-  langBtnActive: {
-    backgroundColor: Colors.primary
-  },
-  langBtnText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: Colors.textMuted
-  },
-  langBtnTextActive: {
-    color: '#FFFFFF'
+    borderColor: '#F1F5F9'
   },
   content: {
     padding: Spacing.lg,
@@ -286,6 +253,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   userName: {
+    flexShrink: 1,
     fontSize: 15,
     fontWeight: '800',
     color: Colors.textMain
@@ -319,9 +287,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: Spacing.sm,
     marginBottom: 4
   },
   savingsTitle: {
+    flexShrink: 1,
     fontSize: 13,
     fontWeight: '800',
     color: '#065F46'
@@ -380,11 +350,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: Spacing.sm,
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9'
   },
   menuLeft: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md
@@ -397,6 +369,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   menuText: {
+    flex: 1,
     fontSize: 12,
     fontWeight: '700',
     color: Colors.textMain

@@ -29,7 +29,7 @@ interface AppState {
 export const useStore = create<AppState>((set) => ({
   language: 'en',
   role: 'customer',
-  mobile: '9876543210',
+  mobile: '98765 43210',
   customerName: 'Sunita Sharma',
   workerName: 'Rajesh Kumar',
   selectedSector: 'Sector 22, Chandigarh',

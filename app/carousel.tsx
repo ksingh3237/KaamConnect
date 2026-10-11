@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import { ArrowRight, Sparkles } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../constants/theme';
+import { resetTo } from '../utils/navigation';
 
 export default function CarouselScreen() {
-  const router = useRouter();
   const [currentSlide, setCurrentSlide] = useState(0);
 
   const slides = [
@@ -40,11 +39,12 @@ export default function CarouselScreen() {
     if (currentSlide < slides.length - 1) {
       setCurrentSlide(currentSlide + 1);
     } else {
-      router.push('/(tabs)/home');
+      resetTo('/(tabs)/home');
     }
   };
 
   const slide = slides[currentSlide];
+  const isLastSlide = currentSlide === slides.length - 1;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -54,7 +54,7 @@ export default function CarouselScreen() {
           <Text style={styles.topPillText}>KaamConnect Charter</Text>
         </View>
         <TouchableOpacity
-          onPress={() => router.push('/(tabs)/home')}
+          onPress={() => resetTo('/(tabs)/home')}
           activeOpacity={0.7}
         >
           <Text style={styles.skipBtnText}>Skip to App →</Text>
@@ -82,6 +82,9 @@ export default function CarouselScreen() {
             <TouchableOpacity
               key={idx}
               onPress={() => setCurrentSlide(idx)}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel={`Go to slide ${idx + 1}`}
               style={[
                 styles.indicatorBar,
                 idx === currentSlide ? styles.indicatorActive : styles.indicatorInactive
@@ -98,11 +101,11 @@ export default function CarouselScreen() {
           activeOpacity={0.85}
         >
           <Text style={styles.actionBtnText}>
-            {currentSlide === 2
+            {isLastSlide
               ? 'Get Started in Tricity • शुरू करें'
               : 'Next Benefit →'}
           </Text>
-          {currentSlide === 2 && <ArrowRight color="#FFFFFF" size={18} />}
+          {isLastSlide && <ArrowRight color="#FFFFFF" size={18} />}
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -227,6 +230,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     borderRadius: Radius.lg,
     paddingVertical: 16,
+    paddingHorizontal: Spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -238,6 +242,8 @@ const styles = StyleSheet.create({
     elevation: 4
   },
   actionBtnText: {
+    flexShrink: 1,
+    textAlign: 'center',
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '800'
