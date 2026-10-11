@@ -1,26 +1,101 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Linking, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Phone, AlertTriangle } from 'lucide-react-native';
 import Svg, { Rect, Path, Circle, Text as SvgText, G } from 'react-native-svg';
 import { Colors, Spacing, Radius } from '../constants/theme';
-import { VERIFIED_WORKERS } from '../constants/mockData';
 import { useStore } from '../store/useStore';
+import { useAsync } from '../api/useAsync';
+import { getJob, getTracking, raiseSos } from '../api/endpoints';
+import { userMessage } from '../api/errors';
+import type { JobView, Tracking } from '../api/types';
+import Avatar from '../components/Avatar';
+import { EmptyBlock, ErrorBlock, LoadingBlock } from '../components/StateBlocks';
+import { confirmAction, notify } from '../utils/dialog';
+import { currentPosition } from '../utils/position';
+
+const POLL_MS = 6000; // the customer sees the worker's progress by polling; REST is the source of truth
+
+const STATUS_LABEL: Record<string, string> = {
+  OPEN: 'WAITING FOR THE WORKER',
+  ASSIGNED: 'WORKER ON THE WAY',
+  ARRIVED: 'WORKER HAS ARRIVED',
+  IN_PROGRESS: 'WORK IN PROGRESS',
+  WORK_COMPLETED: 'WORK DONE • BILL READY',
+  COMPLETED: 'JOB COMPLETED',
+  CANCELLED: 'JOB CANCELLED',
+};
+
+interface Loaded {
+  job: JobView;
+  tracking: Tracking | null;
+}
 
 export default function TrackingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { activeBooking } = useStore();
-  const worker = activeBooking ?? VERIFIED_WORKERS[0];
+  const { activeJobId } = useStore();
+  const [sosBusy, setSosBusy] = useState(false);
 
-  const handleSos = () => {
-    Alert.alert('🚨 Emergency SOS', 'Alert dispatched to Tricity Safety Response Desk and designated emergency contact.');
+  const state = useAsync<Loaded | null>(
+    async () => {
+      if (!activeJobId) return null;
+      const job = await getJob(activeJobId);
+      // Live position exists only once somebody is assigned; a pending direct request has none yet
+      const tracking = job.worker && job.status !== 'OPEN' && job.status !== 'CANCELLED' ? await getTracking(activeJobId) : null;
+      return { job, tracking };
+    },
+    [activeJobId],
+    { pollMs: POLL_MS },
+  );
+  const job = state.data?.job ?? null;
+  const tracking = state.data?.tracking ?? null;
+  const worker = job?.worker ?? null;
+
+  const handleSos = async () => {
+    if (!activeJobId || sosBusy) return;
+    const ok = await confirmAction(
+      '🚨 Emergency SOS',
+      'This sends an alert to the KaamConnect safety desk with your job details and location. Use it only in an emergency. Send it now?',
+      'Send SOS',
+      true,
+    );
+    if (!ok) return;
+    setSosBusy(true);
+    try {
+      // Location is best effort: the alert goes out even when the device cannot give a position
+      const position = await currentPosition(4000).catch(() => undefined);
+      const result = await raiseSos(activeJobId, position);
+      if (result.delivered) {
+        notify(
+          result.repeated ? 'SOS already sent' : 'SOS sent',
+          'The safety desk has received your alert. If you are in danger, call 112 now.',
+        );
+      } else {
+        // Stored on our side but the desk has not confirmed yet; the server keeps retrying by itself.
+        notify(
+          'SOS saved, not confirmed yet',
+          'Your alert is saved and we keep trying to reach the safety desk. This is not confirmed yet. If you are in danger, call 112 now.',
+        );
+      }
+    } catch (error) {
+      notify('SOS could not be sent', userMessage(error) + '\n\nIf you are in danger, call 112 now.');
+    } finally {
+      setSosBusy(false);
+    }
   };
 
   const handleCall = () => {
-    Linking.openURL(`tel:${worker.phone.replace(/\s+/g, '')}`);
+    const phone = tracking?.worker?.phone ?? worker?.phone;
+    if (phone) void Linking.openURL(`tel:${phone.replace(/\s+/g, '')}`);
   };
+
+  const etaText = (() => {
+    if (!tracking || tracking.status !== 'ASSIGNED') return STATUS_LABEL[job?.status ?? 'OPEN'] ?? '';
+    if (tracking.etaMinutes === null) return 'On the way • waiting for the worker\'s location';
+    return `Arriving in ${tracking.etaMinutes} min${tracking.distanceKm !== null ? ` • ${tracking.distanceKm} km away` : ''}`;
+  })();
 
   return (
     <View style={styles.container}>
@@ -35,9 +110,9 @@ export default function TrackingScreen() {
           <ArrowLeft color={Colors.textMain} size={20} />
         </TouchableOpacity>
         <View style={styles.livePill}>
-          <Text style={styles.livePillText}>• LIVE GPS TRACKER</Text>
+          <Text style={styles.livePillText}>• {job ? STATUS_LABEL[job.status] ?? job.status : 'TRACKER'}</Text>
         </View>
-        <TouchableOpacity style={styles.sosBtn} onPress={handleSos} accessibilityRole="button" accessibilityLabel="Emergency SOS">
+        <TouchableOpacity style={[styles.sosBtn, (sosBusy || !activeJobId) && { opacity: 0.6 }]} onPress={() => void handleSos()} disabled={sosBusy || !activeJobId} accessibilityRole="button" accessibilityLabel="Emergency SOS">
           <AlertTriangle color="#FFFFFF" size={18} />
         </TouchableOpacity>
       </View>
@@ -72,7 +147,7 @@ export default function TrackingScreen() {
           {/* Destination Pin */}
           <Circle cx="250" cy="280" r="14" fill="#0284C7" />
           <Circle cx="250" cy="280" r="6" fill="#FFFFFF" />
-          <SvgText x="210" y="310" fill="#0F172A" fontSize="11" fontWeight="bold">Your Home (Sec 22-B)</SvgText>
+          <SvgText x="210" y="310" fill="#0F172A" fontSize="11" fontWeight="bold">Your location</SvgText>
 
           {/* Motorbike Moving Pin */}
           <G transform="translate(130, 140)">
@@ -85,7 +160,7 @@ export default function TrackingScreen() {
         {/* Floating ETA Badge */}
         <View style={[styles.floatingEta, { top: insets.top + 66 }]}>
           <Text style={{ color: Colors.primary, fontWeight: '800' }}>⚡</Text>
-          <Text style={styles.floatingEtaText}>Arriving in 11 Mins • 1.1 km away</Text>
+          <Text style={styles.floatingEtaText}>{etaText}</Text>
         </View>
       </View>
 
@@ -93,30 +168,47 @@ export default function TrackingScreen() {
       <View style={[styles.bottomDrawer, { paddingBottom: Math.max(insets.bottom, 24) }]}>
         <View style={styles.drawerHandle} />
 
-        <View style={styles.drawerHeader}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-            <Image source={{ uri: worker.avatar }} style={styles.workerAvatar} />
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Text style={styles.workerName}>{worker.name}</Text>
-                <Text>🛡️</Text>
+        {state.loading && <LoadingBlock label="Loading your job… / जॉब लोड हो रहा है…" />}
+        {state.error && !state.data && <ErrorBlock message={state.error} onRetry={() => void state.reload()} />}
+        {!activeJobId && <EmptyBlock title="No job selected" hint="Book a pro or accept a quote first. / पहले बुक करें" />}
+        {job && !worker && (
+          <EmptyBlock
+            title={job.status === 'CANCELLED' ? 'This request was cancelled' : 'Waiting for the worker to accept'}
+            hint={job.status === 'CANCELLED' ? job.cancelReason ?? undefined : 'You will see the worker here as soon as they accept. This page refreshes by itself.'}
+          />
+        )}
+        {job && worker && (
+          <>
+            <View style={styles.drawerHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                <Avatar uri={worker.photoUrl} size={50} />
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Text style={styles.workerName}>{worker.name}</Text>
+                    <Text>🛡️</Text>
+                  </View>
+                  {worker.vehicle ? <Text style={styles.vehicleText}>{worker.vehicle}</Text> : null}
+                  <Text style={styles.workerSub}>{worker.trade} • Aadhaar Verified</Text>
+                </View>
               </View>
-              <Text style={styles.vehicleText}>{worker.vehicle}</Text>
-              <Text style={styles.workerSub}>{worker.trade} • Aadhaar Verified</Text>
+
+              {job.arrivalCode ? (
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={styles.codeLabel}>Arrival Code</Text>
+                  <Text style={styles.codeNumber}>{job.arrivalCode}</Text>
+                </View>
+              ) : null}
             </View>
-          </View>
 
-          <View style={{ alignItems: 'flex-end' }}>
-            <Text style={styles.codeLabel}>Arrival Code</Text>
-            <Text style={styles.codeNumber}>8421</Text>
-          </View>
-        </View>
-
-        <View style={styles.noticeBox}>
-          <Text style={styles.noticeText}>
-            Share arrival code <Text style={{ fontWeight: '800' }}>8421</Text> with worker upon entry.
-          </Text>
-        </View>
+            {job.arrivalCode ? (
+              <View style={styles.noticeBox}>
+                <Text style={styles.noticeText}>
+                  Share arrival code <Text style={{ fontWeight: '800' }}>{job.arrivalCode}</Text> with worker upon entry.
+                </Text>
+              </View>
+            ) : null}
+          </>
+        )}
 
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <TouchableOpacity style={styles.callBtn} onPress={handleCall}>

@@ -1,16 +1,29 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Linking, Alert, Modal, Animated, Dimensions, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Linking, Alert, Modal, Animated, Dimensions, TouchableWithoutFeedback } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { MapPin, Bell, Volume2, Search, Mic, Zap, Droplet, Wind, Hammer, Paintbrush, Sparkles, Tv, Truck, Phone, Star, Menu, X, HelpCircle, User as UserIcon, Globe, Settings } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../../constants/theme';
-import { SERVICE_CATEGORIES, VERIFIED_WORKERS } from '../../constants/mockData';
 import { useStore } from '../../store/useStore';
+import { useSession } from '../../store/useSession';
+import { useAsync } from '../../api/useAsync';
+import { createDirectBooking, getCategories, listWorkers } from '../../api/endpoints';
+import { userMessage } from '../../api/errors';
+import type { WorkerCard } from '../../api/types';
+import Avatar from '../../components/Avatar';
+import { EmptyBlock, ErrorBlock, LoadingBlock } from '../../components/StateBlocks';
 
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { selectedSector, setSelectedCategory, setActiveBooking } = useStore();
+  const { selectedSector, selectedAreaId, setSelectedCategory, setActiveJobId } = useStore();
+  const { customerProfile } = useSession();
+  const primaryAddress = customerProfile?.addresses.find((a) => a.isPrimary) ?? customerProfile?.addresses[0] ?? null;
+  const areaId = selectedAreaId ?? primaryAddress?.area.id ?? undefined;
+  const sectorLabel = selectedSector || (primaryAddress ? `${primaryAddress.area.name}, ${primaryAddress.city.name.replace(/\s*\(.*\)/, '')}` : 'Choose your sector');
+  const categories = useAsync(() => getCategories(), [], { reloadOnFocus: false });
+  const workers = useAsync(() => listWorkers({ areaId, sort: 'distance', limit: 10 }), [areaId]);
+  const [bookingId, setBookingId] = useState<string | null>(null);
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const slideAnim = useRef(new Animated.Value(-Dimensions.get('window').width)).current;
@@ -44,9 +57,30 @@ export default function HomeScreen() {
     ]);
   };
 
-  const handleBook = (worker: typeof VERIFIED_WORKERS[0]) => {
-    setActiveBooking(worker);
-    router.push('/tracking');
+  // "Book Pro" asks this one worker, who has to accept. The customer then follows the request on the tracking screen.
+  const handleBook = async (worker: WorkerCard) => {
+    if (bookingId) return;
+    if (!primaryAddress) {
+      Alert.alert('Add your address', 'Choose your sector and address first. / पहले अपना पता जोड़ें');
+      router.push('/customer-onboarding');
+      return;
+    }
+    setBookingId(worker.id);
+    try {
+      const job = await createDirectBooking({
+        workerId: worker.id,
+        categoryId: worker.tradeId,
+        title: `${worker.trade} visit`,
+        timing: 'IMMEDIATE',
+        addressId: primaryAddress.id,
+      });
+      setActiveJobId(job.id);
+      router.push('/tracking');
+    } catch (error) {
+      Alert.alert('Could not book', userMessage(error));
+    } finally {
+      setBookingId(null);
+    }
   };
 
   const renderIcon = (name: string, color: string) => {
@@ -81,7 +115,7 @@ export default function HomeScreen() {
               </Text>
               <TouchableOpacity style={styles.locSelector} onPress={() => router.push('/customer-onboarding')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Change location">
                 <MapPin color={Colors.tertiary} size={11} />
-                <Text style={styles.locText} numberOfLines={1}>{selectedSector || 'Sector 22, Chandigarh'} ▾</Text>
+                <Text style={styles.locText} numberOfLines={1}>{sectorLabel} ▾</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -140,7 +174,9 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.catGrid}>
-          {SERVICE_CATEGORIES.map((cat) => (
+          {categories.loading && <LoadingBlock label="Loading services… / सेवाएँ लोड हो रही हैं…" />}
+          {categories.error && !categories.data && <ErrorBlock message={categories.error} onRetry={() => void categories.reload()} />}
+          {(categories.data ?? []).map((cat) => (
             <TouchableOpacity
               key={cat.id}
               style={styles.catTile}
@@ -148,10 +184,10 @@ export default function HomeScreen() {
               activeOpacity={0.7}
             >
               <View style={[styles.catIconWrap, { backgroundColor: cat.bgColor }]}>
-                {renderIcon(cat.iconName, cat.color)}
+                {renderIcon(cat.iconKey, cat.color)}
               </View>
-              <Text style={styles.catTitle}>{cat.title}</Text>
-              <Text style={styles.catFee}>{cat.baseFee} visit</Text>
+              <Text style={styles.catTitle}>{cat.title.en}</Text>
+              <Text style={styles.catFee}>₹{cat.baseVisitFee} visit</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -170,15 +206,20 @@ export default function HomeScreen() {
         {/* Verified Artisans List */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Verified Artisans Near You (0% App Cut)</Text>
-          <View style={styles.onlinePill}><Text style={styles.onlinePillText}>• 24 Online</Text></View>
+          {workers.data && <View style={styles.onlinePill}><Text style={styles.onlinePillText}>• {workers.data.items.length} verified</Text></View>}
         </View>
 
         <View style={styles.workerList}>
-          {VERIFIED_WORKERS.map((w) => (
+          {workers.loading && <LoadingBlock label="Finding artisans… / कारीगर खोज रहे हैं…" />}
+          {workers.error && !workers.data && <ErrorBlock message={workers.error} onRetry={() => void workers.reload()} />}
+          {workers.data && workers.data.items.length === 0 && (
+            <EmptyBlock title="No verified artisans in this area yet" hint="Post a job and nearby artisans will send quotes. / काम पोस्ट करें, कारीगर कोट भेजेंगे" />
+          )}
+          {(workers.data?.items ?? []).map((w) => (
             <View key={w.id} style={styles.workerCard}>
               <View style={styles.workerTop}>
                 <View style={styles.avatarWrap}>
-                  <Image source={{ uri: w.avatar }} style={styles.workerAvatar} />
+                  <Avatar uri={w.photoUrl} size={52} />
                   <View style={styles.onlineDot} />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -190,10 +231,10 @@ export default function HomeScreen() {
                   <View style={styles.workerMeta}>
                     <View style={styles.ratingBadge}>
                       <Star color="#F59E0B" fill="#F59E0B" size={11} />
-                      <Text style={styles.ratingText}>{w.rating} ({w.reviewsCount})</Text>
+                      <Text style={styles.ratingText}>{w.rating ?? 'New'} ({w.reviewsCount})</Text>
                     </View>
-                    <Text style={styles.metaDim}>📍 {w.distance}</Text>
-                    <Text style={styles.metaDim}>⏱️ {w.etaMinutes}m ETA</Text>
+                    <Text style={styles.metaDim}>📍 {w.distanceKm !== null ? `${w.distanceKm} km` : w.areaName}</Text>
+                    {w.etaMinutes !== null && <Text style={styles.metaDim}>⏱️ {w.etaMinutes}m ETA</Text>}
                   </View>
                 </View>
               </View>
@@ -219,8 +260,8 @@ export default function HomeScreen() {
                     <Phone color="#FFFFFF" size={14} />
                     <Text style={styles.callBtnText}>Call Directly</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.bookBtn} onPress={() => handleBook(w)}>
-                    <Text style={styles.bookBtnText}>Book Pro</Text>
+                  <TouchableOpacity style={[styles.bookBtn, bookingId !== null && { opacity: 0.6 }]} onPress={() => void handleBook(w)} disabled={bookingId !== null} accessibilityRole="button">
+                    <Text style={styles.bookBtnText}>{bookingId === w.id ? 'Booking…' : 'Book Pro'}</Text>
                   </TouchableOpacity>
                 </View>
               </View>

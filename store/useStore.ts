@@ -1,6 +1,7 @@
-// KaamConnect Zustand Store
+// KaamConnect UI store: preferences and small cross-screen choices. Everything that comes from the server (the user,
+// jobs, workers, leads, money figures) is NOT here: it is fetched through api/endpoints.ts and held by the screens, and
+// who is signed in lives in store/useSession.ts. No mock data.
 import { create } from 'zustand';
-import { WORKER_ACTIVE_LEADS, CustomerLead, WorkerProfile, VERIFIED_WORKERS } from '../constants/mockData';
 
 export type Language = 'en' | 'hi' | 'pa';
 export type UserRole = 'customer' | 'worker';
@@ -8,41 +9,39 @@ export type UserRole = 'customer' | 'worker';
 interface AppState {
   language: Language;
   role: UserRole;
+  /** The phone number being signed in, as typed ("98765 43210"). */
   mobile: string;
-  customerName: string;
-  workerName: string;
+  /** The chosen area label ("Sector 22, Chandigarh") and its server id; empty until the customer picks one. */
   selectedSector: string;
+  selectedAreaId: number | null;
+  /** The service the customer tapped on Home, preselected on Post Job. */
   selectedCategory: string;
-  activeBooking: WorkerProfile | null;
-  leads: CustomerLead[];
-  commissionSaved: number;
+  /** The job the customer or worker is currently following (tracking, progress, rating). */
+  activeJobId: string | null;
 
   setLanguage: (lang: Language) => void;
   setRole: (role: UserRole) => void;
   toggleRole: () => void;
   setMobile: (num: string) => void;
-  setSelectedSector: (sector: string) => void;
+  setSelectedSector: (label: string, areaId?: number | null) => void;
   setSelectedCategory: (cat: string) => void;
-  setActiveBooking: (worker: WorkerProfile | null) => void;
+  setActiveJobId: (id: string | null) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
   language: 'en',
   role: 'customer',
-  mobile: '98765 43210',
-  customerName: 'Sunita Sharma',
-  workerName: 'Rajesh Kumar',
-  selectedSector: 'Sector 22, Chandigarh',
-  selectedCategory: 'plumber',
-  activeBooking: VERIFIED_WORKERS[0],
-  leads: WORKER_ACTIVE_LEADS,
-  commissionSaved: 4200,
+  mobile: '',
+  selectedSector: '',
+  selectedAreaId: null,
+  selectedCategory: '',
+  activeJobId: null,
 
   setLanguage: (lang) => set({ language: lang }),
-  setRole: (role) => set({ role: role }),
+  setRole: (role) => set({ role }),
   toggleRole: () => set((state) => ({ role: state.role === 'worker' ? 'customer' : 'worker' })),
   setMobile: (num) => set({ mobile: num }),
-  setSelectedSector: (sector) => set({ selectedSector: sector }),
+  setSelectedSector: (label, areaId = null) => set({ selectedSector: label, selectedAreaId: areaId }),
   setSelectedCategory: (cat) => set({ selectedCategory: cat }),
-  setActiveBooking: (worker) => set({ activeBooking: worker })
+  setActiveJobId: (id) => set({ activeJobId: id }),
 }));

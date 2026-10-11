@@ -1,23 +1,30 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Linking, Alert, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Alert, Platform, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Phone } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../constants/theme';
-import { VERIFIED_WORKERS } from '../constants/mockData';
 import { useStore } from '../store/useStore';
+import { useAsync } from '../api/useAsync';
+import { acceptOffer, getJob, listOffers } from '../api/endpoints';
+import { userMessage } from '../api/errors';
+import type { OfferForCustomer } from '../api/types';
+import Avatar from '../components/Avatar';
+import { EmptyBlock, ErrorBlock, LoadingBlock } from '../components/StateBlocks';
 
-// Optional message a worker attached to their quote
-const OFFER_NOTES: Record<string, string> = {
-  w1: 'Nearby in Sec 22 Market. Carrying standard PVC pipes & sealant tools.'
-};
+const POLL_MS = 8000; // quotes arrive while the screen is open; REST polling is the baseline, a socket can replace it
 
 export default function CompareOffersScreen() {
   const router = useRouter();
-  const { setActiveBooking } = useStore();
+  const { activeJobId } = useStore();
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
 
-  const offerCount = VERIFIED_WORKERS.length;
-  const fastestId = VERIFIED_WORKERS.reduce((a, b) => (b.etaMinutes < a.etaMinutes ? b : a)).id;
+  const job = useAsync(() => (activeJobId ? getJob(activeJobId) : Promise.resolve(null)), [activeJobId]);
+  const offers = useAsync(() => (activeJobId ? listOffers(activeJobId, 'fee') : Promise.resolve([] as OfferForCustomer[])), [activeJobId], { pollMs: POLL_MS });
+
+  const list = offers.data ?? [];
+  const offerCount = list.length;
+  const fastestId = list.find((o) => o.isFastest)?.offerId ?? null;
 
   const handleCall = (phone: string, name: string) => {
     Alert.alert('Direct Phone Call', `Call ${name} directly at ${phone}?`, [
@@ -26,21 +33,26 @@ export default function CompareOffersScreen() {
     ]);
   };
 
-  const handleAccept = (worker: typeof VERIFIED_WORKERS[0]) => {
-    setActiveBooking(worker);
-    if (Platform.OS === 'web') {
-      window.alert('🎉 Offer Accepted\n\n' + worker.name + ' is on the way! Live GPS tracking activated.');
-      router.push('/tracking');
-    } else {
-      Alert.alert('🎉 Offer Accepted', `${worker.name} is on the way! Live GPS tracking activated.`, [
-        { text: 'Track Pro', onPress: () => router.push('/tracking') }
-      ]);
+  const handleAccept = async (offer: OfferForCustomer) => {
+    if (acceptingId || !activeJobId) return;
+    setAcceptingId(offer.offerId);
+    try {
+      await acceptOffer(activeJobId, offer.offerId);
+      router.replace('/tracking');
+    } catch (error) {
+      // e.g. the worker was booked meanwhile (OFFER_UNAVAILABLE): show it and refresh the list
+      const message = userMessage(error);
+      if (Platform.OS === 'web') window.alert(message);
+      else Alert.alert('Could not accept', message);
+      void offers.reload();
+    } finally {
+      setAcceptingId(null);
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={offers.refreshing} onRefresh={() => void offers.reload()} />}>
         {/* Header */}
         <View style={styles.headerBar}>
           <TouchableOpacity
@@ -53,17 +65,17 @@ export default function CompareOffersScreen() {
           </TouchableOpacity>
           <View style={styles.headerText}>
             <Text style={styles.headerTitle}>Compare Incoming Offers</Text>
-            <Text style={styles.headerSub}>{offerCount} Verified Workers Responded</Text>
+            <Text style={styles.headerSub}>{offerCount} Verified {offerCount === 1 ? 'Worker' : 'Workers'} Responded</Text>
           </View>
           <View style={styles.liveBadge}><Text style={styles.liveText}>LIVE OFFERS</Text></View>
         </View>
 
         {/* Request Recap Card */}
         <View style={styles.recapCard}>
-          <Text style={{ fontSize: 20 }}>🚰</Text>
+          <Text style={{ fontSize: 20 }}>🛠️</Text>
           <View style={{ flex: 1 }}>
-            <Text style={styles.recapTitle}>Kitchen Sink Under-pipe Burst</Text>
-            <Text style={styles.recapSub}>Sector 22-B, Chandigarh • Posted 12m ago</Text>
+            <Text style={styles.recapTitle}>{job.data?.title ?? '…'}</Text>
+            <Text style={styles.recapSub}>{job.data ? `${job.data.area.name}, ${job.data.city.name.replace(/\s*\(.*\)/, '')} • ${job.data.reference}` : ''}</Text>
           </View>
           <View style={styles.offersTag}><Text style={styles.offersTagText}>{offerCount} Offers</Text></View>
         </View>
@@ -71,20 +83,29 @@ export default function CompareOffersScreen() {
         <Text style={styles.sectionTitle}>Select an Artisan & Confirm Arrival:</Text>
 
         {/* Offers */}
+        {!activeJobId && <EmptyBlock title="No request selected" hint="Post a job first. / पहले काम पोस्ट करें" />}
+        {activeJobId && offers.loading && <LoadingBlock label="Waiting for quotes… / कोट का इंतज़ार…" />}
+        {activeJobId && offers.error && !offers.data && <ErrorBlock message={offers.error} onRetry={() => void offers.reload()} />}
+        {activeJobId && offers.data && offerCount === 0 && (
+          <EmptyBlock
+            title="No quotes yet"
+            hint={job.data?.status === 'OPEN' ? 'Nearby artisans have been notified. This page refreshes by itself. / कारीगरों को सूचित किया गया है' : 'This request is no longer open for quotes.'}
+          />
+        )}
         <View style={{ gap: 14 }}>
-          {VERIFIED_WORKERS.map((worker) => {
-            const isFastest = worker.id === fastestId;
-            const note = OFFER_NOTES[worker.id];
+          {list.map((offer) => {
+            const worker = offer.worker;
+            const isFastest = offer.offerId === fastestId;
             return (
-              <View key={worker.id} style={[styles.workerCard, isFastest && styles.workerCardFastest]}>
+              <View key={offer.offerId} style={[styles.workerCard, isFastest && styles.workerCardFastest]}>
                 {isFastest && (
                   <View style={styles.fastestBadge}>
-                    <Text style={styles.fastestText}>FASTEST ARRIVAL ({worker.etaMinutes} MIN)</Text>
+                    <Text style={styles.fastestText}>FASTEST ARRIVAL ({offer.etaMinutes} MIN)</Text>
                   </View>
                 )}
 
                 <View style={styles.workerTop}>
-                  <Image source={{ uri: worker.avatar }} style={styles.avatar} />
+                  <Avatar uri={worker.photoUrl} size={52} style={styles.avatar} />
                   <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                       <Text style={styles.workerName}>{worker.name}</Text>
@@ -92,16 +113,16 @@ export default function CompareOffersScreen() {
                     </View>
                     <Text style={styles.workerTrade}>{worker.trade}</Text>
                     <View style={styles.metaRow}>
-                      <Text style={styles.ratingText}>⭐ {worker.rating} ({worker.reviewsCount})</Text>
-                      <Text style={styles.metaDim}>📍 {worker.distance.replace(' away', '')}</Text>
-                      <Text style={styles.metaDim}>⏱️ {worker.etaMinutes} Min ETA</Text>
+                      <Text style={styles.ratingText}>⭐ {worker.rating ?? 'New'} ({worker.reviewsCount})</Text>
+                      <Text style={styles.metaDim}>📍 {worker.distanceKm !== null ? `${worker.distanceKm} km` : worker.areaName}</Text>
+                      <Text style={styles.metaDim}>⏱️ {offer.etaMinutes} Min ETA</Text>
                     </View>
                   </View>
                 </View>
 
-                {note && (
+                {offer.message && (
                   <View style={styles.quoteMsgBox}>
-                    <Text style={styles.quoteMsgText}>💬 "{note}"</Text>
+                    <Text style={styles.quoteMsgText}>💬 "{offer.message}"</Text>
                   </View>
                 )}
 
@@ -109,19 +130,24 @@ export default function CompareOffersScreen() {
                   <View>
                     <Text style={styles.feeLabel}>Offered Visit Fee</Text>
                     <Text style={styles.feeAmount}>
-                      ₹{worker.visitingFee}
-                      {isFastest && <Text style={{ color: Colors.primary, fontSize: 10 }}> (0% App Fee)</Text>}
+                      ₹{offer.visitFee}
+                      <Text style={{ color: Colors.primary, fontSize: 10 }}> (0% App Fee)</Text>
                     </Text>
                   </View>
 
                   <View style={styles.actionGroup}>
-                    <TouchableOpacity style={styles.callBtn} onPress={() => handleCall(worker.phone, worker.name)}>
+                    <TouchableOpacity style={styles.callBtn} onPress={() => handleCall(worker.phone, worker.name)} accessibilityRole="button">
                       <Phone color="#FFFFFF" size={13} />
                       <Text style={styles.callBtnText}>{isFastest ? 'Direct Call' : 'Call'}</Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.acceptBtn} onPress={() => handleAccept(worker)}>
-                      <Text style={styles.acceptBtnText}>{isFastest ? 'Accept Offer ✓' : 'Accept'}</Text>
+                    <TouchableOpacity
+                      style={[styles.acceptBtn, (!offer.available || acceptingId !== null) && { opacity: 0.6 }]}
+                      onPress={() => void handleAccept(offer)}
+                      disabled={!offer.available || acceptingId !== null}
+                      accessibilityRole="button"
+                    >
+                      <Text style={styles.acceptBtnText}>{acceptingId === offer.offerId ? 'Accepting…' : !offer.available ? 'Booked' : isFastest ? 'Accept Offer ✓' : 'Accept'}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>

@@ -1,45 +1,62 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Star, ArrowRight, ShieldCheck, Check } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../constants/theme';
-import { VERIFIED_WORKERS } from '../constants/mockData';
 import { useStore } from '../store/useStore';
 import { resetTo } from '../utils/navigation';
+import { useAsync } from '../api/useAsync';
+import { getJob, reviewJob } from '../api/endpoints';
+import { isApiError, userMessage } from '../api/errors';
+import type { ReviewTag } from '../api/types';
+import Avatar from '../components/Avatar';
+import { EmptyBlock, ErrorBlock, LoadingBlock } from '../components/StateBlocks';
+
+const TAGS: { id: ReviewTag; label: string }[] = [
+  { id: 'PUNCTUAL', label: '⚡ Punctual / समय पर' },
+  { id: 'FAIR_PRICE', label: '💵 Fair Price / वाजिब दाम' },
+  { id: 'CLEAN_WORK', label: '🧼 Clean Work / साफ़ काम' },
+  { id: 'POLITE', label: '🤝 Polite / विनम्र व्यवहार' },
+  { id: 'EXPERT_SKILL', label: '🛠️ Expert Skill / हुनरमंद' },
+];
+const TIP_OPTIONS = [0, 20, 50, 100] as const;
 
 export default function RatingReviewScreen() {
   const router = useRouter();
-  const { activeBooking } = useStore();
-  const worker = activeBooking ?? VERIFIED_WORKERS[0];
+  const { activeJobId } = useStore();
+  const jobState = useAsync(() => (activeJobId ? getJob(activeJobId) : Promise.resolve(null)), [activeJobId], { reloadOnFocus: false });
+  const job = jobState.data;
+  const worker = job?.worker ?? null;
 
   const [rating, setRating] = useState(5);
-  const [selectedTags, setSelectedTags] = useState<string[]>([
-    '⚡ Punctual / समय पर',
-    '💵 Fair Price / वाजिब दाम'
-  ]);
-  const [selectedTip, setSelectedTip] = useState<string>('₹50');
+  const [selectedTags, setSelectedTags] = useState<ReviewTag[]>([]);
+  const [tip, setTip] = useState<number>(0);
+  const [customTip, setCustomTip] = useState('');
+  const [customOpen, setCustomOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const tags = [
-    '⚡ Punctual / समय पर',
-    '💵 Fair Price / वाजिब दाम',
-    '🧼 Clean Work / साफ़ काम',
-    '🤝 Polite / विनम्र व्यवहार',
-    '🛠️ Expert Skill / हुनरमंद'
-  ];
-
-  const tipOptions = ['₹20', '₹50', '₹100', 'Custom'];
-
-  const toggleTag = (tag: string) => {
-    if (selectedTags.includes(tag)) {
-      setSelectedTags(selectedTags.filter((t) => t !== tag));
-    } else {
-      setSelectedTags([...selectedTags, tag]);
-    }
+  const toggleTag = (tag: ReviewTag) => {
+    setSelectedTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
   };
 
-  const handleSubmit = () => {
-    resetTo('/(tabs)/activity');
+  const handleSubmit = async () => {
+    if (saving || !activeJobId) return;
+    setFormError(null);
+    setSaving(true);
+    try {
+      await reviewJob(activeJobId, { rating, tags: selectedTags, ...(tip > 0 ? { tipAmount: tip } : {}) });
+      resetTo('/(tabs)/activity');
+    } catch (error) {
+      if (isApiError(error) && error.code === 'ALREADY_REVIEWED') {
+        resetTo('/(tabs)/activity');
+        return;
+      }
+      setFormError(userMessage(error));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -59,7 +76,7 @@ export default function RatingReviewScreen() {
           <Text style={styles.headerTitle} numberOfLines={1}>Rate & Review / रेटिंग दें</Text>
         </View>
         <View style={styles.jobPill}>
-          <Text style={styles.jobPillText}>JOB #88421</Text>
+          <Text style={styles.jobPillText}>{job ? job.reference : 'JOB'}</Text>
         </View>
       </View>
 
@@ -67,17 +84,22 @@ export default function RatingReviewScreen() {
         {/* Worker Summary Profile */}
         <View style={styles.workerSummary}>
           <View style={styles.avatarWrap}>
-            <Image source={{ uri: worker.avatar }} style={styles.workerAvatar} />
+            <Avatar uri={worker?.photoUrl} size={80} style={styles.workerAvatar} />
             <View style={styles.statusDot} />
           </View>
-          <View style={styles.nameRow}>
-            <Text style={styles.workerName}>{worker.name}</Text>
-            <ShieldCheck color={Colors.primary} size={18} />
-          </View>
-          <Text style={styles.workerTrade}>{worker.trade} • Chandigarh</Text>
-          <Text style={styles.jobSummaryText}>
-            Completed Plumbing Pipe Fix in Sector 22-B
-          </Text>
+          {!activeJobId && <EmptyBlock title="No job selected" hint="Open a completed job from Activity. / गतिविधि से जॉब खोलें" />}
+          {activeJobId && jobState.loading && <LoadingBlock />}
+          {jobState.error && !jobState.data && <ErrorBlock message={jobState.error} onRetry={() => void jobState.reload()} />}
+          {job && worker && (
+            <>
+              <View style={styles.nameRow}>
+                <Text style={styles.workerName}>{worker.name}</Text>
+                <ShieldCheck color={Colors.primary} size={18} />
+              </View>
+              <Text style={styles.workerTrade}>{worker.trade} • {job.city.name.replace(/\s*\(.*\)/, '')}</Text>
+              <Text style={styles.jobSummaryText}>{job.title} • {job.area.name}</Text>
+            </>
+          )}
         </View>
 
         {/* Interactive 5-Star Selector */}
@@ -113,17 +135,19 @@ export default function RatingReviewScreen() {
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>What did you like the most?</Text>
           <View style={styles.tagsContainer}>
-            {tags.map((tag) => {
-              const isActive = selectedTags.includes(tag);
+            {TAGS.map(({ id, label }) => {
+              const isActive = selectedTags.includes(id);
               return (
                 <TouchableOpacity
-                  key={tag}
+                  key={id}
                   style={[styles.tagChip, isActive && styles.tagChipActive]}
-                  onPress={() => toggleTag(tag)}
+                  onPress={() => toggleTag(id)}
                   activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isActive }}
                 >
                   <Text style={[styles.tagText, isActive && styles.tagTextActive]}>
-                    {tag} {isActive ? '✓' : ''}
+                    {label} {isActive ? '✓' : ''}
                   </Text>
                 </TouchableOpacity>
               );
@@ -135,41 +159,71 @@ export default function RatingReviewScreen() {
         <View style={[styles.card, styles.tipCard]}>
           <View style={styles.tipHeader}>
             <Text style={styles.tipTitle}>
-              Add a Direct Tip for {worker.name}? (कारीगर को टिप)
+              Add a Direct Tip for {worker?.name ?? 'the worker'}? (कारीगर को टिप)
             </Text>
             <View style={styles.tipBadge}>
               <Text style={styles.tipBadgeText}>100% to Worker</Text>
             </View>
           </View>
           <View style={styles.tipsGrid}>
-            {tipOptions.map((tip) => {
-              const isSelected = selectedTip === tip;
+            {TIP_OPTIONS.map((amount) => {
+              const isSelected = !customOpen && tip === amount;
               return (
                 <TouchableOpacity
-                  key={tip}
+                  key={amount}
                   style={[styles.tipBtn, isSelected && styles.tipBtnActive]}
-                  onPress={() => setSelectedTip(tip)}
+                  onPress={() => { setTip(amount); setCustomOpen(false); }}
                   activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSelected }}
                 >
                   <Text style={[styles.tipBtnText, isSelected && styles.tipBtnTextActive]}>
-                    {tip} {isSelected ? '✓' : ''}
+                    {amount === 0 ? 'No tip' : `₹${amount}`} {isSelected ? '✓' : ''}
                   </Text>
                 </TouchableOpacity>
               );
             })}
+            <TouchableOpacity
+              style={[styles.tipBtn, customOpen && styles.tipBtnActive]}
+              onPress={() => { setCustomOpen(true); setTip(parseInt(customTip || '0', 10) || 0); }}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityState={{ selected: customOpen }}
+            >
+              <Text style={[styles.tipBtnText, customOpen && styles.tipBtnTextActive]}>Custom {customOpen ? '✓' : ''}</Text>
+            </TouchableOpacity>
           </View>
+          {customOpen && (
+            <TextInput
+              style={{ marginTop: 8, borderWidth: 1.5, borderColor: Colors.borderDark, borderRadius: Radius.md, paddingHorizontal: 12, paddingVertical: 8, fontSize: 13, color: Colors.textMain, backgroundColor: '#FFFFFF' }}
+              value={customTip}
+              onChangeText={(t) => {
+                const digits = t.replace(/\D/g, '').slice(0, 4);
+                setCustomTip(digits);
+                setTip(parseInt(digits || '0', 10) || 0);
+              }}
+              placeholder="Amount in ₹"
+              placeholderTextColor={Colors.textSubtle}
+              keyboardType="number-pad"
+              accessibilityLabel="Custom tip amount"
+            />
+          )}
+          <Text style={{ fontSize: 10, color: Colors.textMuted, marginTop: 6 }}>The tip is a note for the worker; you hand it over yourself, like the bill.</Text>
         </View>
 
         {/* Submit Review Button */}
+        {formError && <Text style={{ fontSize: 12, fontWeight: '600', color: Colors.error, textAlign: 'center', marginBottom: 8 }} accessibilityRole="alert">{formError}</Text>}
         <TouchableOpacity
-          style={styles.submitBtn}
-          onPress={handleSubmit}
+          style={[styles.submitBtn, (saving || !job) && { opacity: 0.7 }]}
+          onPress={() => void handleSubmit()}
+          disabled={saving || !job}
           activeOpacity={0.85}
+          accessibilityRole="button"
         >
           <Text style={styles.submitBtnText}>
-            Submit Review & Complete • सबमिट करें
+            {saving ? 'Submitting… / भेज रहे हैं…' : 'Submit Review & Complete • सबमिट करें'}
           </Text>
-          <ArrowRight color="#FFFFFF" size={18} />
+          {saving ? <ActivityIndicator color="#FFFFFF" /> : <ArrowRight color="#FFFFFF" size={18} />}
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

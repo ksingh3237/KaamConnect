@@ -7,8 +7,10 @@
     "@expo/metro-runtime": "~57.0.16",
     "expo": "~57.0.27",
     "expo-constants": "~57.0.21",
+    "expo-image-picker": "~57.0.20",
     "expo-linking": "~57.0.12",
     "expo-router": "~57.0.25",
+    "expo-secure-store": "~57.0.4",
     "expo-splash-screen": "~57.0.9",
     "expo-status-bar": "~57.0.1",
     "lucide-react-native": "^1.52.0",
@@ -19,6 +21,7 @@
     "react-native-screens": "~4.26.0",
     "react-native-svg": "15.15.4",
     "react-native-web": "^0.21.2",
+    "socket.io-client": "^4.8.4",
     "zustand": "^5.0.15"
   },
   "devDependencies": {

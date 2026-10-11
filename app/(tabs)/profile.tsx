@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
@@ -10,20 +10,50 @@ import {
   PhoneCall,
   ChevronRight,
   RefreshCw,
-  LogOut
+  LogOut,
+  Trash2
 } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../../constants/theme';
 import LanguageToggle from '../../components/LanguageToggle';
 import { useStore } from '../../store/useStore';
 import { resetTo } from '../../utils/navigation';
+import { useSession } from '../../store/useSession';
+import { useAsync } from '../../api/useAsync';
+import { getSavings } from '../../api/endpoints';
+import Avatar from '../../components/Avatar';
+import DeleteAccountModal from '../../components/DeleteAccountModal';
+import { ErrorBlock } from '../../components/StateBlocks';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { role, toggleRole, language, commissionSaved } = useStore();
+  const { role, setRole, language } = useStore();
+  const { me, user, signOut, customerProfile, workerProfile } = useSession();
   const isWorker = role === 'worker';
+  const [signingOut, setSigningOut] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const savings = useAsync(() => getSavings(isWorker ? 'worker' : 'customer'), [isWorker]);
 
-  // Reset the stack so Back can't return to a signed-in screen
-  const handleLogout = () => resetTo('/');
+  const profile = isWorker ? workerProfile : customerProfile;
+  const displayName = profile?.fullName ?? (isWorker ? me?.worker?.fullName : me?.customer?.fullName) ?? 'Your name';
+  const phone = (user?.phone ?? me?.phone ?? '').replace(/^\+91/, '+91 ');
+  const place = isWorker ? workerProfile?.baseArea.name : customerProfile?.addresses.find((a) => a.isPrimary)?.area.name ?? customerProfile?.addresses[0]?.area.name;
+  const verified = isWorker ? me?.worker?.verificationStatus === 'VERIFIED' : false;
+
+  // Switching to a side that has no profile yet starts that side's setup instead of showing an empty screen
+  const handleSwitchRole = () => {
+    const next = isWorker ? 'customer' : 'worker';
+    const hasProfile = next === 'worker' ? me?.worker : me?.customer;
+    setRole(next);
+    if (!hasProfile) router.push(next === 'worker' ? '/worker-onboarding' : '/customer-onboarding');
+  };
+
+  // Ends the login on the server too, then resets the stack so Back can't return to a signed-in screen
+  const handleLogout = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    await signOut();
+    resetTo('/');
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -41,22 +71,24 @@ export default function ProfileScreen() {
         {/* User Profile Card */}
         <View style={styles.card}>
           <View style={styles.profileRow}>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarEmoji}>{isWorker ? '🛠️' : '👤'}</Text>
-            </View>
+            <Avatar uri={profile?.photoUrl} size={52} />
             <View style={{ flex: 1 }}>
               <View style={styles.nameRow}>
                 <Text style={styles.userName}>
-                  {isWorker ? 'Rajesh Kumar (Worker)' : 'Sunita Sharma (Customer)'}
+                  {displayName} ({isWorker ? 'Worker' : 'Customer'})
                 </Text>
-                <ShieldCheck color={Colors.primary} size={16} />
+                {verified && <ShieldCheck color={Colors.primary} size={16} />}
               </View>
               <Text style={styles.userPhone}>
-                +91 98765 43210 • Sector 22, Chandigarh
+                {phone}{place ? ` • ${place}` : ''}
               </Text>
-              <View style={styles.aadhaarPill}>
-                <Text style={styles.aadhaarPillText}>Aadhaar Verified Citizen</Text>
-              </View>
+              {isWorker && me?.worker && (
+                <View style={styles.aadhaarPill}>
+                  <Text style={styles.aadhaarPillText}>
+                    {me.worker.verificationStatus === 'VERIFIED' ? 'Aadhaar Verified' : me.worker.verificationStatus === 'REJECTED' ? 'Verification rejected' : 'Verification pending'}
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
         </View>
@@ -69,9 +101,15 @@ export default function ProfileScreen() {
               <Text style={styles.savedPillText}>TOTAL SAVED</Text>
             </View>
           </View>
-          <Text style={styles.savingsAmount}>₹{commissionSaved.toLocaleString()}.00</Text>
+          {savings.error && !savings.data ? (
+            <ErrorBlock message={savings.error} onRetry={() => void savings.reload()} />
+          ) : (
+            <Text style={styles.savingsAmount}>{savings.data ? `₹${savings.data.commissionSaved.toLocaleString('en-IN')}.00` : '…'}</Text>
+          )}
           <Text style={styles.savingsNote}>
-            Money saved by connecting directly with local artisans without middleman commission!
+            {savings.data
+              ? `Across ${savings.data.jobsCount} completed ${savings.data.jobsCount === 1 ? 'job' : 'jobs'}, compared with a typical ${Math.round(savings.data.benchmarkRate * 100)}% marketplace commission.`
+              : 'Money saved by connecting directly with local artisans without middleman commission!'}
           </Text>
         </View>
 
@@ -91,7 +129,7 @@ export default function ProfileScreen() {
             </View>
             <TouchableOpacity
               style={styles.switchBtn}
-              onPress={toggleRole}
+              onPress={handleSwitchRole}
               activeOpacity={0.8}
             >
               <RefreshCw color="#FFFFFF" size={13} />
@@ -152,14 +190,14 @@ export default function ProfileScreen() {
           {/* 24x7 Safety Helpline */}
           <TouchableOpacity
             style={[styles.menuItem, { borderBottomWidth: 0 }]}
-            onPress={() => alert('Dialing Tricity KaamConnect Safety Desk: 1800-KAAM-CONNECT')}
+            onPress={() => void Linking.openURL('tel:112')}
             activeOpacity={0.7}
           >
             <View style={styles.menuLeft}>
               <View style={[styles.menuIconBg, { backgroundColor: '#FEE2E2' }]}>
                 <PhoneCall color={Colors.error} size={18} />
               </View>
-              <Text style={styles.menuText}>24x7 Tricity Safety & Support Helpline</Text>
+              <Text style={styles.menuText}>Emergency helpline (112)</Text>
             </View>
             <ChevronRight color="#94A3B8" size={18} />
           </TouchableOpacity>
@@ -168,12 +206,28 @@ export default function ProfileScreen() {
         {/* Logout Button */}
         <TouchableOpacity
           style={styles.logoutBtn}
-          onPress={handleLogout}
+          onPress={() => void handleLogout()}
+          disabled={signingOut}
           activeOpacity={0.8}
+          accessibilityRole="button"
         >
           <LogOut color={Colors.error} size={16} />
-          <Text style={styles.logoutBtnText}>Log Out of KaamConnect</Text>
+          <Text style={styles.logoutBtnText}>{signingOut ? 'Logging out…' : 'Log Out of KaamConnect'}</Text>
         </TouchableOpacity>
+
+        {/* Delete account: a quieter, separate action (docs/08 section 1) */}
+        <TouchableOpacity
+          style={styles.deleteLink}
+          onPress={() => setDeleting(true)}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Delete my account"
+        >
+          <Trash2 color={Colors.textMuted} size={14} />
+          <Text style={styles.deleteLinkText}>Delete my account / खाता हटाएं</Text>
+        </TouchableOpacity>
+
+        <DeleteAccountModal visible={deleting} onClose={() => setDeleting(false)} onDeleted={() => { setDeleting(false); resetTo('/'); }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -390,5 +444,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     color: Colors.error
+  },
+  deleteLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10
+  },
+  deleteLinkText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.textMuted,
+    textDecorationLine: 'underline'
   }
 });
