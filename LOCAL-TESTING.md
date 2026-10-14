@@ -51,3 +51,8 @@ temporary placeholder images in `assets/images/` stand in until real artwork exi
 
 Frontend: `npx tsc --noEmit`, `npx expo export --platform web`. Backend: `npm run lint`, `npm run typecheck`,
 `npm run build`, `npm test`, `npm run test:e2e`, `npm run test:cov`.
+
+## 5. Real Firebase phone sign-in (phones only)
+
+The steps above use the development OTP, which is the only mode on the web and in Expo Go. Signing in with a real SMS through
+Firebase needs a development or release build on a phone: see `FIREBASE-SETUP.md`.

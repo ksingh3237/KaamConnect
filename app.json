@@ -11,17 +11,35 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.kaamconnect.app"
+      "bundleIdentifier": "com.kaamconnect.app",
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
-      "package": "com.kaamconnect.app"
+      "package": "com.kaamconnect.app",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "bundler": "metro"
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
-    ]
+      "expo-secure-store",
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "dynamic"
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "374b43a4-46ee-45c6-87ec-380aa3df941f"
+      }
+    }
   }
 }

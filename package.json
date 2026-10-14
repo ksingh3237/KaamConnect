@@ -5,8 +5,12 @@
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
     "@expo/metro-runtime": "~57.0.16",
+    "@react-native-firebase/app": "^26.4.0",
+    "@react-native-firebase/auth": "^26.4.0",
     "expo": "~57.0.27",
+    "expo-build-properties": "~57.0.22",
     "expo-constants": "~57.0.21",
+    "expo-dev-client": "~57.0.20",
     "expo-image-picker": "~57.0.20",
     "expo-linking": "~57.0.12",
     "expo-router": "~57.0.25",
@@ -26,13 +30,16 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vitest": "^4.1.11"
   },
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "private": true
 }

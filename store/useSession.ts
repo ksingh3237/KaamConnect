@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import * as endpoints from '../api/endpoints';
 import { getRefreshToken, hasTokens, onSessionEnded, restoreTokens, setTokens } from '../api/client';
 import { isApiError } from '../api/errors';
+import { AUTH_MODE, firebaseFlow } from '../api/phoneSignIn';
 import type { CustomerView, MeView, OtpRequestResult, SessionUser, WorkerView } from '../api/types';
 
 export type SessionStatus =
@@ -26,6 +27,10 @@ interface SessionState {
   bootstrap: () => Promise<void>;
   requestOtp: (phone: string) => Promise<OtpRequestResult>;
   verifyOtp: (phone: string, code: string) => Promise<{ isNewUser: boolean; user: SessionUser }>;
+  /** Proof of the signed-in person's phone number for account deletion: a Firebase ID token, or the SMS code in development OTP mode. */
+  proveOwnership: (code: string) => Promise<{ code: string } | { firebaseIdToken: string }>;
+  /** Call after a deletion attempt: forgets any Firebase sign-in that was started for it. */
+  finishOwnershipProof: () => Promise<void>;
   refreshMe: () => Promise<MeView | null>;
   signOut: () => Promise<void>;
   /** Used after account deletion: the server already ended the login. */
@@ -78,13 +83,14 @@ export const useSession = create<SessionState>((set, get) => ({
   },
 
   requestOtp: async (phone) => {
-    const result = await endpoints.requestOtp(phone);
+    // Firebase mode: Firebase sends the SMS, the server's development notice does not apply.
+    const result = AUTH_MODE === 'firebase' ? await firebaseFlow.requestCode(phone) : await endpoints.requestOtp(phone);
     set({ devNotice: result.devNotice ?? null, resendAfterSec: result.resendAfterSec });
     return result;
   },
 
   verifyOtp: async (phone, code) => {
-    const result = await endpoints.verifyOtp(phone, code);
+    const result = AUTH_MODE === 'firebase' ? await firebaseFlow.signIn(code) : await endpoints.verifyOtp(phone, code);
     await setTokens({ accessToken: result.accessToken, refreshToken: result.refreshToken });
     set({ status: 'signedIn', user: result.user });
     try {
@@ -94,6 +100,13 @@ export const useSession = create<SessionState>((set, get) => ({
       /* the screens refetch; the login itself succeeded */
     }
     return { isNewUser: result.isNewUser, user: result.user };
+  },
+
+  proveOwnership: async (code) =>
+    AUTH_MODE === 'firebase' ? { firebaseIdToken: await firebaseFlow.proveOwnership(code) } : { code },
+
+  finishOwnershipProof: async () => {
+    if (AUTH_MODE === 'firebase') await firebaseFlow.finish();
   },
 
   refreshMe: async () => {

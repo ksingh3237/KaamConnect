@@ -17,7 +17,7 @@ interface Props {
 }
 
 export default function DeleteAccountModal({ visible, onClose, onDeleted }: Props) {
-  const { user, devNotice, requestOtp, clearLocal } = useSession();
+  const { user, devNotice, requestOtp, proveOwnership, finishOwnershipProof, clearLocal } = useSession();
   const [step, setStep] = useState<'explain' | 'code'>('explain');
   const [code, setCode] = useState('');
   const [understood, setUnderstood] = useState(false);
@@ -35,6 +35,7 @@ export default function DeleteAccountModal({ visible, onClose, onDeleted }: Prop
   };
   const close = () => {
     if (busy === 'delete') return; // never walk away from a deletion in progress
+    void finishOwnershipProof(); // Firebase mode: drop a half-used phone verification
     reset();
     onClose();
   };
@@ -59,7 +60,9 @@ export default function DeleteAccountModal({ visible, onClose, onDeleted }: Prop
     setError(null);
     setBlockers([]);
     try {
-      await deleteAccount(code);
+      // Development OTP: the SMS code itself. Firebase: the SMS code becomes a fresh Firebase ID token for this number.
+      await deleteAccount(await proveOwnership(code));
+      await finishOwnershipProof();
       await clearLocal();
       reset();
       onDeleted();
@@ -68,6 +71,12 @@ export default function DeleteAccountModal({ visible, onClose, onDeleted }: Prop
         // The server refuses before it looks at the code, so the code is NOT spent: stay here, let the person finish or
         // cancel what is open, and press Delete again with the same code.
         setBlockers(e.details.map((d) => d.issue));
+      }
+      if (isApiError(e) && (e.code === 'FIREBASE_TOKEN_STALE' || e.code === 'FIREBASE_TOKEN_INVALID')) {
+        // Too much time passed since the code was entered: that verification cannot be reused, so start again
+        void finishOwnershipProof();
+        setCode('');
+        setStep('explain');
       }
       setError(userMessage(e));
     } finally {

@@ -1,5 +1,6 @@
 // Every API call the app makes, typed. Screens import from here and never build URLs themselves.
 import { del, get, patch, post, put } from './client';
+import { toE164 } from './phone';
 import type {
   BillItemKind,
   BillView,
@@ -37,24 +38,26 @@ import type {
   SosStatusView,
 } from './types';
 
-/** "98765 43210", "9876543210" or "+919876543210" all become "+919876543210" (the server also accepts these). */
-export const toE164 = (input: string): string => {
-  const digits = input.replace(/\D/g, '');
-  return digits.length === 10 ? `+91${digits}` : `+${digits}`;
-};
+export { toE164 };
 
 // ── auth (public)
 export const requestOtp = (phone: string) =>
   post<OtpRequestResult>('/auth/otp/request', { phone: toE164(phone) }, { auth: false });
 export const verifyOtp = (phone: string, code: string) =>
   post<VerifyResult>('/auth/otp/verify', { phone: toE164(phone), code }, { auth: false });
+/** Firebase Phone Authentication: trades the Firebase ID token for our own session (same reply as verifyOtp). */
+export const verifyFirebase = (idToken: string) => post<VerifyResult>('/auth/firebase/verify', { idToken }, { auth: false });
 export const logout = (refreshToken: string) => post<void>('/auth/logout', { refreshToken });
 
 // ── account
 export const getMe = () => get<MeView>('/me');
 export const patchMe = (body: { language: Lang }) => patch<MeView>('/me', body);
-/** Deletes the account (anonymisation). `code` is a fresh OTP for the account's own number; the server also refuses while a job is active. */
-export const deleteAccount = (code: string) => del<void>('/me', { body: { code, confirm: true } });
+/**
+ * Deletes the account (anonymisation). The proof is ONE of: `code` (a fresh SMS code for the account's own number, development
+ * OTP) or `firebaseIdToken` (a Firebase phone sign-in done just now for that number). The server also refuses while a job is active.
+ */
+export type DeletionProof = { code: string } | { firebaseIdToken: string };
+export const deleteAccount = (proof: DeletionProof) => del<void>('/me', { body: { ...proof, confirm: true } });
 export const getSavings = (role?: 'customer' | 'worker') => get<Savings>('/me/savings', { query: { role } });
 
 // ── reference data

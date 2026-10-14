@@ -8,6 +8,7 @@ import { noFocusRing } from '../constants/theme';
 import { useStore } from '../store/useStore';
 import { useSession } from '../store/useSession';
 import { isApiError, userMessage } from '../api/errors';
+import { AUTH_MODE, firebaseFlow } from '../api/phoneSignIn';
 
 const OTP_LENGTH = 6;
 
@@ -31,6 +32,8 @@ export default function OtpScreen() {
   const devCode = devNotice?.match(/\b(\d{6})\b/)?.[1] ?? null;
 
   const input = useRef<TextInput>(null);
+  // Mirrors isVerifying for callbacks that outlive a render (the Android auto-verification listener below)
+  const verifying = useRef(false);
 
   useEffect(() => {
     if (!mobile) router.replace('/login');
@@ -50,24 +53,44 @@ export default function OtpScreen() {
     setApiError(null);
   };
 
+  // Android can read the SMS and verify the number by itself. Finish the sign-in then, without waiting for the person to
+  // type; `verifying` stops it from racing a manual Verify. The code argument is not needed once Firebase has signed in.
+  useEffect(() => {
+    if (AUTH_MODE !== 'firebase') return;
+    return firebaseFlow.onAutoVerified(() => {
+      if (verifying.current) return;
+      verifying.current = true;
+      setIsVerifying(true);
+      setApiError(null);
+      verifyOtp(mobile, '')
+        .catch((error) => setApiError(userMessage(error)))
+        .finally(() => {
+          verifying.current = false;
+          setIsVerifying(false);
+        });
+    });
+  }, [mobile, verifyOtp]);
+
   // On success the session store flips to "signed in" and the root layout moves the person to the right screen
   // (role selection for a new account, the marketplace otherwise), so there is nothing to navigate to here.
   const handleVerify = async () => {
-    if (isVerifying) return;
+    if (isVerifying || verifying.current) return;
     if (code.length < OTP_LENGTH) {
       setShowError(true);
       input.current?.focus();
       return;
     }
+    verifying.current = true;
     setIsVerifying(true);
     setApiError(null);
     try {
       await verifyOtp(mobile, code);
     } catch (error) {
       setApiError(userMessage(error));
-      if (isApiError(error) && (error.code === 'OTP_INVALID' || error.code === 'OTP_LOCKED')) setCode('');
+      if (isApiError(error) && ['OTP_INVALID', 'OTP_LOCKED', 'FIREBASE_TOKEN_STALE', 'FIREBASE_TOKEN_INVALID'].includes(error.code)) setCode('');
       input.current?.focus();
     } finally {
+      verifying.current = false;
       setIsVerifying(false);
     }
   };

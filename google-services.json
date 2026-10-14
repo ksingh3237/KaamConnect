@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "446084556643",
+    "project_id": "kaamconnect-a829d",
+    "storage_bucket": "kaamconnect-a829d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:446084556643:android:1e5eb21957098c1d9f1556",
+        "android_client_info": {
+          "package_name": "com.kaamconnect.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAq3LgXEJp9Pk9hxgcQheXw5kWi-5_cbdA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
