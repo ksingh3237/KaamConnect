@@ -5,12 +5,27 @@ import { Home, Compass, Plus, ClipboardList, User } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/theme';
 import { useStore } from '../../store/useStore';
+import { listLeads } from '../../api/endpoints';
 
 export default function TabLayout() {
   const { role } = useStore();
   const isWorker = role === 'worker';
   const insets = useSafeAreaInsets();
   const router = useRouter();
+
+  const openNewestLead = async () => {
+    try {
+      const page = await listLeads({ filter: 'all' });
+      const lead = page.items.find((l) => l.leadState !== 'DECLINED');
+      if (lead) {
+        router.push({ pathname: '/lead-offer', params: { id: lead.id } });
+        return;
+      }
+    } catch {
+      // offline or server trouble: the radar shows the error with a retry
+    }
+    router.navigate('/(tabs)/leads');
+  };
 
   return (
     <Tabs
@@ -27,7 +42,7 @@ export default function TabLayout() {
           paddingTop: 4
         },
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: 13,
           fontWeight: '700'
         }
       }}
@@ -49,11 +64,12 @@ export default function TabLayout() {
       <Tabs.Screen
         name="post-job"
         listeners={{
-          // Workers send quotes, they don't post jobs
+          // Workers send quotes, they don't post jobs: the middle button opens the quote screen for the newest lead
+          // they have not declined, or their lead radar when there is none (a quote always needs a real lead)
           tabPress: (e) => {
             if (isWorker) {
               e.preventDefault();
-              router.push('/lead-offer');
+              void openNewestLead();
             }
           }
         }}
@@ -65,7 +81,7 @@ export default function TabLayout() {
             </View>
           ),
           tabBarLabelStyle: {
-            fontSize: 11,
+            fontSize: 13,
             fontWeight: '800',
             color: Colors.primary
           }

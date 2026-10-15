@@ -97,7 +97,7 @@ export default function RatingReviewScreen() {
                 <ShieldCheck color={Colors.primary} size={18} />
               </View>
               <Text style={styles.workerTrade}>{worker.trade} • {job.city.name.replace(/\s*\(.*\)/, '')}</Text>
-              <Text style={styles.jobSummaryText}>{job.title} • {job.area.name}</Text>
+              <Text style={styles.jobSummaryText}>{job.title} • {job.locality ?? job.area.name}</Text>
             </>
           )}
         </View>
@@ -208,7 +208,7 @@ export default function RatingReviewScreen() {
               accessibilityLabel="Custom tip amount"
             />
           )}
-          <Text style={{ fontSize: 10, color: Colors.textMuted, marginTop: 6 }}>The tip is a note for the worker; you hand it over yourself, like the bill.</Text>
+          <Text style={{ fontSize: 12, color: Colors.textMuted, marginTop: 6 }}>The tip is a note for the worker; you hand it over yourself, like the bill.</Text>
         </View>
 
         {/* Submit Review Button */}
@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryContainer
   },
   jobPillText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     color: Colors.primaryDark
   },
@@ -325,7 +325,7 @@ const styles = StyleSheet.create({
     color: Colors.primary
   },
   jobSummaryText: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.textMuted,
     textAlign: 'center',
     marginTop: 4
@@ -343,7 +343,7 @@ const styles = StyleSheet.create({
     elevation: 2
   },
   ratingPrompt: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: Colors.textMuted,
     textAlign: 'center',
@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary
   },
   tagText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: Colors.textMain
   },
@@ -417,7 +417,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF3C7'
   },
   tipBadgeText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '800',
     color: '#92400E'
   },

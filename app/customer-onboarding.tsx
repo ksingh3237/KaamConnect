@@ -4,7 +4,6 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router';
 import { ArrowLeft, User, Verified, Camera, CameraIcon, BadgeInfo, UserCircle, MapPin, Building, Mic, PhoneCall, ShieldCheck, ArrowRight, CheckCircle2 } from 'lucide-react-native';
 import LanguageToggle, { FULL_LANG_LABELS } from '../components/LanguageToggle';
-import ModeSwitchCard from '../components/ModeSwitchCard';
 import { useStore } from '../store/useStore';
 import { resetTo } from '../utils/navigation';
 import { useSession } from '../store/useSession';
@@ -15,6 +14,7 @@ import { uploadFile } from '../api/upload';
 import { pickImage } from '../utils/pickImage';
 import { currentPosition, type Position } from '../utils/position';
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks';
+import SectorPicker from '../components/SectorPicker';
 
 export default function CustomerOnboardingScreen() {
   const router = useRouter();
@@ -31,6 +31,10 @@ export default function CustomerOnboardingScreen() {
   const [nameError, setNameError] = useState(false);
   const [address, setAddress] = useState(primary?.line ?? '');
   const [areaId, setAreaId] = useState<number | null>(selectedAreaId ?? primary?.area.id ?? null);
+  // Typed locality when the person's pocket is not in the list (areaId is then the city's "Other area")
+  const [localityName, setLocalityName] = useState<string | null>(
+    selectedAreaId === null || selectedAreaId === primary?.area.id ? primary?.locality ?? null : null,
+  );
   const [directCall, setDirectCall] = useState(existing?.allowDirectCalls ?? true);
   const [commLang, setCommLang] = useState<'en' | 'hi' | 'pa'>(existing?.commLanguage ?? 'hi');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -48,19 +52,18 @@ export default function CustomerOnboardingScreen() {
   const areaLabel = useMemo(() => {
     for (const city of locations.data ?? []) {
       const area = city.areas.find((a) => a.id === areaId);
-      if (area) return `${area.name}, ${city.name.replace(/\s*\(.*\)/, '')}`;
+      if (area) return `${localityName ?? area.name}, ${city.name.replace(/\s*\(.*\)/, '')}`;
     }
     return '';
-  }, [locations.data, areaId]);
+  }, [locations.data, areaId, localityName]);
 
   const displayPhone = (user?.phone ?? '').replace(/^\+91/, '');
 
-  const chooseArea = (id: number) => {
+  const chooseArea = (id: number, label: string, locality: string | null) => {
     setAreaId(id);
+    setLocalityName(locality);
     setFormError(null);
-    const city = (locations.data ?? []).find((c) => c.areas.some((a) => a.id === id));
-    const area = city?.areas.find((a) => a.id === id);
-    if (city && area) setSelectedSector(`${area.name}, ${city.name.replace(/\s*\(.*\)/, '')}`, id);
+    setSelectedSector(label, id);
   };
 
   // Captures real coordinates for the address when the device can give them. It does not pick a sector:
@@ -94,11 +97,6 @@ export default function CustomerOnboardingScreen() {
   };
 
   // replace (not push) so Back from the other setup screen returns to Role Selection
-  const handleSwitchToWorker = () => {
-    setRole('worker');
-    router.replace('/worker-onboarding');
-  };
-
   const handleComplete = async () => {
     if (saving || photoBusy) return;
     setFormError(null);
@@ -122,7 +120,7 @@ export default function CustomerOnboardingScreen() {
         ...(photoKey ? { photoKey } : {}),
         commLanguage: commLang,
         allowDirectCalls: directCall,
-        address: { areaId, line: address.trim(), ...(coords ?? {}) },
+        address: { areaId, line: address.trim(), ...(localityName ? { localityName } : {}), ...(coords ?? {}) },
       });
       await refreshMe();
       setRole('customer');
@@ -135,8 +133,6 @@ export default function CustomerOnboardingScreen() {
     }
   };
 
-  // The sector chips come from the server (GET /locations), grouped by city
-  const sectors: [string, { id: number; name: string }[]][] = (locations.data ?? []).map((c) => [c.name.toUpperCase(), c.areas]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -152,7 +148,7 @@ export default function CustomerOnboardingScreen() {
           >
             <ArrowLeft color="#111c2d" size={24} strokeWidth={2.5} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle} numberOfLines={1}>Worker Detail Direct Call</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>Your Profile</Text>
         </View>
         <View style={styles.headerRight}>
           <View style={styles.tricityHeaderPill}>
@@ -175,8 +171,6 @@ export default function CustomerOnboardingScreen() {
         </View>
 
         {/* Customer Mode Card */}
-        <ModeSwitchCard mode="customer" onSwitch={handleSwitchToWorker} />
-
         {/* Info Box */}
         <View style={styles.infoBox}>
           <View style={styles.infoIconBox}>
@@ -310,35 +304,16 @@ export default function CustomerOnboardingScreen() {
           <View style={styles.sectorSelectionWrap}>
             <View style={styles.labelRow}>
               <Text style={styles.labelText}>Select Tricity Hub & Sector</Text>
-              <Text style={styles.hintText}>Tap to pinpoint</Text>
+              <Text style={styles.hintText}>Search or tap</Text>
             </View>
 
             {locations.loading && <LoadingBlock label="Loading sectors… / सेक्टर लोड हो रहे हैं…" />}
             {locations.error && !locations.data && <ErrorBlock message={locations.error} onRetry={() => void locations.reload()} />}
-            {sectors.map(([city, list]) => (
-              <View key={city} style={{ marginTop: 10 }}>
-                <Text style={styles.cityHeading}>{city}</Text>
-                <View style={styles.chipsWrap}>
-                  {list.map((area) => {
-                    const isActive = areaId === area.id;
-                    return (
-                      <TouchableOpacity
-                        key={area.id}
-                        style={[styles.sectorChip, isActive && styles.sectorChipActive]}
-                        onPress={() => chooseArea(area.id)}
-                        activeOpacity={0.8}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: isActive }}
-                      >
-                        <Text style={[styles.sectorChipText, isActive && styles.sectorChipTextActive]}>
-                          {area.name.replace('Sector', 'Sec')} {isActive ? '✓' : ''}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+            {locations.data && (
+              <View style={{ marginTop: 10 }}>
+                <SectorPicker locations={locations.data} value={areaId} locality={localityName} onChange={chooseArea} />
               </View>
-            ))}
+            )}
           </View>
 
           {/* Placeholder Map View */}
@@ -480,7 +455,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f3ff'
   },
   tricityHeaderPillText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: '#3d4a41'
   },
@@ -527,7 +502,7 @@ const styles = StyleSheet.create({
   },
   stepBadgeText: {
     flexShrink: 1,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
     color: '#111c2d',
@@ -598,7 +573,7 @@ const styles = StyleSheet.create({
     borderColor: '#d8e3fb'
   },
   avatarUploadText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: '#6c7a70',
     marginTop: 4
@@ -679,7 +654,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   verifiedOtpText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: '#006c46'
   },
@@ -727,7 +702,7 @@ const styles = StyleSheet.create({
     borderRadius: 9999
   },
   primaryBadgeText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: '#002112'
   },
@@ -743,7 +718,7 @@ const styles = StyleSheet.create({
     borderRadius: 9999
   },
   tricityBadgeText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: '#111c2d'
   },
@@ -771,7 +746,7 @@ const styles = StyleSheet.create({
     marginTop: 8
   },
   cityHeading: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: '#3d4a41',
     marginBottom: 6
@@ -874,7 +849,7 @@ const styles = StyleSheet.create({
     color: '#ffffff'
   },
   commBtnSub: {
-    fontSize: 11,
+    fontSize: 13,
     color: '#3d4a41',
     marginTop: 2
   },

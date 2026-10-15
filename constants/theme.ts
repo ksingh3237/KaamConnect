@@ -30,10 +30,10 @@ export const Colors = {
   border: '#E2E8F0',
   borderDark: '#CBD5E1',
 
-  // Typography Colors
+  // Typography Colors (dark enough to read outdoors in sunlight; avoid the pale #94A3B8 for text)
   textMain: '#111C2D',
-  textMuted: '#64748B',
-  textSubtle: '#94A3B8',
+  textMuted: '#475569',
+  textSubtle: '#64748B',
 
   // System
   error: '#EF4444',
@@ -50,6 +50,15 @@ export const Spacing = {
   xl: 20,
   xxl: 24,
   xxxl: 32
+};
+
+// Readable type scale: no essential text under 13px, body 14-15px.
+export const Type = {
+  hero: { fontSize: 24, fontWeight: '800' } as TextStyle,
+  heading: { fontSize: 18, fontWeight: '700' } as TextStyle,
+  title: { fontSize: 15, fontWeight: '700' } as TextStyle,
+  body: { fontSize: 14, lineHeight: 20 } as TextStyle,
+  caption: { fontSize: 13, fontWeight: '600' } as TextStyle,
 };
 
 export const Radius = {

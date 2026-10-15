@@ -15,10 +15,25 @@ export function destinationFor(profile: Pick<SessionUser, 'hasCustomerProfile' |
   if (!customer && !worker) return { href: '/role', role: null };
   // Someone with both profiles keeps the role they last used; otherwise the one profile they have.
   const role: UserRole = customer && worker ? currentRole : customer ? 'customer' : 'worker';
-  return { href: role === 'worker' ? '/(tabs)/leads' : '/(tabs)/home', role };
+  // Both land on Home: it shows the customer marketplace or the worker dashboard depending on the role
+  return { href: '/(tabs)/home', role };
 }
 
 export const profileOf = (me: MeView) => ({ hasCustomerProfile: me.customer !== null, hasWorkerProfile: me.worker !== null });
 
 /** Screens a signed-out person may see. Everything else needs a login. */
-export const PUBLIC_SEGMENTS = new Set(['', 'index', 'language', 'login', 'otp', 'carousel']);
+export const PUBLIC_SEGMENTS = new Set(['', 'index', 'language', 'login', 'otp', 'carousel', 'legal']);
+
+/** Public screens a signed-in person may also open (from the app's menu) without being sent to their marketplace. */
+export const OPEN_TO_ALL_SEGMENTS = new Set(['language', 'legal']);
+
+/**
+ * The role to open with after a restart: the remembered one if the person has that profile, otherwise the one they
+ * do have. Someone with neither keeps the remembered (or default) role until they finish setup.
+ */
+export function resolveRole(remembered: UserRole | null, hasCustomer: boolean, hasWorker: boolean): UserRole {
+  const wanted: UserRole = remembered ?? 'customer';
+  if (wanted === 'worker' && !hasWorker && hasCustomer) return 'customer';
+  if (wanted === 'customer' && !hasCustomer && hasWorker) return 'worker';
+  return wanted;
+}

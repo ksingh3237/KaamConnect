@@ -4,7 +4,11 @@ import { create } from 'zustand';
 import * as endpoints from '../api/endpoints';
 import { getRefreshToken, hasTokens, onSessionEnded, restoreTokens, setTokens } from '../api/client';
 import { isApiError } from '../api/errors';
-import type { CustomerView, MeView, OtpRequestResult, SessionUser, WorkerView } from '../api/types';
+import { getWidgetClient, isMsg91WidgetConfigured } from '../api/msg91';
+import type { CustomerView, MeView, OtpRequestResult, SessionUser, VerifyResult, WorkerView } from '../api/types';
+import { loadRole } from '../api/storage';
+import { resolveRole } from '../utils/session-routing';
+import { useStore } from './useStore';
 
 export type SessionStatus =
   | 'booting' // reading the stored login
@@ -22,9 +26,13 @@ interface SessionState {
   /** Set by the server only when it runs with the development OTP bypass; shown as a banner on the OTP screens. */
   devNotice: string | null;
   resendAfterSec: number;
+  /** Digits in the code the person types: 6 for the backend's own OTP, the widget's setting for MSG91. */
+  otpLength: number;
 
   bootstrap: () => Promise<void>;
   requestOtp: (phone: string) => Promise<OtpRequestResult>;
+  /** Asks for the same code again (MSG91: its retry, on the same request; otherwise a fresh request). */
+  resendOtp: (phone: string) => Promise<OtpRequestResult>;
   verifyOtp: (phone: string, code: string) => Promise<{ isNewUser: boolean; user: SessionUser }>;
   refreshMe: () => Promise<MeView | null>;
   signOut: () => Promise<void>;
@@ -41,7 +49,39 @@ async function loadProfiles(me: MeView): Promise<{ customerProfile: CustomerView
   return { customerProfile, workerProfile };
 }
 
-export const useSession = create<SessionState>((set, get) => ({
+export const useSession = create<SessionState>((set, get) => {
+  /** Stores the tokens and signs in. Shared by every sign-in door so the steps (and their order) never differ. */
+  const finishSignIn = async (result: VerifyResult) => {
+    await setTokens({ accessToken: result.accessToken, refreshToken: result.refreshToken });
+    set({ status: 'signedIn', user: result.user });
+    try {
+      const me = await endpoints.getMe();
+      set({ me, ...(await loadProfiles(me)) });
+    } catch {
+      /* the screens refetch; the login itself succeeded */
+    }
+    return { isNewUser: result.isNewUser, user: result.user };
+  };
+
+  // The access token from a correct code, held in memory only until our server has accepted or refused it. If the
+  // server cannot be reached right after a correct code, a retry reuses it instead of costing the person a second SMS.
+  let pendingMsg91Token: string | null = null;
+
+  /** The access token proves nothing by itself: only our server, asking MSG91, can say whose number it is. */
+  const signInWithMsg91Token = async (accessToken: string) => {
+    pendingMsg91Token = accessToken;
+    try {
+      const signedIn = await finishSignIn(await endpoints.msg91Verify(accessToken));
+      pendingMsg91Token = null;
+      return signedIn;
+    } catch (error) {
+      const outage = isApiError(error) && (error.code === 'NETWORK' || error.code === 'TIMEOUT' || error.status >= 500);
+      if (!outage) pendingMsg91Token = null; // refused or invalid: it will never work, do not reuse it
+      throw error;
+    }
+  };
+
+  return {
   status: 'booting',
   user: null,
   me: null,
@@ -49,6 +89,7 @@ export const useSession = create<SessionState>((set, get) => ({
   workerProfile: null,
   devNotice: null,
   resendAfterSec: 30,
+  otpLength: 6,
 
   bootstrap: async () => {
     onSessionEnded(() => set({ status: 'signedOut', user: null, me: null, customerProfile: null, workerProfile: null }));
@@ -60,6 +101,9 @@ export const useSession = create<SessionState>((set, get) => ({
     try {
       const me = await endpoints.getMe();
       const profiles = await loadProfiles(me);
+      // Reopen the side used last time, but never one this person has no profile for (a worker-only account
+      // must not land on the customer home after a restart, and the other way round)
+      useStore.getState().setRole(resolveRole(await loadRole(), me.customer !== null, me.worker !== null));
       set({
         status: 'signedIn',
         me,
@@ -78,22 +122,37 @@ export const useSession = create<SessionState>((set, get) => ({
   },
 
   requestOtp: async (phone) => {
+    if (isMsg91WidgetConfigured()) {
+      pendingMsg91Token = null; // a new request (maybe another number) must not inherit an old proof
+      const { settings, outcome } = await getWidgetClient().start(phone);
+      if (outcome.kind === 'verified') {
+        // Invisible OTP: MSG91 verified the number without a code. Our server still has to confirm the token.
+        await signInWithMsg91Token(outcome.accessToken);
+        return { resendAfterSec: settings.retryTimeSec, expiresInSec: settings.expiryMin * 60, otpLength: settings.otpLength, signedIn: true };
+      }
+      const result = { resendAfterSec: settings.retryTimeSec, expiresInSec: settings.expiryMin * 60, otpLength: settings.otpLength };
+      set({ devNotice: null, resendAfterSec: result.resendAfterSec, otpLength: result.otpLength });
+      return result;
+    }
     const result = await endpoints.requestOtp(phone);
-    set({ devNotice: result.devNotice ?? null, resendAfterSec: result.resendAfterSec });
+    set({ devNotice: result.devNotice ?? null, resendAfterSec: result.resendAfterSec, otpLength: 6 });
     return result;
   },
 
+  resendOtp: async (phone) => {
+    if (!isMsg91WidgetConfigured()) return get().requestOtp(phone);
+    const settings = getWidgetClient().settings();
+    await getWidgetClient().retry();
+    const resendAfterSec = settings?.retryTimeSec ?? get().resendAfterSec;
+    return { resendAfterSec, expiresInSec: (settings?.expiryMin ?? 15) * 60, otpLength: get().otpLength };
+  },
+
   verifyOtp: async (phone, code) => {
-    const result = await endpoints.verifyOtp(phone, code);
-    await setTokens({ accessToken: result.accessToken, refreshToken: result.refreshToken });
-    set({ status: 'signedIn', user: result.user });
-    try {
-      const me = await endpoints.getMe();
-      set({ me, ...(await loadProfiles(me)) });
-    } catch {
-      /* the screens refetch; the login itself succeeded */
+    if (isMsg91WidgetConfigured()) {
+      if (pendingMsg91Token) return signInWithMsg91Token(pendingMsg91Token);
+      return signInWithMsg91Token(await getWidgetClient().verify(code));
     }
-    return { isNewUser: result.isNewUser, user: result.user };
+    return finishSignIn(await endpoints.verifyOtp(phone, code));
   },
 
   refreshMe: async () => {
@@ -126,4 +185,5 @@ export const useSession = create<SessionState>((set, get) => ({
     await setTokens(null);
     set({ status: 'signedOut', user: null, me: null, customerProfile: null, workerProfile: null });
   },
-}));
+  };
+});

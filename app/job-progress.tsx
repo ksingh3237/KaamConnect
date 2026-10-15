@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, ActivityIndicator, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, CheckCircle2, Phone, ShieldCheck, Zap } from 'lucide-react-native';
@@ -10,7 +10,7 @@ import { addWorkPhoto, approveBill, completeWork, getBill, getJob, payJob, putBi
 import { isApiError, userMessage } from '../api/errors';
 import { uploadFile } from '../api/upload';
 import { pickImage } from '../utils/pickImage';
-import { confirmAction } from '../utils/dialog';
+import { callPhone, confirmAction } from '../utils/dialog';
 import type { BillItemKind, BillView, JobView, PaymentMethod } from '../api/types';
 import Avatar from '../components/Avatar';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../components/StateBlocks';
@@ -112,7 +112,7 @@ export default function JobProgressScreen() {
 
   const call = () => {
     const phone = other?.phone;
-    if (phone) void Linking.openURL(`tel:${phone.replace(/\s+/g, '')}`);
+    if (phone) void callPhone(phone, other?.name ?? 'them');
   };
 
   const timeline = job
@@ -423,7 +423,7 @@ const styles = StyleSheet.create({
     color: Colors.textMain
   },
   headerSubtitle: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.textMuted
   },
   statusPill: {
@@ -433,7 +433,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryContainer
   },
   statusPillText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     color: Colors.primaryDark
   },
@@ -479,7 +479,7 @@ const styles = StyleSheet.create({
     color: Colors.textMuted
   },
   workerVehicle: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.primary,
     fontWeight: '700',
     marginTop: 2
@@ -496,7 +496,7 @@ const styles = StyleSheet.create({
     borderColor: '#A7F3D0'
   },
   callSmallText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: '#065F46'
   },
@@ -541,7 +541,7 @@ const styles = StyleSheet.create({
     color: Colors.textMain
   },
   timelineDesc: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.textMuted
   },
   timelineLine: {
@@ -559,13 +559,13 @@ const styles = StyleSheet.create({
     flex: 1
   },
   photoLabelBefore: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     color: Colors.error,
     marginBottom: 4
   },
   photoLabelAfter: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     color: Colors.primary,
     marginBottom: 4
@@ -595,7 +595,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryContainer
   },
   zeroCutBadgeText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '800',
     color: Colors.primaryDark
   },
@@ -670,7 +670,7 @@ const styles = StyleSheet.create({
     marginBottom: 2
   },
   qrSubtitle: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.textMuted,
     marginBottom: Spacing.md,
     textAlign: 'center'
@@ -687,7 +687,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg
   },
   qrCodeLabel: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '800',
     color: Colors.textMuted,
     marginTop: 4,
@@ -735,12 +735,12 @@ const styles = StyleSheet.create({
   smallBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
   ghostBtn: { borderWidth: 1.5, borderColor: Colors.borderDark, paddingHorizontal: 12, paddingVertical: 8, borderRadius: Radius.md, backgroundColor: '#FFFFFF' },
   ghostBtnText: { color: Colors.textMain, fontSize: 12, fontWeight: '700' },
-  hint: { fontSize: 11, color: Colors.textMuted, marginTop: 6, lineHeight: 16 },
+  hint: { fontSize: 13, color: Colors.textMuted, marginTop: 6, lineHeight: 18 },
   errorLine: { fontSize: 12, fontWeight: '600', color: Colors.error, marginTop: 8, textAlign: 'center' },
   chipRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginTop: 6 },
   chip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.borderDark, backgroundColor: '#FFFFFF' },
   chipOn: { backgroundColor: Colors.primaryContainer, borderColor: Colors.primary },
-  chipText: { fontSize: 11, fontWeight: '700', color: Colors.textMuted },
+  chipText: { fontSize: 13, fontWeight: '700', color: Colors.textMuted },
   chipTextOn: { color: Colors.primaryDark },
   itemBox: { borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, padding: 10, marginTop: 8, backgroundColor: '#FAFCFE' },
   photoThumbRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },

@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Mic, Camera, Send } from 'lucide-react-native';
+import { Camera, Send, Check, X } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../../constants/theme';
+import { serviceIcon } from '../../constants/services';
 import { useStore } from '../../store/useStore';
 import { useSession } from '../../store/useSession';
 import { useAsync } from '../../api/useAsync';
@@ -15,6 +16,8 @@ import type { JobTiming } from '../../api/types';
 import { ErrorBlock, LoadingBlock } from '../../components/StateBlocks';
 
 const MAX_PHOTOS = 4;
+/** Approximate width of one service pill plus the gap, used to scroll the chosen one into view. */
+const CAT_PILL_STEP = 190;
 const TIMINGS: { id: JobTiming; label: string }[] = [
   { id: 'IMMEDIATE', label: 'Immediate (30m)' },
   { id: 'AFTERNOON', label: 'Afternoon' },
@@ -39,6 +42,13 @@ export default function PostJobScreen() {
   const [formError, setFormError] = useState<string | null>(null);
 
   const category = (categories.data ?? []).find((c) => c.id === selectedCategory) ?? categories.data?.[0] ?? null;
+  const catScroll = useRef<ScrollView>(null);
+  const categoryIndex = (categories.data ?? []).findIndex((c) => c.id === category?.id);
+
+  // Bring the chosen service into view (it may have been picked on Home, far along the row)
+  useEffect(() => {
+    if (categoryIndex > 0) catScroll.current?.scrollTo({ x: Math.max(0, categoryIndex * CAT_PILL_STEP - 24), animated: true });
+  }, [categoryIndex]);
 
   const handleAddPhoto = async () => {
     if (uploading || photos.length >= MAX_PHOTOS) return;
@@ -97,7 +107,7 @@ export default function PostJobScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Post Job & Details / काम का विवरण</Text>
           <Text style={styles.headerSub}>Broadcast Direct to Tricity Workers • 0% Fee</Text>
@@ -108,22 +118,47 @@ export default function PostJobScreen() {
           <Text style={styles.label}>Service Type / सेवा का प्रकार *</Text>
           {categories.loading && <LoadingBlock label="Loading services… / सेवाएँ लोड हो रही हैं…" />}
           {categories.error && !categories.data && <ErrorBlock message={categories.error} onRetry={() => void categories.reload()} />}
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          <ScrollView
+            ref={catScroll}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.catRow}
+            style={styles.catScroller}
+          >
             {(categories.data ?? []).map((c) => {
               const on = category?.id === c.id;
+              const Icon = serviceIcon(c.iconKey);
               return (
                 <TouchableOpacity
                   key={c.id}
-                  style={[styles.timingBtn, on && styles.timingBtnActive]}
+                  style={[styles.catPill, on && styles.catPillActive]}
                   onPress={() => setSelectedCategory(c.id)}
+                  activeOpacity={0.7}
                   accessibilityRole="button"
                   accessibilityState={{ selected: on }}
+                  accessibilityLabel={`${c.title.en}, ${c.title.hi}`}
                 >
-                  <Text style={[styles.timingText, on && styles.timingTextActive]} numberOfLines={1}>{c.title.en} ({c.title.hi})</Text>
+                  <View style={[styles.catPillIcon, { backgroundColor: c.bgColor }]}>
+                    <Icon color={c.color} size={20} />
+                  </View>
+                  <View>
+                    <Text style={[styles.catPillText, on && styles.catPillTextActive]}>{c.title.en}</Text>
+                    <Text style={styles.catPillHi}>{c.title.hi}</Text>
+                  </View>
+                  {on && (
+                    <View style={styles.catCheck}>
+                      <Check color="#FFFFFF" size={12} strokeWidth={3.5} />
+                    </View>
+                  )}
                 </TouchableOpacity>
               );
             })}
-          </View>
+          </ScrollView>
+          {category && (
+            <Text style={styles.catHint} numberOfLines={2}>
+              ₹{category.baseVisitFee} visit • {category.examples}
+            </Text>
+          )}
         </View>
 
         {/* Problem Title */}
@@ -154,7 +189,7 @@ export default function PostJobScreen() {
         <View style={styles.card}>
           <Text style={styles.label}>Additional Details / अधिक जानकारी</Text>
           <TextInput
-            style={[styles.textInput, { height: 72, textAlignVertical: 'top' }]}
+            style={[styles.textInput, { height: 96, textAlignVertical: 'top' }]}
             multiline
             value={desc}
             onChangeText={setDesc}
@@ -167,17 +202,20 @@ export default function PostJobScreen() {
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>
             {photos.length < MAX_PHOTOS && (
               <TouchableOpacity style={styles.addPhotoBox} onPress={() => void handleAddPhoto()} disabled={uploading} accessibilityRole="button" accessibilityLabel="Add a photo of the problem">
-                {uploading ? <ActivityIndicator color={Colors.primary} /> : <Camera color={Colors.textMuted} size={20} />}
-                <Text style={{ fontSize: 9, color: Colors.textMuted, marginTop: 2 }}>{uploading ? 'Uploading' : 'Add'}</Text>
+                {uploading ? <ActivityIndicator color={Colors.primary} /> : <Camera color={Colors.primaryDark} size={24} />}
+                <Text style={styles.addPhotoText}>{uploading ? 'Uploading…' : 'Add photo'}</Text>
               </TouchableOpacity>
             )}
             {photos.map((p, i) => (
-              <TouchableOpacity key={p.key ?? i} onPress={() => setPhotos((prev) => prev.filter((_, j) => j !== i))} accessibilityRole="button" accessibilityLabel="Remove this photo">
+              <TouchableOpacity key={p.key ?? i} onPress={() => setPhotos((prev) => prev.filter((_, j) => j !== i))} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Remove this photo">
                 <Image source={{ uri: p.file.uri }} style={styles.photoThumb} />
+                <View style={styles.removeBadge}>
+                  <X color="#FFFFFF" size={12} strokeWidth={3} />
+                </View>
               </TouchableOpacity>
             ))}
           </View>
-          {photos.length > 0 && <Text style={{ fontSize: 9, color: Colors.textMuted, marginTop: 4 }}>Tap a photo to remove it.</Text>}
+          {photos.length > 0 && <Text style={styles.helpText}>Tap a photo to remove it. / फ़ोटो हटाने के लिए टैप करें</Text>}
         </View>
 
         {/* Timing Selector */}
@@ -216,13 +254,15 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '800',
     color: Colors.textMain
   },
   headerSub: {
-    fontSize: 10,
-    color: Colors.textMuted
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textMuted,
+    marginTop: 2
   },
   card: {
     backgroundColor: '#FFFFFF',
@@ -233,10 +273,10 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md
   },
   label: {
-    fontSize: 11,
+    fontSize: 15,
     fontWeight: '800',
     color: Colors.textMain,
-    marginBottom: 6
+    marginBottom: 8
   },
   pickerBox: {
     height: 44,
@@ -257,15 +297,16 @@ const styles = StyleSheet.create({
     borderColor: Colors.borderDark,
     borderRadius: Radius.md,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 13,
+    paddingVertical: 10,
+    minHeight: 48,
+    fontSize: 15,
     color: Colors.textMain
   },
   textInputError: {
     borderColor: Colors.error
   },
   errorText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '600',
     color: Colors.error,
     marginTop: 6
@@ -281,15 +322,15 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md
   },
   voiceTitle: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '800',
     color: '#065F46'
   },
   voiceSub: {
-    fontSize: 10,
+    fontSize: 13,
     color: '#047857',
-    marginTop: 2,
-    marginBottom: 12,
+    marginTop: 4,
+    lineHeight: 18,
     textAlign: 'center'
   },
   voiceRow: {
@@ -326,24 +367,25 @@ const styles = StyleSheet.create({
     color: '#065F46'
   },
   voiceAttached: {
-    fontSize: 10,
+    fontSize: 12,
     color: '#059669',
     fontWeight: '700',
     textAlign: 'center'
   },
   addPhotoBox: {
-    width: 60,
-    height: 60,
+    width: 84,
+    height: 84,
     borderRadius: Radius.md,
     borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: Colors.borderDark,
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center'
   },
   photoThumb: {
-    width: 60,
-    height: 60,
+    width: 84,
+    height: 84,
     borderRadius: Radius.md
   },
   timingRow: {
@@ -352,21 +394,25 @@ const styles = StyleSheet.create({
   },
   timingBtn: {
     flex: 1,
+    minHeight: 48,
     paddingVertical: 10,
+    paddingHorizontal: 4,
     borderRadius: Radius.md,
-    // Constant 2px border so the row doesn't shift when the selection changes
+    // Constant 2px border so the row does not shift when the selection changes
     borderWidth: 2,
     borderColor: Colors.border,
-    alignItems: 'center'
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   timingBtnActive: {
     backgroundColor: '#F0FDF4',
     borderColor: Colors.primary
   },
   timingText: {
-    fontSize: 10,
+    fontSize: 13,
     fontWeight: '700',
-    color: Colors.textMain
+    color: Colors.textMain,
+    textAlign: 'center'
   },
   timingTextActive: {
     color: '#065F46'
@@ -388,7 +434,92 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     textAlign: 'center',
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '800'
+  },
+  catScroller: {
+    marginHorizontal: -14
+  },
+  catRow: {
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 2
+  },
+  catPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 60,
+    paddingLeft: 8,
+    paddingRight: 18,
+    paddingVertical: 8,
+    borderRadius: Radius.lg,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    backgroundColor: '#FFFFFF'
+  },
+  catPillActive: {
+    borderColor: Colors.primary,
+    backgroundColor: '#F0FDF4'
+  },
+  catPillIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  catPillText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.textMain
+  },
+  catPillTextActive: {
+    color: '#065F46'
+  },
+  catPillHi: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    marginTop: 1
+  },
+  catCheck: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 22,
+    height: 22,
+    borderTopRightRadius: Radius.lg,
+    borderBottomLeftRadius: 10,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  catHint: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    marginTop: 10,
+    lineHeight: 18
+  },
+  addPhotoText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.primaryDark,
+    marginTop: 4
+  },
+  removeBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(15,23,42,0.75)',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  helpText: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    marginTop: 6
   }
 });

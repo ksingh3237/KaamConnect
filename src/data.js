@@ -70,15 +70,15 @@ export const SERVICE_CATEGORIES = [
   },
   {
     id: 'cleaner',
-    title: 'Deep Cleaning',
-    hindi: 'सफाई सेवा',
-    punjabi: 'ਸਫ਼ਾਈ ਸੇਵਾ',
+    title: 'Home & Deep Cleaning',
+    hindi: 'घर व डीप सफाई',
+    punjabi: 'ਘਰ ਅਤੇ ਡੀਪ ਸਫ਼ਾਈ',
     icon: 'sparkles',
-    baseFee: '₹350',
+    baseFee: '₹299',
     color: '#EC4899',
     bgColor: '#FCE7F3',
     popular: true,
-    examples: 'Kitchen, Bathroom, Sofa, Water tank'
+    examples: 'Full House Deep Clean, Kitchen, Bathroom, Sofa & Carpet Cleaning'
   },
   {
     id: 'appliance',

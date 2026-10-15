@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Phone, AlertTriangle } from 'lucide-react-native';
@@ -12,7 +12,7 @@ import { userMessage } from '../api/errors';
 import type { JobView, Tracking } from '../api/types';
 import Avatar from '../components/Avatar';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../components/StateBlocks';
-import { confirmAction, notify } from '../utils/dialog';
+import { callPhone, confirmAction, notify } from '../utils/dialog';
 import { currentPosition } from '../utils/position';
 
 const POLL_MS = 6000; // the customer sees the worker's progress by polling; REST is the source of truth
@@ -88,7 +88,7 @@ export default function TrackingScreen() {
 
   const handleCall = () => {
     const phone = tracking?.worker?.phone ?? worker?.phone;
-    if (phone) void Linking.openURL(`tel:${phone.replace(/\s+/g, '')}`);
+    if (phone) void callPhone(phone, worker?.name ?? 'your worker');
   };
 
   const etaText = (() => {
@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
     elevation: 4
   },
   livePillText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     color: '#065F46'
   },
@@ -328,16 +328,16 @@ const styles = StyleSheet.create({
     color: Colors.textMain
   },
   vehicleText: {
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.primary,
     fontWeight: '700'
   },
   workerSub: {
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.textMuted
   },
   codeLabel: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: Colors.textMuted
   },
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   noticeText: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.textMuted
   },
   callBtn: {

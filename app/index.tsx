@@ -1,558 +1,217 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import React, { useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { ShieldCheck, Zap, Droplet, Wind, Truck, ArrowRight, Check, CheckCircle2, Shield } from 'lucide-react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { setStatusBarStyle } from 'expo-status-bar';
+import { ShieldCheck, ArrowRight, BadgeIndianRupee, Wallet, Zap, Star } from 'lucide-react-native';
 import LanguageToggle, { FULL_LANG_LABELS } from '../components/LanguageToggle';
+import Marquee from '../components/Marquee';
+import { PREVIEW_SERVICES, SERVICE_PHOTOS, serviceIcon } from '../constants/services';
+import { Colors } from '../constants/theme';
 
-export default function SplashScreen() {
+// Two rows of real work photos for the collage; both drift right-to-left at different speeds.
+const PHOTO_ROWS: string[][] = [
+  ['cleaner', 'electrician', 'plumber', 'ac_repair', 'painter', 'carpenter', 'car_wash'],
+  ['vehicle_repair', 'ro_service', 'civil_construction', 'gardening', 'appliance', 'cctv_security', 'catering_food'],
+];
+
+const POINTS = [
+  { icon: BadgeIndianRupee, title: '0% commission', sub: 'पूरा पैसा कारीगर का', color: '#047857', bg: '#D1FAE5' },
+  { icon: Wallet, title: 'Pay directly by cash / UPI', sub: 'सीधा भुगतान, कोई बिचौलिया नहीं', color: '#1D4ED8', bg: '#DBEAFE' },
+  { icon: ShieldCheck, title: 'Aadhaar verified local pros', sub: 'चंडीगढ़ • मोहाली • पंचकूला', color: '#7E22CE', bg: '#F3E8FF' },
+];
+
+export default function WelcomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const start = () => router.push('/language');
+
+  // Light status-bar icons on the green hero, back to dark for every other screen
+  useFocusEffect(
+    useCallback(() => {
+      setStatusBarStyle('light');
+      return () => setStatusBarStyle('dark');
+    }, []),
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Top Header Bar: Status Indicator & Language Pill */}
-        <View style={styles.topBar}>
-          <View style={styles.livePill}>
-            <View style={styles.liveDotWrap}>
-              <View style={[styles.liveDot, { position: 'absolute', opacity: 0.3, transform: [{ scale: 1.5 }] }]} />
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} bounces={false}>
+        {/* Green hero */}
+        <View style={styles.hero}>
+          <View style={styles.topBar}>
+            <View style={styles.livePill}>
               <View style={styles.liveDot} />
+              <Text style={styles.livePillText} numberOfLines={1}>Tricity Live</Text>
             </View>
-            <Text style={styles.livePillText}>Tricity Live • चंडीगढ़ • मोहाली • पंचकूला</Text>
+            <LanguageToggle variant="soft" labels={FULL_LANG_LABELS} />
           </View>
 
-          <LanguageToggle labels={FULL_LANG_LABELS} />
-        </View>
+          <Text style={styles.brand}>KaamConnect</Text>
+          <Text style={styles.tagline}>Trusted home services{'\n'}in minutes</Text>
+          <Text style={styles.taglineHi}>भरोसेमंद कारीगर, मिनटों में • 0% कमीशन</Text>
 
-        {/* Brand Hero Section */}
-        <View style={styles.brandHero}>
-          {/* App Emblem with Verification Badge */}
-          <View style={styles.logoWrap}>
-            <View style={styles.logoCircle}>
-              <ShieldCheck color="#FFFFFF" size={44} strokeWidth={2.5} />
-            </View>
-            <View style={styles.verifiedDot}>
-              <View style={styles.verifiedDotInner}>
-                <Check color="#FFFFFF" size={14} strokeWidth={3} />
-              </View>
-            </View>
-          </View>
-
-          {/* Main Headline with Dot Accent */}
-          <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center' }}>
-            <Text style={styles.brandTitle}>KaamConnect</Text>
-            <View style={styles.brandDot} />
-          </View>
-
-          {/* Regional Subtitle */}
-          <Text style={styles.brandSubtitle}>
-            Chandigarh • Mohali • Panchkula's Direct Service Marketplace
-          </Text>
-
-          {/* Trust Highlight Pill */}
-          <View style={styles.trustPill}>
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#00b074' }} />
-            <Text style={styles.trustTag}>0% Commission</Text>
-            <Text style={{ color: '#94a3b8', fontSize: 12 }}>•</Text>
-            <Text style={styles.trustSub}>सीधा भुगतान (Zero Middleman)</Text>
+          <View style={styles.ratingRow}>
+            <Star color="#FDE68A" fill="#FDE68A" size={16} />
+            <Text style={styles.ratingText}>Chandigarh • Mohali • Panchkula</Text>
           </View>
         </View>
 
-        {/* Tricity Verified Pros Preview Card */}
-        <View style={styles.prosCard}>
-          <View style={styles.prosHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <View style={{ width: 8, height: 16, borderRadius: 4, backgroundColor: '#00b074' }} />
-              <Text style={styles.prosTitle}>Tricity Verified Pros</Text>
-            </View>
-            <View style={styles.p2pBadge}>
-              <ShieldCheck color="#059669" size={12} />
-              <Text style={styles.p2pText}>100% Direct P2P Settlement</Text>
-            </View>
-          </View>
-
-          {/* 4 Trade Quick Cards */}
-          <View style={styles.categoryRow}>
-            {/* 1. Electrician */}
-            <View style={styles.miniCatTile}>
-              <View style={[styles.catIconWrap, { backgroundColor: '#fffbeb', borderColor: 'rgba(253, 230, 138, 0.7)' }]}>
-                <Zap color="#d97706" size={20} strokeWidth={2.2} />
-              </View>
-              <Text style={styles.catName}>Electrician</Text>
-              <Text style={styles.catSector}>Sec 22, Chd</Text>
-            </View>
-
-            {/* 2. Plumber */}
-            <View style={styles.miniCatTile}>
-              <View style={[styles.catIconWrap, { backgroundColor: '#f0f9ff', borderColor: 'rgba(186, 230, 253, 0.7)' }]}>
-                <Droplet color="#0284c7" size={20} strokeWidth={2.2} />
-              </View>
-              <Text style={styles.catName}>Plumber</Text>
-              <Text style={styles.catSector}>Ph 7, Mohali</Text>
-            </View>
-
-            {/* 3. AC Repair */}
-            <View style={styles.miniCatTile}>
-              <View style={[styles.catIconWrap, { backgroundColor: '#f0fdfa', borderColor: 'rgba(153, 246, 228, 0.7)' }]}>
-                <Wind color="#0d9488" size={20} strokeWidth={2.2} />
-              </View>
-              <Text style={styles.catName}>AC Repair</Text>
-              <Text style={styles.catSector}>Sec 11, PKL</Text>
-            </View>
-
-            {/* 4. Car Wash */}
-            <View style={styles.miniCatTile}>
-              <View style={[styles.catIconWrap, { backgroundColor: '#eef2ff', borderColor: 'rgba(199, 210, 254, 0.7)' }]}>
-                <Truck color="#4f46e5" size={20} strokeWidth={2.2} />
-              </View>
-              <Text style={styles.catName}>Car Wash</Text>
-              <Text style={styles.catSector}>Sec 35, Chd</Text>
-            </View>
-          </View>
-
-          {/* Rating & Speed Footer */}
-          <View style={styles.prosFooter}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text style={{ color: '#f59e0b', fontSize: 12 }}>★</Text>
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#334155' }}>4.9 / 5</Text>
-              <Text style={{ color: '#94a3b8' }}>•</Text>
-              <Text style={{ fontSize: 12, fontWeight: '500', color: '#64748b' }}>14,200+ Reviews</Text>
-            </View>
-            <View style={styles.speedBadge}>
-              <CheckCircle2 color="#059669" size={14} strokeWidth={2.2} />
-              <Text style={{ fontSize: 11, fontWeight: '600', color: '#047857' }}>15 Min Arrival</Text>
-            </View>
-          </View>
+        {/* Photo collage (decorative) */}
+        <View style={styles.collage} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          {PHOTO_ROWS.map((row, r) => (
+            <Marquee key={r} speed={r === 0 ? 22 : 16} gap={10} style={{ marginBottom: 10 }}>
+              {row.map((id) => (
+                <Image key={id} source={SERVICE_PHOTOS[id]} style={[styles.photo, r === 1 && styles.photoTall]} resizeMode="cover" />
+              ))}
+            </Marquee>
+          ))}
         </View>
 
-        {/* Key Value Propositions */}
-        <View style={styles.bulletList}>
-          {/* 1. Zero Commission */}
-          <View style={styles.bulletCard}>
-            <View style={[styles.bulletIcon, { backgroundColor: 'rgba(209, 250, 229, 0.7)' }]}>
-              <Zap color="#047857" size={20} strokeWidth={2.2} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <View style={styles.bulletTitleRow}>
-                <Text style={styles.bulletTitle}>0% Platform Fee • No Commission</Text>
-                <View style={[styles.tagBadge, { backgroundColor: '#059669' }]}>
-                  <Text style={[styles.tagText, { color: '#FFFFFF' }]}>FREE</Text>
+        {/* Services marquee: moves on its own, swipe to browse */}
+        <View style={styles.sectionHead}>
+          <Text style={styles.sectionTitle}>20+ services near you</Text>
+          <Text style={styles.sectionSub}>Swipe • स्वाइप करें</Text>
+        </View>
+        <Marquee speed={28} swipeable gap={10}>
+          {PREVIEW_SERVICES.map((s) => {
+            const Icon = serviceIcon(s.iconKey);
+            return (
+              <TouchableOpacity key={s.id} style={styles.tile} onPress={start} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel={`${s.en}, ${s.hi}`}>
+                <View style={[styles.tileIcon, { backgroundColor: s.bg }]}>
+                  <Icon color={s.color} size={24} strokeWidth={2.2} />
                 </View>
-              </View>
-              <Text style={styles.bulletDesc}>
-                पूरा पैसा कारीगर का — no hidden cut for app or middlemen. Customers get honest, fair pricing.
-              </Text>
-            </View>
-          </View>
+                <Text style={styles.tileTitle} numberOfLines={1}>{s.en}</Text>
+                <Text style={styles.tileHi} numberOfLines={1}>{s.hi}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </Marquee>
 
-          {/* 2. Direct Cash/UPI */}
-          <View style={styles.bulletCard}>
-            <View style={[styles.bulletIcon, { backgroundColor: 'rgba(219, 234, 254, 0.7)' }]}>
-              <View style={{ width: 20, height: 14, borderRadius: 2, borderWidth: 2, borderColor: '#1d4ed8' }} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <View style={styles.bulletTitleRow}>
-                <Text style={styles.bulletTitle}>Direct Cash / UPI Settlement</Text>
-                <View style={[styles.tagBadge, { backgroundColor: '#eff6ff', borderColor: '#bfdbfe', borderWidth: 1 }]}>
-                  <Text style={[styles.tagText, { color: '#1d4ed8' }]}>DIRECT</Text>
-                </View>
+        {/* Why KaamConnect */}
+        <View style={styles.points}>
+          {POINTS.map((p) => (
+            <View key={p.title} style={styles.point}>
+              <View style={[styles.pointIcon, { backgroundColor: p.bg }]}>
+                <p.icon color={p.color} size={22} />
               </View>
-              <Text style={styles.bulletDesc}>
-                Pay worker directly on completion via GPay, PhonePe, Paytm or Cash. Zero holding period.
-              </Text>
-            </View>
-          </View>
-
-          {/* 3. Verified Pros */}
-          <View style={styles.bulletCard}>
-            <View style={[styles.bulletIcon, { backgroundColor: 'rgba(243, 232, 255, 0.7)' }]}>
-              <Shield color="#7e22ce" size={20} strokeWidth={2.2} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <View style={styles.bulletTitleRow}>
-                <Text style={styles.bulletTitle}>Verified Tricity Pros</Text>
-                <View style={[styles.tagBadge, { backgroundColor: '#faf5ff', borderColor: '#e9d5ff', borderWidth: 1 }]}>
-                  <Text style={[styles.tagText, { color: '#7e22ce' }]}>AADHAAR</Text>
-                </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.pointTitle}>{p.title}</Text>
+                <Text style={styles.pointSub}>{p.sub}</Text>
               </View>
-              <Text style={styles.bulletDesc}>
-                चंडीगढ़, मोहाली, पंचकूला local background-checked workers with genuine ratings.
-              </Text>
             </View>
-          </View>
+          ))}
         </View>
       </ScrollView>
 
-      {/* Sticky / Fixed Bottom Action Section */}
+      {/* Sticky call to action */}
       <View style={[styles.footerBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-        <TouchableOpacity style={styles.primaryBtn} onPress={() => router.push('/language')} activeOpacity={0.9}>
-          <ShieldCheck color="#d1fae5" size={20} />
+        <TouchableOpacity style={styles.primaryBtn} onPress={start} activeOpacity={0.85} accessibilityRole="button">
+          <Zap color="#FFFFFF" size={20} fill="#FFFFFF" />
           <Text style={styles.primaryBtnText}>Get Started • शुरू करें</Text>
-          <ArrowRight color="#FFFFFF" size={20} strokeWidth={2.5} />
+          <ArrowRight color="#FFFFFF" size={22} strokeWidth={2.5} />
         </TouchableOpacity>
-
-        <View style={styles.footnoteContainer}>
-          <ShieldCheck color="#059669" size={16} strokeWidth={2} />
-          <Text style={styles.footnote}>
-            Empowering 5,000+ Tricity Technicians & Households
-          </Text>
-        </View>
+        <Text style={styles.footnote}>Free for customers and workers • No hidden charges</Text>
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8fafc'
+  container: { flex: 1, backgroundColor: Colors.primary },
+  scrollContent: { backgroundColor: '#F8FAFC', paddingBottom: 20, flexGrow: 1 },
+  hero: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 28,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
   },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'web' ? 12 : 24,
-    paddingBottom: 16
-  },
-  topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 8,
-    paddingTop: 4,
-    paddingBottom: 12
-  },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 18 },
   livePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ecfdf5',
-    borderColor: 'rgba(167, 243, 208, 0.8)',
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 16,
     gap: 6,
     flexShrink: 1,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 1 },
-    shadowRadius: 2,
-    elevation: 1
-  },
-  liveDotWrap: {
-    position: 'relative',
-    width: 8,
-    height: 8,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#059669'
-  },
-  livePillText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#065f46',
-    letterSpacing: -0.2,
-    flexShrink: 1
-  },
-  brandHero: {
-    alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 16
-  },
-  logoWrap: {
-    position: 'relative',
-    marginBottom: 12
-  },
-  logoCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 16,
-    backgroundColor: '#00b074',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 4,
-    borderColor: '#ecfdf5',
-    shadowColor: '#059669',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 15,
-    elevation: 10
-  },
-  verifiedDot: {
-    position: 'absolute',
-    bottom: -4,
-    right: -4,
-    backgroundColor: '#FFFFFF',
-    padding: 2,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 6,
-    elevation: 2
-  },
-  verifiedDotInner: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#059669',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  brandTitle: {
-    fontSize: 30,
-    fontWeight: '800',
-    color: '#0f172a',
-    letterSpacing: -0.5
-  },
-  brandDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#00b074',
-    marginLeft: 4,
-    marginBottom: 4
-  },
-  brandSubtitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748b',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginTop: 4,
-    marginBottom: 8,
-    textAlign: 'center'
-  },
-  trustPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0f172a',
+    backgroundColor: 'rgba(255,255,255,0.18)',
     paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 9999,
-    gap: 6,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 1 },
-    shadowRadius: 2,
-    elevation: 1
+    paddingVertical: 6,
+    borderRadius: 999,
   },
-  trustTag: {
-    color: '#6ee7b7',
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: -0.2
-  },
-  trustSub: {
-    color: '#e2e8f0',
-    fontSize: 12
-  },
-  prosCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(226, 232, 240, 0.8)',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 1 },
-    shadowRadius: 2,
-    elevation: 1,
-    marginBottom: 12
-  },
-  prosHeader: {
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#BBF7D0' },
+  livePillText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
+  brand: { color: '#FFFFFF', fontSize: 36, fontWeight: '900', letterSpacing: -0.8, textAlign: 'center' },
+  tagline: { color: '#FFFFFF', fontSize: 22, fontWeight: '800', textAlign: 'center', marginTop: 6, lineHeight: 30 },
+  taglineHi: { color: '#ECFDF5', fontSize: 15, fontWeight: '600', textAlign: 'center', marginTop: 8 },
+  ratingRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 12
-  },
-  prosTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0f172a'
-  },
-  p2pBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ecfdf5',
-    borderWidth: 1,
-    borderColor: '#d1fae5',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 9999,
-    gap: 4
-  },
-  p2pText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#065f46'
-  },
-  categoryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
-    marginBottom: 12
-  },
-  miniCatTile: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#f1f5f9',
-    borderRadius: 12,
-    padding: 8,
-    alignItems: 'center'
-  },
-  catIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    marginBottom: 6,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 1 },
-    shadowRadius: 2,
-    elevation: 1
+    gap: 6,
+    alignSelf: 'center',
+    marginTop: 14,
+    backgroundColor: 'rgba(0,0,0,0.14)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 999,
   },
-  catName: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#1e293b',
-    textAlign: 'center'
-  },
-  catSector: {
-    fontSize: 9,
-    fontWeight: '500',
-    color: '#64748b',
-    marginTop: 2,
-    textAlign: 'center'
-  },
-  prosFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9'
-  },
-  speedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ecfdf5',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-    gap: 4
-  },
-  bulletList: {
-    gap: 10,
-    marginBottom: 10
-  },
-  bulletCard: {
+  ratingText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
+  collage: { marginTop: 18 },
+  photo: { width: 132, height: 96, borderRadius: 14, marginRight: 10, backgroundColor: '#E2E8F0' },
+  photoTall: { width: 112, height: 112 },
+  sectionHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 20, marginTop: 10, marginBottom: 10 },
+  sectionTitle: { fontSize: 18, fontWeight: '800', color: Colors.textMain },
+  sectionSub: { fontSize: 13, fontWeight: '600', color: Colors.textMuted },
+  tile: {
+    width: 112,
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: 'rgba(226, 232, 240, 0.8)',
     borderRadius: 16,
-    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    marginRight: 10,
+    alignItems: 'center',
+  },
+  tileIcon: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: 8 },
+  tileTitle: { fontSize: 14, fontWeight: '800', color: Colors.textMain, textAlign: 'center' },
+  tileHi: { fontSize: 13, fontWeight: '600', color: Colors.textMuted, marginTop: 1, textAlign: 'center' },
+  points: { paddingHorizontal: 16, marginTop: 18, gap: 10 },
+  point: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 1 },
-    shadowRadius: 2,
-    elevation: 1
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 12,
   },
-  bulletIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  bulletTitleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 2
-  },
-  bulletTitle: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#0f172a'
-  },
-  tagBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4
-  },
-  tagText: {
-    fontSize: 10,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5
-  },
-  bulletDesc: {
-    fontSize: 11,
-    color: '#475569',
-    lineHeight: 16
-  },
+  pointIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  pointTitle: { fontSize: 15, fontWeight: '700', color: Colors.textMain },
+  pointSub: { fontSize: 13, color: Colors.textMuted, marginTop: 2 },
   footerBar: {
-    width: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: 'rgba(226, 232, 240, 0.9)',
+    borderTopColor: Colors.border,
     paddingTop: 12,
     paddingHorizontal: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 16,
-    elevation: 5
   },
   primaryBtn: {
-    width: '100%',
-    height: 56,
+    height: 58,
     borderRadius: 16,
-    backgroundColor: '#00b074',
+    backgroundColor: Colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 10,
     shadowColor: '#059669',
-    shadowOffset: { width: 0, height: 10 },
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
-    shadowRadius: 15,
-    elevation: 10
+    shadowRadius: 12,
+    elevation: 8,
   },
-  primaryBtnText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: -0.5
-  },
-  footnoteContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 2,
-    marginTop: 8
-  },
-  footnote: {
-    flexShrink: 1,
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#64748b'
-  }
+  primaryBtnText: { color: '#FFFFFF', fontSize: 18, fontWeight: '800' },
+  footnote: { fontSize: 13, color: Colors.textMuted, textAlign: 'center', marginTop: 8 },
 });
