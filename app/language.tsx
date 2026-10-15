@@ -1,11 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Wrench, Volume2, ChevronRight, Check, ArrowRight, ShieldCheck, Info } from 'lucide-react-native';
 import { useStore } from '../store/useStore';
 import { useSession } from '../store/useSession';
 import { patchMe } from '../api/endpoints';
+import { notify } from '../utils/dialog';
 
 export default function LanguageScreen() {
   const router = useRouter();
@@ -26,7 +27,7 @@ export default function LanguageScreen() {
   };
 
   const handleSpeaker = () => {
-    Alert.alert('🔊 Audio Assistance', 'Playing audio instructions in your chosen language.');
+    void notify('Audio help / आवाज़ सहायता', 'Spoken instructions are coming soon. / बोलकर निर्देश जल्द आ रहे हैं।');
   };
 
   const ctaLabels = {
@@ -264,10 +265,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#111c2d',
     letterSpacing: -0.5,
-    lineHeight: 20
+    lineHeight: 27
   },
   brandSubtitle: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '600',
     color: '#6c7a70',
     letterSpacing: 0.5,
@@ -300,7 +301,7 @@ const styles = StyleSheet.create({
   },
   tricityBadgeText: {
     color: '#065f46',
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     letterSpacing: -0.2
   },
@@ -339,7 +340,7 @@ const styles = StyleSheet.create({
     color: '#022c22'
   },
   audioSub: {
-    fontSize: 11.5,
+    fontSize: 13,
     fontWeight: '500',
     color: '#047857',
     marginTop: 2
@@ -351,7 +352,7 @@ const styles = StyleSheet.create({
     fontSize: 21,
     fontWeight: '800',
     color: '#111c2d',
-    lineHeight: 24,
+    lineHeight: 28,
     marginBottom: 6
   },
   titleVernacular: {
@@ -452,11 +453,11 @@ const styles = StyleSheet.create({
     elevation: 1
   },
   badgeText: {
-    fontSize: 10.5,
+    fontSize: 12,
     fontWeight: '600'
   },
   badgeTextActive: {
-    fontSize: 10.5,
+    fontSize: 12,
     fontWeight: '700',
     color: '#FFFFFF'
   },

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, useWindowDimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -27,6 +27,8 @@ export default function LoginScreen() {
   const [showError, setShowError] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const requestOtp = useSession((st) => st.requestOtp);
+  // State updates land after the next render, so two fast taps can both pass an isLoading check; a ref cannot.
+  const sending = useRef(false);
 
   const handlePhoneChange = (text: string) => {
     setPhoneVal(formatPhone(text));
@@ -35,24 +37,27 @@ export default function LoginScreen() {
   };
 
   const triggerOtpFlow = async () => {
-    if (isLoading) return;
+    if (sending.current) return;
     const digits = phoneVal.replace(/\D/g, '');
     // Indian mobile numbers start with 6-9 (the server enforces the same rule)
     if (digits.length !== 10 || !/^[6-9]/.test(digits)) {
       setShowError(true);
       return;
     }
+    sending.current = true;
     setIsLoading(true);
     setApiError(null);
     setMobile(phoneVal);
     try {
-      await requestOtp(phoneVal);
-      router.push('/otp');
+      const result = await requestOtp(phoneVal);
+      // Invisible OTP already verified the number and signed the person in: the root layout moves them on.
+      if (!result.signedIn) router.push('/otp');
     } catch (error) {
       // OTP_COOLDOWN means a code was sent a moment ago: the OTP screen can still take it
       if (isApiError(error) && error.code === 'OTP_COOLDOWN') router.push('/otp');
       else setApiError(userMessage(error));
     } finally {
+      sending.current = false;
       setIsLoading(false);
     }
   };
@@ -271,7 +276,11 @@ export default function LoginScreen() {
         </TouchableOpacity>
 
         <Text style={styles.termsText}>
-          By proceeding, you agree to KaamConnect's <Text style={styles.termsLink}>Terms of Service</Text> & Direct Payment Charter. No hidden commission, ever.
+          By proceeding, you agree to KaamConnect's{' '}
+          <Text style={styles.termsLink} onPress={() => router.push({ pathname: '/legal', params: { doc: 'terms' } })} accessibilityRole="link">Terms of Service</Text>
+          {' & '}
+          <Text style={styles.termsLink} onPress={() => router.push({ pathname: '/legal', params: { doc: 'privacy' } })} accessibilityRole="link">Privacy Policy</Text>
+          . No hidden commission, ever.
         </Text>
       </View>
     </SafeAreaView>
@@ -316,10 +325,10 @@ const styles = StyleSheet.create({
     color: '#00b074'
   },
   headerSub: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '500',
     color: '#64748b',
-    lineHeight: 14
+    lineHeight: 18
   },
   headerRight: {
     flex: 1,
@@ -343,7 +352,7 @@ const styles = StyleSheet.create({
   },
   commBadgeText: {
     flexShrink: 1,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: '#00875a'
   },
@@ -385,7 +394,7 @@ const styles = StyleSheet.create({
     elevation: 1
   },
   activeChdText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: '#00875a'
   },
@@ -404,7 +413,7 @@ const styles = StyleSheet.create({
     marginBottom: 8
   },
   fastOtpText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: '#006398',
     textTransform: 'uppercase',
@@ -414,13 +423,13 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '800',
     color: '#1e293b',
-    lineHeight: 28
+    lineHeight: 30
   },
   mainTitleHindi: {
     fontSize: 22,
     fontWeight: '800',
     color: '#00b074',
-    lineHeight: 28
+    lineHeight: 30
   },
   titleSub: {
     fontSize: 13,
@@ -458,7 +467,7 @@ const styles = StyleSheet.create({
   },
   inputHint: {
     flexShrink: 0,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '600',
     color: '#00b074'
   },
@@ -518,7 +527,7 @@ const styles = StyleSheet.create({
   },
   safeNoticeText: {
     flexShrink: 1,
-    fontSize: 11,
+    fontSize: 13,
     color: '#64748b'
   },
   errorText: {
@@ -555,7 +564,7 @@ const styles = StyleSheet.create({
     borderRadius: 9999
   },
   trustedTagText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     color: '#004b73'
   },
@@ -600,12 +609,12 @@ const styles = StyleSheet.create({
   },
   coverageText: {
     flexShrink: 1,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '500',
     color: '#475569'
   },
   tricityWideText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     color: '#006398'
   },
@@ -618,7 +627,7 @@ const styles = StyleSheet.create({
   },
   footerRibbonText: {
     flexShrink: 1,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '600',
     color: '#64748b'
   },
@@ -655,16 +664,16 @@ const styles = StyleSheet.create({
     color: '#ffffff'
   },
   termsText: {
-    fontSize: 10,
-    color: '#64748b',
+    fontSize: 13,
+    color: '#475569',
     textAlign: 'center',
-    marginTop: 8,
-    lineHeight: 14,
+    marginTop: 10,
+    lineHeight: 19,
     paddingHorizontal: 8
   },
   termsLink: {
-    color: '#00b074',
-    fontWeight: '500',
+    color: '#00875a',
+    fontWeight: '700',
     textDecorationLine: 'underline'
   }
 });

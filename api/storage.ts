@@ -53,3 +53,24 @@ export async function clearTokens(): Promise<void> {
     /* nothing to clear */
   }
 }
+
+const ROLE_KEY = 'kaamconnect.role.v1';
+
+/** The app mode the person last used ('customer' | 'worker'), so a restart reopens the same side. Not secret. */
+export async function loadRole(): Promise<'customer' | 'worker' | null> {
+  try {
+    const raw = Platform.OS === 'web' ? globalThis.localStorage?.getItem(ROLE_KEY) ?? null : await SecureStore.getItemAsync(ROLE_KEY);
+    return raw === 'customer' || raw === 'worker' ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveRole(role: 'customer' | 'worker'): Promise<void> {
+  try {
+    if (Platform.OS === 'web') globalThis.localStorage?.setItem(ROLE_KEY, role);
+    else await SecureStore.setItemAsync(ROLE_KEY, role);
+  } catch {
+    /* not remembered; the role still works for this run */
+  }
+}

@@ -17,10 +17,15 @@ const ETAS = [
   { minutes: 45, label: '45 Mins' },
 ];
 
+const CLOSED_TITLE = 'This lead has been fulfilled or closed';
+const CLOSED_HINT = 'Check new leads on your radar. / नई लीड के लिए रडार देखें';
+/** Server answers that mean the request is gone for this worker, not that something broke. */
+const CLOSED_CODES = new Set(['NOT_FOUND', 'JOB_NOT_OPEN']);
+
 export default function LeadOfferScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const leadState = useAsync(() => (id ? getLead(id) : Promise.reject(new Error('No lead selected'))), [id], { reloadOnFocus: false });
+  const leadState = useAsync(() => (id ? getLead(id) : Promise.resolve(null)), [id], { reloadOnFocus: false });
   const lead = leadState.data;
   const initials = (lead?.customerName ?? '')
     .split(' ')
@@ -37,6 +42,14 @@ export default function LeadOfferScreen() {
   const [sending, setSending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const alreadyQuoted = !!lead?.myOffer;
+  // Set when sending finds the request already taken or cancelled
+  const [closedOnSend, setClosedOnSend] = useState(false);
+  const closed =
+    closedOnSend ||
+    (leadState.errorCode !== null && CLOSED_CODES.has(leadState.errorCode)) ||
+    // not open any more, and not because this worker won it (their accepted quote / accepted direct request)
+    (!!lead && lead.status !== 'OPEN' && lead.leadState !== 'ACCEPTED' && lead.myOffer?.status !== 'ACCEPTED');
+  const toRadar = () => router.replace('/(tabs)/leads');
 
   // Start from the category's standard visit fee, or from the quote already sent
   useEffect(() => {
@@ -58,9 +71,13 @@ export default function LeadOfferScreen() {
     setSending(true);
     try {
       await sendOffer(lead.id, { visitFee: Number(fee), etaMinutes: eta, ...(message.trim() ? { message: message.trim() } : {}) });
-      notify('✅ Quote Sent', `Your quote of ₹${fee} has been sent to ${lead.customerName}. You will see it here as accepted if they choose you.`);
+      void notify('✅ Quote Sent', `Your quote of ₹${fee} has been sent to ${lead.customerName}. You will see it here as accepted if they choose you.`);
       router.replace('/(tabs)/leads');
     } catch (error) {
+      if (isApiError(error) && CLOSED_CODES.has(error.code)) {
+        setClosedOnSend(true);
+        return;
+      }
       const fields = isApiError(error) ? error.details.map((d) => `${d.field}: ${d.issue}`).join('; ') : '';
       setFormError(userMessage(error) + (fields ? ` (${fields})` : ''));
     } finally {
@@ -90,9 +107,15 @@ export default function LeadOfferScreen() {
           )}
         </View>
 
-        {!id && <EmptyBlock title="No lead selected" hint="Open a lead from the radar. / रडार से लीड खोलें" />}
+        {!id && <EmptyBlock title="Choose a lead first" hint="Open a lead from your radar to send a quote. / रडार से लीड खोलें" />}
         {id && leadState.loading && <LoadingBlock />}
-        {leadState.error && !leadState.data && <ErrorBlock message={leadState.error} onRetry={() => void leadState.reload()} />}
+        {closed && <EmptyBlock title={CLOSED_TITLE} hint={CLOSED_HINT} />}
+        {leadState.error && !leadState.data && !closed && <ErrorBlock message={leadState.error} onRetry={() => void leadState.reload()} />}
+        {(!id || closed) && (
+          <TouchableOpacity style={styles.sendQuoteBtn} onPress={toRadar} activeOpacity={0.8} accessibilityRole="button">
+            <Text style={styles.sendQuoteBtnText}>Open my lead radar • रडार खोलें</Text>
+          </TouchableOpacity>
+        )}
         {lead && (
           <>
 
@@ -193,10 +216,12 @@ export default function LeadOfferScreen() {
 
         {formError && <Text style={[styles.errorText, { textAlign: 'center', marginBottom: 8 }]} accessibilityRole="alert">{formError}</Text>}
         {lead.leadState === 'ACCEPTED' && <EmptyBlock title="This request is now yours" hint="Open it from Your active jobs on the leads page." />}
-        <TouchableOpacity style={[styles.sendQuoteBtn, (sending || lead.leadState !== 'NEW') && { opacity: 0.7 }]} onPress={() => void handleSendOffer()} disabled={sending || lead.leadState !== 'NEW'} accessibilityRole="button">
-          {sending ? <ActivityIndicator color="#FFFFFF" /> : <Send color="#FFFFFF" size={18} />}
-          <Text style={styles.sendQuoteBtnText}>{sending ? 'Sending…' : alreadyQuoted ? 'Update Quote (0% Commission)' : 'Send Direct Quote to Customer (0% Commission)'}</Text>
-        </TouchableOpacity>
+        {!closed && (
+          <TouchableOpacity style={[styles.sendQuoteBtn, (sending || lead.leadState !== 'NEW') && { opacity: 0.7 }]} onPress={() => void handleSendOffer()} disabled={sending || lead.leadState !== 'NEW'} activeOpacity={0.8} accessibilityRole="button">
+            {sending ? <ActivityIndicator color="#FFFFFF" /> : <Send color="#FFFFFF" size={18} />}
+            <Text style={styles.sendQuoteBtnText}>{sending ? 'Sending…' : alreadyQuoted ? 'Update Quote (0% Commission)' : 'Send Direct Quote to Customer (0% Commission)'}</Text>
+          </TouchableOpacity>
+        )}
           </>
         )}
       </ScrollView>
@@ -238,7 +263,7 @@ const styles = StyleSheet.create({
     color: Colors.textMain
   },
   headerSub: {
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.textMuted
   },
   urgentBadge: {
@@ -248,7 +273,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm
   },
   urgentText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     color: '#92400E'
   },
@@ -269,7 +294,7 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   catPillText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '800',
     color: '#0369A1'
   },
@@ -285,7 +310,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full
   },
   distText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     color: '#065F46'
   },
@@ -313,7 +338,7 @@ const styles = StyleSheet.create({
     color: Colors.textMain
   },
   custLoc: {
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.textMuted
   },
   verifiedCustBadge: {
@@ -323,7 +348,7 @@ const styles = StyleSheet.create({
     borderRadius: 4
   },
   verifiedCustText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700',
     color: Colors.success
   },
@@ -347,18 +372,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   voicePlayTitle: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '800',
     color: '#065F46'
   },
   voicePlaySub: {
-    fontSize: 9,
+    fontSize: 12,
     color: '#047857'
   },
   leadNotes: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.textMuted,
-    lineHeight: 16,
+    lineHeight: 18,
     marginTop: 4
   },
   leadImg: {
@@ -372,7 +397,7 @@ const styles = StyleSheet.create({
     color: '#065F46'
   },
   quoteHeaderSub: {
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.textMuted,
     marginBottom: 10
   },
@@ -380,7 +405,7 @@ const styles = StyleSheet.create({
     marginBottom: 10
   },
   formLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: Colors.textMain,
     marginBottom: 4
@@ -424,7 +449,7 @@ const styles = StyleSheet.create({
     fontWeight: '600'
   },
   hintText: {
-    fontSize: 9,
+    fontSize: 12,
     color: Colors.textMuted,
     marginTop: 2
   },
@@ -442,7 +467,7 @@ const styles = StyleSheet.create({
     borderWidth: 2
   },
   etaText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     color: Colors.textMain
   },

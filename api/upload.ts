@@ -35,10 +35,33 @@ export async function uploadFile(purpose: MediaPurpose, file: PickedFile): Promi
   });
   let response: Response;
   try {
-    response = await fetch(presign.uploadUrl, { method: presign.method, headers: presign.headers, body: blob });
+    // Send exactly the headers the server signed (Content-Type), nothing more
+    response = await fetch(presign.uploadUrl, { method: presign.method, headers: { ...presign.headers }, body: blob });
   } catch {
-    throw new ApiError(0, 'UPLOAD_FAILED', 'The upload could not reach storage');
+    throw new ApiError(0, 'UPLOAD_FAILED', 'The upload could not reach storage. Check your connection and try again.');
   }
-  if (!response.ok) throw new ApiError(response.status, 'UPLOAD_FAILED', `Storage refused the upload (${response.status})`);
+  if (!response.ok) {
+    const reason = await refusalReason(response);
+    console.warn(`[upload] ${purpose} refused with ${response.status}: ${reason || '(no body)'}`);
+    throw new ApiError(response.status, 'UPLOAD_FAILED', `Storage refused the upload (${response.status})${reason ? `: ${reason}` : ''}`);
+  }
   return presign.key;
+}
+
+/** The server's own explanation (dev storage answers JSON { message }, S3 answers XML <Message>), shortened. */
+async function refusalReason(response: Response): Promise<string> {
+  try {
+    const text = await response.text();
+    try {
+      const json = JSON.parse(text) as { message?: unknown; error?: { message?: unknown } };
+      const message = json.error?.message ?? json.message;
+      if (typeof message === 'string') return message.slice(0, 160);
+    } catch {
+      // not JSON
+    }
+    const xml = /<Message>([^<]*)<\/Message>/.exec(text);
+    return (xml?.[1] ?? text).trim().slice(0, 160);
+  } catch {
+    return '';
+  }
 }

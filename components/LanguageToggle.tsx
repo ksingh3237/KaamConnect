@@ -85,7 +85,7 @@ const styles = StyleSheet.create({
     elevation: 1
   },
   pillText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '600',
     color: '#475569'
   },

@@ -1,791 +1,367 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Linking, Alert, Modal, Animated, Dimensions, TouchableWithoutFeedback } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import React, { useCallback, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { MapPin, Bell, Volume2, Search, Mic, Zap, Droplet, Wind, Hammer, Paintbrush, Sparkles, Tv, Truck, Phone, Star, Menu, X, HelpCircle, User as UserIcon, Globe, Settings } from 'lucide-react-native';
-import { Colors, Spacing, Radius } from '../../constants/theme';
+import {
+  MapPin, Bell, Volume2, Search, Mic, Menu, X,
+  ShieldCheck, Zap, Wallet, ClipboardList, PhoneCall, BadgeIndianRupee, ArrowRight,
+} from 'lucide-react-native';
+import { Colors, Spacing, Radius, noFocusRing } from '../../constants/theme';
 import { useStore } from '../../store/useStore';
 import { useSession } from '../../store/useSession';
 import { useAsync } from '../../api/useAsync';
-import { createDirectBooking, getCategories, listWorkers } from '../../api/endpoints';
-import { userMessage } from '../../api/errors';
-import type { WorkerCard } from '../../api/types';
-import Avatar from '../../components/Avatar';
+import { getCategories } from '../../api/endpoints';
+import ServiceCard from '../../components/ServiceCard';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../../components/StateBlocks';
+import { notify } from '../../utils/dialog';
+import AppMenu from '../../components/AppMenu';
+import WorkerHome from '../../components/WorkerHome';
 
+/** How many services Home shows before "View all" (searching shows every match). */
+const HOME_SERVICES = 6;
+
+const STEPS = [
+  { icon: ClipboardList, title: 'Select a service or post your job', hi: 'सेवा चुनें या काम पोस्ट करें' },
+  { icon: PhoneCall, title: 'Get direct calls & quotes from nearby mistris', hi: 'आस-पास के मिस्त्री से सीधे कोट पाएं' },
+  { icon: Wallet, title: 'Pay the worker directly by cash or UPI (0% commission)', hi: 'सीधे कैश/UPI से भुगतान करें' },
+];
+
+const TRUST = [
+  { icon: ShieldCheck, title: 'Aadhaar verified workers', hi: 'आधार सत्यापित कारीगर', color: '#7C3AED', bg: '#F3E8FF' },
+  { icon: Zap, title: '15 min arrival in Chandigarh, Mohali & Panchkula', hi: 'ट्राईसिटी में 15 मिनट में पहुंच', color: '#D97706', bg: '#FEF3C7' },
+  { icon: BadgeIndianRupee, title: '100% direct P2P payment', hi: 'पूरा पैसा सीधे कारीगर को', color: '#047857', bg: '#D1FAE5' },
+];
+
+/** Home is the customer marketplace or the worker's dashboard, by the role in use. */
 export default function HomeScreen() {
+  const role = useStore((s) => s.role);
+  return role === 'worker' ? <WorkerHome /> : <CustomerHome />;
+}
+
+function CustomerHome() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const { selectedSector, selectedAreaId, setSelectedCategory, setActiveJobId } = useStore();
+  const { selectedSector, setSelectedCategory } = useStore();
   const { customerProfile } = useSession();
   const primaryAddress = customerProfile?.addresses.find((a) => a.isPrimary) ?? customerProfile?.addresses[0] ?? null;
-  const areaId = selectedAreaId ?? primaryAddress?.area.id ?? undefined;
-  const sectorLabel = selectedSector || (primaryAddress ? `${primaryAddress.area.name}, ${primaryAddress.city.name.replace(/\s*\(.*\)/, '')}` : 'Choose your sector');
+  const sectorLabel = selectedSector || (primaryAddress ? `${primaryAddress.locality ?? primaryAddress.area.name}, ${primaryAddress.city.name.replace(/\s*\(.*\)/, '')}` : 'Choose your sector');
   const categories = useAsync(() => getCategories(), [], { reloadOnFocus: false });
-  const workers = useAsync(() => listWorkers({ areaId, sort: 'distance', limit: 10 }), [areaId]);
-  const [bookingId, setBookingId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
 
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const slideAnim = useRef(new Animated.Value(-Dimensions.get('window').width)).current;
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  const openDrawer = () => {
-    setIsDrawerOpen(true);
-    Animated.timing(slideAnim, {
-      toValue: 0,
-      duration: 250,
-      useNativeDriver: true,
-    }).start();
-  };
+  const searching = query.trim().length > 0;
+  const shown = useMemo(() => {
+    const all = categories.data ?? [];
+    const q = query.trim().toLowerCase();
+    if (!q) return all.slice(0, HOME_SERVICES);
+    return all.filter((c) => [c.title.en, c.title.hi, c.title.pa, c.examples].some((t) => t.toLowerCase().includes(q)));
+  }, [categories.data, query]);
 
-  const closeDrawer = () => {
-    Animated.timing(slideAnim, {
-      toValue: -Dimensions.get('window').width,
-      duration: 250,
-      useNativeDriver: true,
-    }).start(() => setIsDrawerOpen(false));
-  };
-
-  const handleCategoryPress = (catId: string) => {
+  // Tabs are switched with navigate (jump to the existing tab), never pushed, so Back never has duplicates to unwind
+  const handleCategoryPress = useCallback((catId: string) => {
     setSelectedCategory(catId);
-    router.push('/(tabs)/post-job');
-  };
-
-  const handleCall = (phone: string, name: string) => {
-    Alert.alert('Direct Phone Call', `Call ${name} directly at ${phone}? (0% commission direct dial)`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Call Now', onPress: () => Linking.openURL(`tel:${phone.replace(/\s+/g, '')}`) }
-    ]);
-  };
-
-  // "Book Pro" asks this one worker, who has to accept. The customer then follows the request on the tracking screen.
-  const handleBook = async (worker: WorkerCard) => {
-    if (bookingId) return;
-    if (!primaryAddress) {
-      Alert.alert('Add your address', 'Choose your sector and address first. / पहले अपना पता जोड़ें');
-      router.push('/customer-onboarding');
-      return;
-    }
-    setBookingId(worker.id);
-    try {
-      const job = await createDirectBooking({
-        workerId: worker.id,
-        categoryId: worker.tradeId,
-        title: `${worker.trade} visit`,
-        timing: 'IMMEDIATE',
-        addressId: primaryAddress.id,
-      });
-      setActiveJobId(job.id);
-      router.push('/tracking');
-    } catch (error) {
-      Alert.alert('Could not book', userMessage(error));
-    } finally {
-      setBookingId(null);
-    }
-  };
-
-  const renderIcon = (name: string, color: string) => {
-    switch (name) {
-      case 'Zap': return <Zap color={color} size={22} />;
-      case 'Droplet': return <Droplet color={color} size={22} />;
-      case 'Wind': return <Wind color={color} size={22} />;
-      case 'Hammer': return <Hammer color={color} size={22} />;
-      case 'Paintbrush': return <Paintbrush color={color} size={22} />;
-      case 'Sparkles': return <Sparkles color={color} size={22} />;
-      case 'Tv': return <Tv color={color} size={22} />;
-      case 'Truck': return <Truck color={color} size={22} />;
-      default: return <Zap color={color} size={22} />;
-    }
-  };
+    router.navigate('/(tabs)/post-job');
+  }, [router, setSelectedCategory]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
         {/* Top Header Bar */}
         <View style={styles.headerBar}>
           <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={openDrawer} style={styles.menuBtn} activeOpacity={0.7} hitSlop={8} accessibilityRole="button" accessibilityLabel="Open menu">
+            <TouchableOpacity onPress={() => setMenuOpen(true)} style={styles.menuBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Open menu">
               <Menu color={Colors.textMain} size={26} strokeWidth={2.5} />
             </TouchableOpacity>
-            <View style={styles.logoBox}>
-              <Text style={{ color: '#FFFFFF', fontWeight: '900', fontSize: 16 }}>KC</Text>
-            </View>
             <View style={{ flexShrink: 1 }}>
               <Text style={styles.brandTitle}>
                 Kaam<Text style={{ color: Colors.primary }}>Connect</Text>
               </Text>
-              <TouchableOpacity style={styles.locSelector} onPress={() => router.push('/customer-onboarding')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Change location">
-                <MapPin color={Colors.tertiary} size={11} />
+              <TouchableOpacity style={styles.locSelector} onPress={() => router.push('/customer-onboarding')} activeOpacity={0.7} hitSlop={8} accessibilityRole="button" accessibilityLabel="Change location">
+                <MapPin color={Colors.tertiaryDark} size={14} />
                 <Text style={styles.locText} numberOfLines={1}>{sectorLabel} ▾</Text>
               </TouchableOpacity>
             </View>
           </View>
 
           <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.iconCircle} onPress={() => Alert.alert('🔊 Audio Assistance', 'Welcome to KaamConnect Tricity.')} accessibilityRole="button" accessibilityLabel="Audio assistance">
-              <Volume2 color={Colors.textMain} size={18} />
+            <TouchableOpacity style={styles.iconCircle} onPress={() => void notify('Audio help / आवाज़ सहायता', 'Spoken instructions are coming soon. / बोलकर निर्देश जल्द आ रहे हैं।')} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Audio assistance">
+              <Volume2 color={Colors.textMain} size={20} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.iconCircle} onPress={() => router.push('/(tabs)/activity')} accessibilityRole="button" accessibilityLabel="Notifications">
-              <Bell color={Colors.textMain} size={18} />
+            <TouchableOpacity style={styles.iconCircle} onPress={() => router.navigate('/(tabs)/activity')} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Notifications">
+              <Bell color={Colors.textMain} size={20} />
               <View style={styles.notifDot} />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Emergency SOS Banner */}
-        <View style={styles.sosBanner}>
-          <View style={styles.sosIcon}><Text style={{ fontSize: 18 }}>⚡</Text></View>
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-              <Text style={styles.sosTitle}>Need Urgent Mistri?</Text>
-              <View style={styles.sosBadge}><Text style={styles.sosBadgeText}>15 MIN ETA</Text></View>
-            </View>
-            <Text style={styles.sosSub}>Emergency breakdown? Direct technician dispatch in Sector 22/35/Mohali.</Text>
-          </View>
-        </View>
-
-        {/* Universal Search Input */}
+        {/* Search: filters the services below as you type */}
         <View style={styles.searchBar}>
-          <Search color={Colors.textMuted} size={18} />
+          <Search color={Colors.textMuted} size={20} />
           <TextInput
-            style={styles.searchInput}
-            placeholder="Search electrician, plumber, AC repair in Tricity..."
+            style={[styles.searchInput, noFocusRing]}
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search electrician, plumber, AC, RO…"
             placeholderTextColor={Colors.textSubtle}
+            returnKeyType="search"
+            accessibilityLabel="Search services"
           />
-          <TouchableOpacity style={styles.micBtn} onPress={() => router.push('/(tabs)/post-job')} hitSlop={8} accessibilityRole="button" accessibilityLabel="Post a job by voice">
-            <Mic color="#FFFFFF" size={16} />
-          </TouchableOpacity>
-        </View>
-
-        {/* 0% Platform Fee Banner */}
-        <View style={styles.zeroFeeCard}>
-          <Text style={{ fontSize: 22 }}>💵</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.zeroFeeTitle}>0% Platform Fee Guarantee</Text>
-            <Text style={styles.zeroFeeSub}>You pay 100% directly to the technician via UPI/Cash. Zero middleman surcharge.</Text>
-          </View>
-        </View>
-
-        {/* Popular Categories Grid */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Popular Services in Chandigarh Tricity</Text>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/leads')}>
-            <Text style={styles.viewAllText}>View All →</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.catGrid}>
-          {categories.loading && <LoadingBlock label="Loading services… / सेवाएँ लोड हो रही हैं…" />}
-          {categories.error && !categories.data && <ErrorBlock message={categories.error} onRetry={() => void categories.reload()} />}
-          {(categories.data ?? []).map((cat) => (
-            <TouchableOpacity
-              key={cat.id}
-              style={styles.catTile}
-              onPress={() => handleCategoryPress(cat.id)}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.catIconWrap, { backgroundColor: cat.bgColor }]}>
-                {renderIcon(cat.iconKey, cat.color)}
-              </View>
-              <Text style={styles.catTitle}>{cat.title.en}</Text>
-              <Text style={styles.catFee}>₹{cat.baseVisitFee} visit</Text>
+          {searching ? (
+            <TouchableOpacity style={styles.clearBtn} onPress={() => setQuery('')} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Clear search">
+              <X color={Colors.textMuted} size={18} />
             </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Post a Job Quick Prompt */}
-        <View style={styles.postJobCard}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.postJobTitle}>Got a specific repair job?</Text>
-            <Text style={styles.postJobSub}>Post details & receive instant quotes from nearby mistris!</Text>
-          </View>
-          <TouchableOpacity style={styles.postJobBtn} onPress={() => router.push('/(tabs)/post-job')}>
-            <Text style={styles.postJobBtnText}>+ Post Job</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Verified Artisans List */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Verified Artisans Near You (0% App Cut)</Text>
-          {workers.data && <View style={styles.onlinePill}><Text style={styles.onlinePillText}>• {workers.data.items.length} verified</Text></View>}
-        </View>
-
-        <View style={styles.workerList}>
-          {workers.loading && <LoadingBlock label="Finding artisans… / कारीगर खोज रहे हैं…" />}
-          {workers.error && !workers.data && <ErrorBlock message={workers.error} onRetry={() => void workers.reload()} />}
-          {workers.data && workers.data.items.length === 0 && (
-            <EmptyBlock title="No verified artisans in this area yet" hint="Post a job and nearby artisans will send quotes. / काम पोस्ट करें, कारीगर कोट भेजेंगे" />
+          ) : (
+            <TouchableOpacity style={styles.micBtn} onPress={() => router.navigate('/(tabs)/post-job')} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Post a job">
+              <Mic color="#FFFFFF" size={18} />
+            </TouchableOpacity>
           )}
-          {(workers.data?.items ?? []).map((w) => (
-            <View key={w.id} style={styles.workerCard}>
-              <View style={styles.workerTop}>
-                <View style={styles.avatarWrap}>
-                  <Avatar uri={w.photoUrl} size={52} />
-                  <View style={styles.onlineDot} />
+        </View>
+
+        {!searching && (
+          <>
+            {/* Emergency banner */}
+            <TouchableOpacity style={styles.sosBanner} onPress={() => router.navigate('/(tabs)/post-job')} activeOpacity={0.8} accessibilityRole="button">
+              <View style={styles.sosIcon}><Text style={{ fontSize: 20 }}>⚡</Text></View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                  <Text style={styles.sosTitle}>Need an urgent mistri?</Text>
+                  <View style={styles.sosBadge}><Text style={styles.sosBadgeText}>15 MIN ETA</Text></View>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={styles.workerName}>{w.name}</Text>
-                    <Text style={{ fontSize: 12 }}>🛡️</Text>
-                  </View>
-                  <Text style={styles.workerTrade}>{w.trade}</Text>
-                  <View style={styles.workerMeta}>
-                    <View style={styles.ratingBadge}>
-                      <Star color="#F59E0B" fill="#F59E0B" size={11} />
-                      <Text style={styles.ratingText}>{w.rating ?? 'New'} ({w.reviewsCount})</Text>
-                    </View>
-                    <Text style={styles.metaDim}>📍 {w.distanceKm !== null ? `${w.distanceKm} km` : w.areaName}</Text>
-                    {w.etaMinutes !== null && <Text style={styles.metaDim}>⏱️ {w.etaMinutes}m ETA</Text>}
-                  </View>
-                </View>
+                <Text style={styles.sosSub}>Post an immediate job and nearby pros respond fast.</Text>
               </View>
+            </TouchableOpacity>
 
-              <View style={styles.skillsRow}>
-                {w.skills.slice(0, 3).map((s) => (
-                  <View key={s} style={styles.skillTag}>
-                    <Text style={styles.skillText}>{s}</Text>
-                  </View>
-                ))}
-              </View>
-
-              <View style={styles.workerBottom}>
-                <View>
-                  <Text style={styles.feeLabel}>Visiting Charge</Text>
-                  <Text style={styles.feeAmount}>
-                    ₹{w.visitingFee} <Text style={{ color: Colors.primary, fontSize: 10 }}> (₹0 App Cut)</Text>
-                  </Text>
-                </View>
-
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <TouchableOpacity style={styles.callBtn} onPress={() => handleCall(w.phone, w.name)}>
-                    <Phone color="#FFFFFF" size={14} />
-                    <Text style={styles.callBtnText}>Call Directly</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.bookBtn, bookingId !== null && { opacity: 0.6 }]} onPress={() => void handleBook(w)} disabled={bookingId !== null} accessibilityRole="button">
-                    <Text style={styles.bookBtnText}>{bookingId === w.id ? 'Booking…' : 'Book Pro'}</Text>
-                  </TouchableOpacity>
-                </View>
+            {/* 0% Platform Fee Banner */}
+            <View style={styles.zeroFeeCard}>
+              <Text style={{ fontSize: 26 }}>💵</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.zeroFeeTitle}>0% Platform Fee Guarantee</Text>
+                <Text style={styles.zeroFeeSub}>Pay 100% directly to the technician by UPI or cash. No middleman.</Text>
               </View>
             </View>
+          </>
+        )}
+
+        {/* Services grid */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>{searching ? `Results for “${query.trim()}”` : 'Popular Services in Tricity'}</Text>
+          {!searching && (
+            <TouchableOpacity onPress={() => router.navigate('/(tabs)/leads')} activeOpacity={0.7} hitSlop={10} accessibilityRole="button">
+              <Text style={styles.viewAllText}>View All →</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {categories.loading && <LoadingBlock label="Loading services… / सेवाएँ लोड हो रही हैं…" />}
+        {categories.error && !categories.data && <ErrorBlock message={categories.error} onRetry={() => void categories.reload()} />}
+        {searching && categories.data && shown.length === 0 && (
+          <EmptyBlock title="No matching service" hint="Try another word, or post your job and nearby pros will quote. / काम पोस्ट करें" />
+        )}
+        <View style={styles.grid}>
+          {shown.map((cat) => (
+            <ServiceCard key={cat.id} category={cat} onPress={handleCategoryPress} />
           ))}
         </View>
+
+        {!searching && categories.data && categories.data.length > HOME_SERVICES && (
+          <TouchableOpacity style={styles.allServicesBtn} onPress={() => router.navigate('/(tabs)/leads')} activeOpacity={0.7} accessibilityRole="button">
+            <Text style={styles.allServicesText}>Explore all {categories.data.length}+ Services / सभी सेवाएं</Text>
+            <ArrowRight color={Colors.primaryDark} size={18} />
+          </TouchableOpacity>
+        )}
+
+        {!searching && (
+          <>
+            {/* Post a Job Quick Prompt */}
+            <View style={styles.postJobCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.postJobTitle}>Got a specific repair job?</Text>
+                <Text style={styles.postJobSub}>Post details and get quotes from nearby mistris.</Text>
+              </View>
+              <TouchableOpacity style={styles.postJobBtn} onPress={() => router.navigate('/(tabs)/post-job')} activeOpacity={0.7} accessibilityRole="button">
+                <Text style={styles.postJobBtnText}>+ Post Job</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* How it works */}
+            <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>How KaamConnect Works • 3 आसान कदम</Text>
+            <View style={styles.stepsCard}>
+              {STEPS.map((step, i) => (
+                <View key={step.title} style={[styles.stepRow, i < STEPS.length - 1 && styles.stepDivider]}>
+                  <View style={styles.stepNum}><Text style={styles.stepNumText}>{i + 1}</Text></View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.stepTitle}>{step.title}</Text>
+                    <Text style={styles.stepHi}>{step.hi}</Text>
+                  </View>
+                  <step.icon color={Colors.primary} size={24} />
+                </View>
+              ))}
+            </View>
+
+            {/* Trust badges */}
+            <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>Tricity Direct Trust • भरोसा</Text>
+            <View style={styles.trustList}>
+              {TRUST.map((t) => (
+                <View key={t.title} style={styles.trustCard}>
+                  <View style={[styles.trustIcon, { backgroundColor: t.bg }]}>
+                    <t.icon color={t.color} size={24} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.trustTitle}>{t.title}</Text>
+                    <Text style={styles.trustHi}>{t.hi}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
       </ScrollView>
 
-      {/* Drawer Overlay & Content */}
-      <Modal visible={isDrawerOpen} transparent={true} animationType="none" onRequestClose={closeDrawer}>
-        <View style={styles.drawerOverlay}>
-          <TouchableWithoutFeedback onPress={closeDrawer}>
-            <View style={styles.drawerBackground} />
-          </TouchableWithoutFeedback>
-          <Animated.View style={[styles.drawerContent, { transform: [{ translateX: slideAnim }] }]}>
-            <View style={[styles.drawerHeader, { paddingTop: insets.top + 20 }]}>
-              <View>
-                <Text style={styles.drawerTitle}>Menu</Text>
-                <Text style={styles.drawerSub}>KaamConnect Tricity</Text>
-              </View>
-              <TouchableOpacity onPress={closeDrawer} style={{ padding: 8 }} accessibilityRole="button" accessibilityLabel="Close menu">
-                <X color={Colors.textMain} size={24} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.drawerScroll}>
-              <TouchableOpacity style={styles.drawerItem} onPress={() => { closeDrawer(); router.push('/(tabs)/profile'); }}>
-                <UserIcon color={Colors.primary} size={26} />
-                <View style={styles.drawerItemTextWrap}>
-                  <Text style={styles.drawerItemTitle}>Profile</Text>
-                  <Text style={styles.drawerItemSub}>प्रोफ़ाइल / ਪ੍ਰੋਫਾਈਲ</Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.drawerItem} onPress={() => { closeDrawer(); Alert.alert('Help', 'Support Contact: 1800-123-4567'); }}>
-                <HelpCircle color={Colors.primary} size={26} />
-                <View style={styles.drawerItemTextWrap}>
-                  <Text style={styles.drawerItemTitle}>Help & Support</Text>
-                  <Text style={styles.drawerItemSub}>सहायता / ਮਦਦ</Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.drawerItem} onPress={() => { closeDrawer(); router.push({ pathname: '/language', params: { from: 'app' } }); }}>
-                <Globe color={Colors.primary} size={26} />
-                <View style={styles.drawerItemTextWrap}>
-                  <Text style={styles.drawerItemTitle}>Language</Text>
-                  <Text style={styles.drawerItemSub}>भाषा / ਭਾਸ਼ਾ</Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.drawerItem} onPress={() => { closeDrawer(); Alert.alert('Settings', 'Settings screen coming soon.'); }}>
-                <Settings color={Colors.primary} size={26} />
-                <View style={styles.drawerItemTextWrap}>
-                  <Text style={styles.drawerItemTitle}>Settings</Text>
-                  <Text style={styles.drawerItemSub}>सेटिंग्स / ਸੈਟਿੰਗਜ਼</Text>
-                </View>
-              </TouchableOpacity>
-            </ScrollView>
-          </Animated.View>
-        </View>
-      </Modal>
+      <AppMenu visible={menuOpen} onClose={() => setMenuOpen(false)} />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background
-  },
-  scrollContent: {
-    padding: Spacing.lg
-  },
-  headerBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.md
-  },
-  headerLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginRight: 4
-  },
-  menuBtn: {
-    padding: 4
-  },
-  logoBox: {
-    width: 36,
-    height: 36,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  brandTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: Colors.textMain
-  },
+  container: { flex: 1, backgroundColor: Colors.background },
+  scrollContent: { padding: Spacing.lg, paddingBottom: 32 },
+  headerBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.md },
+  headerLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, marginRight: 4 },
+  menuBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginLeft: -8 },
+  brandTitle: { fontSize: 20, fontWeight: '800', color: Colors.textMain },
   locSelector: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     alignSelf: 'flex-start',
     maxWidth: '100%',
-    backgroundColor: '#F0F9FF',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: Radius.full,
-    marginTop: 2
+    marginTop: 3,
   },
-  locText: {
-    flexShrink: 1,
-    fontSize: 10,
-    fontWeight: '700',
-    color: Colors.tertiaryDark
-  },
-  headerRight: {
-    flexDirection: 'row',
-    gap: 8
-  },
+  locText: { flexShrink: 1, fontSize: 13, fontWeight: '700', color: Colors.tertiaryDark },
+  headerRight: { flexDirection: 'row', gap: 8 },
   iconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: Colors.border,
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
   },
-  notifDot: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: Colors.secondary
-  },
-  sosBanner: {
-    backgroundColor: '#FEF3C7',
-    borderWidth: 1,
-    borderColor: '#FCD34D',
-    borderRadius: Radius.lg,
-    padding: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: Spacing.md
-  },
-  sosIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.secondary,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  sosTitle: {
-    flexShrink: 1,
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#92400E'
-  },
-  sosBadge: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4
-  },
-  sosBadgeText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#92400E'
-  },
-  sosSub: {
-    fontSize: 10,
-    color: '#B45309',
-    marginTop: 2
-  },
+  notifDot: { position: 'absolute', top: 9, right: 10, width: 9, height: 9, borderRadius: 5, backgroundColor: Colors.secondary },
   searchBar: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
     borderColor: Colors.border,
     borderRadius: Radius.xl,
-    paddingHorizontal: 12,
-    height: 48,
+    paddingLeft: 14,
+    paddingRight: 6,
+    height: 54,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: Spacing.md
+    marginBottom: Spacing.md,
   },
-  searchInput: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 12,
-    color: Colors.textMain
-  },
-  micBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  zeroFeeCard: {
-    backgroundColor: Colors.primary,
+  searchInput: { flex: 1, minWidth: 0, fontSize: 15, color: Colors.textMain, height: '100%' },
+  micBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
+  clearBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: Colors.surfaceVariant, alignItems: 'center', justifyContent: 'center' },
+  sosBanner: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
     borderRadius: Radius.lg,
-    padding: 12,
+    padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: Spacing.lg
+    marginBottom: Spacing.md,
   },
-  zeroFeeTitle: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '800'
-  },
-  zeroFeeSub: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    opacity: 0.9,
-    marginTop: 2
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 10
-  },
-  sectionTitle: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '800',
-    color: Colors.textMain
-  },
-  viewAllText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: Colors.primary
-  },
-  catGrid: {
-    // 4 x 23% tiles; the leftover 8% becomes the gutters, so the row fits at any width
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 8,
-    marginBottom: Spacing.lg
-  },
-  catTile: {
-    width: '23%',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: Colors.border,
+  sosIcon: { width: 42, height: 42, borderRadius: 21, backgroundColor: Colors.secondary, alignItems: 'center', justifyContent: 'center' },
+  sosTitle: { flexShrink: 1, fontSize: 16, fontWeight: '800', color: '#92400E' },
+  sosBadge: { backgroundColor: '#FFFFFF', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  sosBadgeText: { fontSize: 12, fontWeight: '800', color: '#92400E' },
+  sosSub: { fontSize: 13, color: '#92400E', marginTop: 3, lineHeight: 18 },
+  zeroFeeCard: {
+    backgroundColor: Colors.primary,
     borderRadius: Radius.lg,
-    padding: 8,
-    alignItems: 'center'
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: Spacing.lg,
   },
-  catIconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: Radius.md,
+  zeroFeeTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+  zeroFeeSub: { color: '#FFFFFF', fontSize: 13, marginTop: 3, lineHeight: 18 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 12 },
+  sectionTitle: { flex: 1, fontSize: 18, fontWeight: '800', color: Colors.textMain },
+  viewAllText: { fontSize: 14, fontWeight: '700', color: Colors.primaryDark },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 12 },
+  allServicesBtn: {
+    marginTop: 14,
+    minHeight: 50,
+    borderRadius: Radius.lg,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primaryLight,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6
+    gap: 8,
   },
-  catTitle: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: Colors.textMain,
-    textAlign: 'center'
-  },
-  catFee: {
-    fontSize: 8,
-    color: Colors.textMuted,
-    marginTop: 2
-  },
+  allServicesText: { fontSize: 15, fontWeight: '800', color: Colors.primaryDark },
   postJobCard: {
     backgroundColor: '#F0FDF4',
     borderWidth: 1.5,
     borderColor: '#86EFAC',
     borderRadius: Radius.lg,
-    padding: 14,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
-    marginBottom: Spacing.lg
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.xl,
   },
-  postJobTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#065F46'
-  },
-  postJobSub: {
-    fontSize: 10,
-    color: '#047857',
-    marginTop: 2
-  },
-  postJobBtn: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: Radius.md
-  },
-  postJobBtnText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '800'
-  },
-  onlinePill: {
-    backgroundColor: '#ECFDF5',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radius.full
-  },
-  onlinePillText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: Colors.success
-  },
-  workerList: {
-    gap: 12
-  },
-  workerCard: {
+  postJobTitle: { fontSize: 16, fontWeight: '800', color: '#065F46' },
+  postJobSub: { fontSize: 13, color: '#047857', marginTop: 3, lineHeight: 18 },
+  postJobBtn: { backgroundColor: Colors.primary, paddingHorizontal: 16, minHeight: 48, justifyContent: 'center', borderRadius: Radius.md },
+  postJobBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+  stepsCard: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: Colors.border,
-    borderRadius: Radius.xl,
-    padding: 14
+    borderRadius: Radius.lg,
+    paddingHorizontal: 14,
+    marginBottom: Spacing.xl,
   },
-  workerTop: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 10
-  },
-  avatarWrap: {
-    width: 52,
-    height: 52
-  },
-  workerAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26
-  },
-  onlineDot: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: Colors.success,
-    borderWidth: 2,
-    borderColor: '#FFFFFF'
-  },
-  workerName: {
-    flexShrink: 1,
-    fontSize: 14,
-    fontWeight: '800',
-    color: Colors.textMain
-  },
-  workerTrade: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: Colors.primaryDark,
-    marginTop: 1
-  },
-  workerMeta: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    columnGap: 8,
-    rowGap: 4,
-    marginTop: 4
-  },
-  ratingBadge: {
+  stepRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
+  stepDivider: { borderBottomWidth: 1, borderBottomColor: Colors.surfaceVariant },
+  stepNum: { width: 34, height: 34, borderRadius: 17, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
+  stepNumText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+  stepTitle: { fontSize: 15, fontWeight: '700', color: Colors.textMain, lineHeight: 20 },
+  stepHi: { fontSize: 13, color: Colors.textMuted, marginTop: 2 },
+  trustList: { gap: 10 },
+  trustCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
-    backgroundColor: '#FFFBEB',
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    borderRadius: 4
-  },
-  ratingText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#B45309'
-  },
-  metaDim: {
-    fontSize: 10,
-    color: Colors.textMuted
-  },
-  skillsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-    marginBottom: 10
-  },
-  skillTag: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4
-  },
-  skillText: {
-    fontSize: 9,
-    color: Colors.textMuted
-  },
-  workerBottom: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderStyle: 'dashed',
-    borderTopColor: '#E2E8F0'
-  },
-  feeLabel: {
-    fontSize: 9,
-    color: Colors.textMuted
-  },
-  feeAmount: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: Colors.textMain
-  },
-  callBtn: {
-    backgroundColor: Colors.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: Radius.md
-  },
-  callBtnText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700'
-  },
-  bookBtn: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Colors.borderDark
-  },
-  bookBtnText: {
-    color: Colors.textMain,
-    fontSize: 11,
-    fontWeight: '700'
-  },
-  drawerOverlay: {
-    flex: 1,
-    flexDirection: 'row',
-  },
-  drawerBackground: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  drawerContent: {
-    width: '75%',
-    maxWidth: 320,
-    height: '100%',
+    gap: 12,
     backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 2, height: 0 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 5,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.lg,
+    padding: 14,
   },
-  drawerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  drawerTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: Colors.textMain,
-  },
-  drawerSub: {
-    fontSize: 12,
-    color: Colors.textMuted,
-    marginTop: 2,
-  },
-  drawerScroll: {
-    padding: 16,
-  },
-  drawerItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    gap: 16,
-  },
-  drawerItemTextWrap: {
-    flex: 1,
-  },
-  drawerItemTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.textMain,
-  },
-  drawerItemSub: {
-    fontSize: 12,
-    color: Colors.textMuted,
-    marginTop: 2,
-  }
+  trustIcon: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  trustTitle: { fontSize: 15, fontWeight: '700', color: Colors.textMain, lineHeight: 20 },
+  trustHi: { fontSize: 13, color: Colors.textMuted, marginTop: 2 },
 });

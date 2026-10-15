@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, RefreshCw, Compass, Play, ChevronRight, Zap, Droplet, Wind, Hammer, Paintbrush, Sparkles, Tv, Truck } from 'lucide-react-native';
+import { ArrowLeft, Compass, Play } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../../constants/theme';
 import { useStore } from '../../store/useStore';
 import { useSession } from '../../store/useSession';
@@ -13,6 +13,7 @@ import { currentPosition } from '../../utils/position';
 import { notify } from '../../utils/dialog';
 import { timeAgo, whenLabel } from '../../utils/time';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../../components/StateBlocks';
+import ServiceCard from '../../components/ServiceCard';
 
 const LEAD_FILTERS: { id: 'all' | 'immediate' | 'scheduled'; label: string }[] = [
   { id: 'all', label: 'All Leads' },
@@ -54,13 +55,6 @@ export default function LeadsScreen() {
     };
   }, [isWorker, onTheWay]);
 
-  const switchRole = () => {
-    const next = isWorker ? 'customer' : 'worker';
-    const hasProfile = next === 'worker' ? me?.worker : me?.customer;
-    setRole(next);
-    if (!hasProfile) router.push(next === 'worker' ? '/worker-onboarding' : '/customer-onboarding');
-  };
-
   const answerDirect = async (jobId: string, accept: boolean) => {
     if (directBusy) return;
     setDirectBusy(jobId);
@@ -82,23 +76,15 @@ export default function LeadsScreen() {
     }
   };
 
+  // Tabs are switched with navigate (jump to the existing tab), never pushed
+  const openService = useCallback((id: string) => {
+    setSelectedCategory(id);
+    router.navigate('/(tabs)/post-job');
+  }, [router, setSelectedCategory]);
+
   const openJob = (jobId: string) => {
     setActiveJobId(jobId);
     router.push('/job-progress');
-  };
-
-  const renderIcon = (name: string, color: string) => {
-    switch (name) {
-      case 'Zap': return <Zap color={color} size={22} />;
-      case 'Droplet': return <Droplet color={color} size={22} />;
-      case 'Wind': return <Wind color={color} size={22} />;
-      case 'Hammer': return <Hammer color={color} size={22} />;
-      case 'Paintbrush': return <Paintbrush color={color} size={22} />;
-      case 'Sparkles': return <Sparkles color={color} size={22} />;
-      case 'Tv': return <Tv color={color} size={22} />;
-      case 'Truck': return <Truck color={color} size={22} />;
-      default: return <Zap color={color} size={22} />;
-    }
   };
 
   return (
@@ -106,6 +92,7 @@ export default function LeadsScreen() {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         refreshControl={isWorker ? <RefreshControl refreshing={leads.refreshing} onRefresh={() => { void leads.reload(); void myJobs.reload(); }} /> : undefined}
       >
         {/* Header */}
@@ -116,10 +103,6 @@ export default function LeadsScreen() {
             </Text>
             <Text style={styles.headerSub}>Chandigarh • Mohali • Panchkula</Text>
           </View>
-          <TouchableOpacity style={styles.toggleBtn} onPress={switchRole} accessibilityRole="button">
-            <RefreshCw color={Colors.textMain} size={14} />
-            <Text style={styles.toggleBtnText}>{isWorker ? 'Switch Customer' : 'Switch Worker'}</Text>
-          </TouchableOpacity>
         </View>
 
         {isWorker ? (
@@ -243,32 +226,15 @@ export default function LeadsScreen() {
           </View>
         ) : (
           /* CUSTOMER MODE: Service Category Directory */
-          <View style={styles.catDirectory}>
+          <View>
+            <Text style={styles.catIntro}>Tap a service to post your job • 0% commission, pay the worker directly</Text>
             {categories.loading && <LoadingBlock label="Loading services… / सेवाएँ लोड हो रही हैं…" />}
             {categories.error && !categories.data && <ErrorBlock message={categories.error} onRetry={() => void categories.reload()} />}
-            {(categories.data ?? []).map((cat) => (
-              <TouchableOpacity
-                key={cat.id}
-                style={styles.catDirCard}
-                onPress={() => {
-                  setSelectedCategory(cat.id);
-                  router.push('/(tabs)/post-job');
-                }}
-              >
-                <View style={[styles.catDirIcon, { backgroundColor: cat.bgColor }]}>
-                  {renderIcon(cat.iconKey, cat.color)}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                    <Text style={styles.catDirTitle}>{cat.title.en}</Text>
-                    <Text style={styles.catDirFee}>From ₹{cat.baseVisitFee}</Text>
-                  </View>
-                  <Text style={styles.catDirVernacular}>{cat.title.hi} • {cat.title.pa}</Text>
-                  <Text style={styles.catDirExamples}>{cat.examples}</Text>
-                </View>
-                <ChevronRight color={Colors.textSubtle} size={18} />
-              </TouchableOpacity>
-            ))}
+            <View style={styles.catGrid}>
+              {(categories.data ?? []).map((cat) => (
+                <ServiceCard key={cat.id} category={cat} onPress={openService} />
+              ))}
+            </View>
           </View>
         )}
       </ScrollView>
@@ -297,7 +263,7 @@ const styles = StyleSheet.create({
     color: Colors.textMain
   },
   headerSub: {
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.textMuted
   },
   toggleBtn: {
@@ -312,7 +278,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md
   },
   toggleBtnText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     color: Colors.textMain
   },
@@ -342,12 +308,12 @@ const styles = StyleSheet.create({
   },
   zeroDeductText: {
     color: '#065F46',
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '800'
   },
   radarHeroSub: {
     color: '#FFFFFF',
-    fontSize: 10,
+    fontSize: 12,
     opacity: 0.9,
     marginTop: 2
   },
@@ -389,7 +355,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.textMain
   },
   chipText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     color: Colors.textMain
   },
@@ -423,7 +389,7 @@ const styles = StyleSheet.create({
   },
   catPillText: {
     color: '#0369A1',
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '800'
   },
   leadTitle: {
@@ -439,13 +405,13 @@ const styles = StyleSheet.create({
   },
   timeTagText: {
     color: '#92400E',
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '700'
   },
   leadNotes: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.textMuted,
-    lineHeight: 16,
+    lineHeight: 18,
     marginBottom: 8
   },
   audioBox: {
@@ -460,7 +426,7 @@ const styles = StyleSheet.create({
   audioBoxText: {
     flexShrink: 1,
     color: '#0369A1',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700'
   },
   leadFooter: {
@@ -474,12 +440,12 @@ const styles = StyleSheet.create({
     borderTopColor: '#E2E8F0'
   },
   leadLoc: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     color: Colors.textMain
   },
   leadBudget: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     color: Colors.primary,
     marginTop: 2
@@ -492,49 +458,19 @@ const styles = StyleSheet.create({
   },
   quoteBtnText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '800'
   },
-  catDirectory: {
-    gap: 10
-  },
-  catDirCard: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.lg,
-    padding: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12
-  },
-  catDirIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: Radius.md,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  catDirTitle: {
-    flexShrink: 1,
-    fontSize: 13,
-    fontWeight: '800',
-    color: Colors.textMain
-  },
-  catDirFee: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: Colors.primary
-  },
-  catDirVernacular: {
-    fontSize: 10,
-    color: Colors.primaryDark,
-    fontWeight: '600',
-    marginTop: 1
-  },
-  catDirExamples: {
-    fontSize: 10,
+  catIntro: {
+    fontSize: 14,
     color: Colors.textMuted,
-    marginTop: 2
+    lineHeight: 20,
+    marginBottom: 12
+  },
+  catGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 12
   }
 });

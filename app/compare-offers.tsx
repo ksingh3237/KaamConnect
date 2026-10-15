@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Alert, Platform, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Phone } from 'lucide-react-native';
@@ -11,6 +11,7 @@ import { userMessage } from '../api/errors';
 import type { OfferForCustomer } from '../api/types';
 import Avatar from '../components/Avatar';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../components/StateBlocks';
+import { callPhone, notify } from '../utils/dialog';
 
 const POLL_MS = 8000; // quotes arrive while the screen is open; REST polling is the baseline, a socket can replace it
 
@@ -26,12 +27,7 @@ export default function CompareOffersScreen() {
   const offerCount = list.length;
   const fastestId = list.find((o) => o.isFastest)?.offerId ?? null;
 
-  const handleCall = (phone: string, name: string) => {
-    Alert.alert('Direct Phone Call', `Call ${name} directly at ${phone}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Call', onPress: () => Linking.openURL(`tel:${phone.replace(/\s+/g, '')}`) }
-    ]);
-  };
+  const handleCall = (phone: string, name: string) => void callPhone(phone, name);
 
   const handleAccept = async (offer: OfferForCustomer) => {
     if (acceptingId || !activeJobId) return;
@@ -42,8 +38,7 @@ export default function CompareOffersScreen() {
     } catch (error) {
       // e.g. the worker was booked meanwhile (OFFER_UNAVAILABLE): show it and refresh the list
       const message = userMessage(error);
-      if (Platform.OS === 'web') window.alert(message);
-      else Alert.alert('Could not accept', message);
+      void notify('Could not accept / स्वीकार नहीं हो सका', message);
       void offers.reload();
     } finally {
       setAcceptingId(null);
@@ -75,7 +70,7 @@ export default function CompareOffersScreen() {
           <Text style={{ fontSize: 20 }}>🛠️</Text>
           <View style={{ flex: 1 }}>
             <Text style={styles.recapTitle}>{job.data?.title ?? '…'}</Text>
-            <Text style={styles.recapSub}>{job.data ? `${job.data.area.name}, ${job.data.city.name.replace(/\s*\(.*\)/, '')} • ${job.data.reference}` : ''}</Text>
+            <Text style={styles.recapSub}>{job.data ? `${job.data.locality ?? job.data.area.name}, ${job.data.city.name.replace(/\s*\(.*\)/, '')} • ${job.data.reference}` : ''}</Text>
           </View>
           <View style={styles.offersTag}><Text style={styles.offersTagText}>{offerCount} Offers</Text></View>
         </View>
@@ -83,7 +78,14 @@ export default function CompareOffersScreen() {
         <Text style={styles.sectionTitle}>Select an Artisan & Confirm Arrival:</Text>
 
         {/* Offers */}
-        {!activeJobId && <EmptyBlock title="No request selected" hint="Post a job first. / पहले काम पोस्ट करें" />}
+        {!activeJobId && (
+          <>
+            <EmptyBlock title="Open a request to see its quotes" hint="Your requests are in Activity. / अपने अनुरोध गतिविधि में देखें" />
+            <TouchableOpacity style={[styles.acceptBtn, { marginTop: 12, minHeight: 48, justifyContent: 'center' }]} onPress={() => router.replace('/(tabs)/activity')} activeOpacity={0.8} accessibilityRole="button">
+              <Text style={styles.acceptBtnText}>My requests • मेरे अनुरोध</Text>
+            </TouchableOpacity>
+          </>
+        )}
         {activeJobId && offers.loading && <LoadingBlock label="Waiting for quotes… / कोट का इंतज़ार…" />}
         {activeJobId && offers.error && !offers.data && <ErrorBlock message={offers.error} onRetry={() => void offers.reload()} />}
         {activeJobId && offers.data && offerCount === 0 && (
@@ -131,7 +133,7 @@ export default function CompareOffersScreen() {
                     <Text style={styles.feeLabel}>Offered Visit Fee</Text>
                     <Text style={styles.feeAmount}>
                       ₹{offer.visitFee}
-                      <Text style={{ color: Colors.primary, fontSize: 10 }}> (0% App Fee)</Text>
+                      <Text style={{ color: Colors.primary, fontSize: 12 }}> (0% App Fee)</Text>
                     </Text>
                   </View>
 
@@ -194,7 +196,7 @@ const styles = StyleSheet.create({
     color: Colors.textMain
   },
   headerSub: {
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.textMuted
   },
   liveBadge: {
@@ -204,7 +206,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full
   },
   liveText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '800',
     color: '#065F46'
   },
@@ -225,7 +227,7 @@ const styles = StyleSheet.create({
     color: Colors.textMain
   },
   recapSub: {
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.textMuted
   },
   offersTag: {
@@ -235,7 +237,7 @@ const styles = StyleSheet.create({
     borderRadius: 4
   },
   offersTagText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '800',
     color: '#92400E'
   },
@@ -267,7 +269,7 @@ const styles = StyleSheet.create({
   },
   fastestText: {
     color: '#FFFFFF',
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '800'
   },
   workerTop: {
@@ -287,7 +289,7 @@ const styles = StyleSheet.create({
     color: Colors.textMain
   },
   workerTrade: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.primaryDark,
     fontWeight: '600'
   },
@@ -299,12 +301,12 @@ const styles = StyleSheet.create({
     marginTop: 2
   },
   ratingText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     color: '#B45309'
   },
   metaDim: {
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.textMuted
   },
   quoteMsgBox: {
@@ -314,9 +316,9 @@ const styles = StyleSheet.create({
     marginBottom: 10
   },
   quoteMsgText: {
-    fontSize: 10,
+    fontSize: 12,
     color: '#065F46',
-    lineHeight: 14
+    lineHeight: 16
   },
   workerBottom: {
     flexDirection: 'row',
@@ -330,7 +332,7 @@ const styles = StyleSheet.create({
     borderTopColor: '#E2E8F0'
   },
   feeLabel: {
-    fontSize: 9,
+    fontSize: 12,
     color: Colors.textMuted
   },
   feeAmount: {
@@ -354,7 +356,7 @@ const styles = StyleSheet.create({
   },
   callBtnText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700'
   },
   acceptBtn: {
@@ -365,7 +367,7 @@ const styles = StyleSheet.create({
   },
   acceptBtnText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '800'
   }
 });

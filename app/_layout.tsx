@@ -1,35 +1,48 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Stack, router, useSegments } from 'expo-router';
+import { Stack, useSegments, type Href } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useSession } from '../store/useSession';
 import { useStore } from '../store/useStore';
-import { PUBLIC_SEGMENTS, destinationFor } from '../utils/session-routing';
+import { OPEN_TO_ALL_SEGMENTS, PUBLIC_SEGMENTS, destinationFor } from '../utils/session-routing';
+import { resetTo } from '../utils/navigation';
+import DialogHost from '../components/DialogHost';
 
 // Restores the stored login once, then keeps the person on the right side of the sign-in wall:
 //  - signed out on a screen that needs a login -> the welcome screen;
 //  - signed in on a welcome/login screen -> straight to their marketplace (or role selection if they have no profile).
 function SessionGate({ children }: { children: React.ReactNode }) {
   const { status, user, bootstrap } = useSession();
-  const role = useStore((s) => s.role);
-  const setRole = useStore((s) => s.setRole);
   const segments = useSegments();
   const top = (segments[0] as string | undefined) ?? '';
+  // The redirect last asked for, so a re-render before the navigation lands cannot fire it twice
+  const lastRedirect = useRef<string | null>(null);
 
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
 
   useEffect(() => {
+    let target: Href | null = null;
     if (status === 'signedOut' && !PUBLIC_SEGMENTS.has(top)) {
-      router.replace('/');
-    } else if (status === 'signedIn' && user && PUBLIC_SEGMENTS.has(top) && top !== 'language') {
-      const dest = destinationFor(user, role);
-      if (dest.role) setRole(dest.role);
-      router.replace(dest.href);
+      target = '/';
+    } else if (status === 'signedIn' && user && PUBLIC_SEGMENTS.has(top) && !OPEN_TO_ALL_SEGMENTS.has(top)) {
+      // Read the role once here (not as a dependency): setting it must not re-run this redirect
+      const dest = destinationFor(user, useStore.getState().role);
+      if (dest.role) useStore.getState().setRole(dest.role);
+      target = dest.href;
     }
-  }, [status, user, top, role, setRole]);
+    if (!target) {
+      lastRedirect.current = null;
+      return;
+    }
+    const key = `${status}|${top}|${JSON.stringify(target)}`;
+    if (lastRedirect.current === key) return;
+    lastRedirect.current = key;
+    // Clear the welcome/login screens (or the signed-in screens) underneath, so Back cannot return into them
+    resetTo(target);
+  }, [status, user, top]);
 
   if (status === 'booting') {
     return (
@@ -79,8 +92,10 @@ export default function RootLayout() {
           <Stack.Screen name="job-progress" />
           <Stack.Screen name="rating" />
           <Stack.Screen name="carousel" />
+          <Stack.Screen name="legal" options={{ animation: 'slide_from_bottom' }} />
         </Stack>
       </SessionGate>
+      <DialogHost />
     </SafeAreaProvider>
   );
 }
