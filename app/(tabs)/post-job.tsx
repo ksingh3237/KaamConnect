@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -7,11 +7,11 @@ import { Colors, Spacing, Radius } from '../../constants/theme';
 import { useStore } from '../../store/useStore';
 import { useSession } from '../../store/useSession';
 import { useAsync } from '../../api/useAsync';
-import { createJob, getCategories } from '../../api/endpoints';
+import { createJob, getCategories, getLocations } from '../../api/endpoints';
 import { isApiError, userMessage } from '../../api/errors';
 import { uploadFile, type PickedFile } from '../../api/upload';
 import { pickImage } from '../../utils/pickImage';
-import type { JobTiming } from '../../api/types';
+import type { CreateJobBody, JobTiming } from '../../api/types';
 import { ErrorBlock, LoadingBlock } from '../../components/StateBlocks';
 
 const MAX_PHOTOS = 4;
@@ -28,6 +28,17 @@ export default function PostJobScreen() {
   const { customerProfile } = useSession();
   const categories = useAsync(() => getCategories(), [], { reloadOnFocus: false });
   const address = customerProfile?.addresses.find((a) => a.isPrimary) ?? customerProfile?.addresses[0] ?? null;
+  const locations = useAsync(() => getLocations(), [], { reloadOnFocus: false });
+  // Sector chips grouped by city, from GET /locations (same source as onboarding)
+  const sectors = useMemo(() => (locations.data ?? []).map((c) => ({ city: c.name.replace(/\s*\(.*\)/, ''), areas: c.areas })), [locations.data]);
+
+  const [addressMode, setAddressMode] = useState<'PRIMARY' | 'CUSTOM'>('PRIMARY');
+  const [customLine, setCustomLine] = useState('');
+  const [customAreaId, setCustomAreaId] = useState<number | null>(null);
+  const [customLocality, setCustomLocality] = useState('');
+  const [lineError, setLineError] = useState(false);
+  const [areaError, setAreaError] = useState(false);
+  const [localityError, setLocalityError] = useState(false);
 
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
@@ -67,10 +78,25 @@ export default function PostJobScreen() {
       setFormError('Choose a service first. / पहले सेवा चुनें');
       return;
     }
-    if (!address) {
-      setFormError('Add your address first. / पहले अपना पता जोड़ें');
-      router.push('/customer-onboarding');
-      return;
+    let jobAddress: Pick<CreateJobBody, 'addressId' | 'address'>;
+    if (addressMode === 'CUSTOM') {
+      const line = customLine.trim();
+      const locality = customLocality.trim();
+      const badLine = line.length < 3;
+      const badArea = customAreaId === null;
+      const badLocality = locality.length === 1;
+      setLineError(badLine);
+      setAreaError(badArea);
+      setLocalityError(badLocality);
+      if (badLine || badArea || badLocality) return;
+      jobAddress = { address: { areaId: customAreaId, line, ...(locality ? { localityName: locality } : {}) } };
+    } else {
+      if (!address) {
+        setFormError('Add your address first. / पहले अपना पता जोड़ें');
+        router.push('/customer-onboarding');
+        return;
+      }
+      jobAddress = { addressId: address.id };
     }
     setPosting(true);
     try {
@@ -79,13 +105,17 @@ export default function PostJobScreen() {
           title: title.trim(),
           ...(desc.trim() ? { description: desc.trim() } : {}),
           timing,
-          addressId: address.id,
+          ...jobAddress,
           ...(photos.length ? { photoKeys: photos.flatMap((p) => (p.key ? [p.key] : [])) } : {}),
       });
       setActiveJobId(job.id);
       setTitle('');
       setDesc('');
       setPhotos([]);
+      setAddressMode('PRIMARY');
+      setCustomLine('');
+      setCustomAreaId(null);
+      setCustomLocality('');
       router.push('/compare-offers');
     } catch (error) {
       const fields = isApiError(error) ? error.details.map((d) => `${d.field}: ${d.issue}`).join('; ') : '';
@@ -190,6 +220,88 @@ export default function PostJobScreen() {
               </TouchableOpacity>
             ))}
           </View>
+        </View>
+
+        {/* Job Location */}
+        <View style={styles.card}>
+          <Text style={styles.label}>Job Location / काम का पता *</Text>
+          <TouchableOpacity style={styles.radioRow} onPress={() => setAddressMode('PRIMARY')} accessibilityRole="radio" accessibilityState={{ selected: addressMode === 'PRIMARY' }}>
+            <View style={[styles.radioOuter, addressMode === 'PRIMARY' && styles.radioOuterOn]}>
+              {addressMode === 'PRIMARY' && <View style={styles.radioDot} />}
+            </View>
+            <Text style={styles.radioText}>
+              {address
+                ? `Use Primary Saved Address (${address.line}, ${address.area.name})`
+                : 'Use Primary Saved Address (none saved yet — you will be asked to add one)'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.radioRow} onPress={() => setAddressMode('CUSTOM')} accessibilityRole="radio" accessibilityState={{ selected: addressMode === 'CUSTOM' }}>
+            <View style={[styles.radioOuter, addressMode === 'CUSTOM' && styles.radioOuterOn]}>
+              {addressMode === 'CUSTOM' && <View style={styles.radioDot} />}
+            </View>
+            <Text style={styles.radioText}>Enter Different Job Location Address (e.g. at home while ordering from office)</Text>
+          </TouchableOpacity>
+
+          {addressMode === 'CUSTOM' && (
+            <View style={styles.customBox}>
+              <Text style={styles.subLabel}>House / Flat / Street / मकान नंबर, गली *</Text>
+              <TextInput
+                style={[styles.textInput, lineError && styles.textInputError]}
+                value={customLine}
+                onChangeText={(text) => {
+                  setCustomLine(text);
+                  setLineError(false);
+                }}
+                placeholder="e.g. House 214, Street 5"
+                placeholderTextColor={Colors.textSubtle}
+                maxLength={200}
+              />
+              {lineError && <Text style={styles.errorText}>Enter the house / street address (at least 3 characters) / पूरा पता लिखें</Text>}
+
+              <Text style={[styles.subLabel, { marginTop: 12 }]}>Tricity Sector / Area *</Text>
+              {locations.loading && <LoadingBlock label="Loading sectors… / सेक्टर लोड हो रहे हैं…" />}
+              {locations.error && !locations.data && <ErrorBlock message={locations.error} onRetry={() => void locations.reload()} />}
+              {sectors.map((group) => (
+                <View key={group.city} style={{ marginTop: 6 }}>
+                  <Text style={styles.cityHeading}>{group.city.toUpperCase()}</Text>
+                  <View style={styles.chipWrap}>
+                    {group.areas.map((area) => {
+                      const on = customAreaId === area.id;
+                      return (
+                        <TouchableOpacity
+                          key={area.id}
+                          style={[styles.areaChip, on && styles.areaChipActive]}
+                          onPress={() => {
+                            setCustomAreaId(area.id);
+                            setAreaError(false);
+                          }}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: on }}
+                        >
+                          <Text style={[styles.areaChipText, on && styles.timingTextActive]}>{area.name.replace('Sector', 'Sec')}{on ? ' ✓' : ''}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))}
+              {areaError && <Text style={styles.errorText}>Choose the sector / area / सेक्टर चुनें</Text>}
+
+              <Text style={[styles.subLabel, { marginTop: 12 }]}>Locality / Landmark (optional) / इलाका, लैंडमार्क</Text>
+              <TextInput
+                style={[styles.textInput, localityError && styles.textInputError]}
+                value={customLocality}
+                onChangeText={(text) => {
+                  setCustomLocality(text);
+                  setLocalityError(false);
+                }}
+                placeholder="e.g. Near Peer Muchalla temple"
+                placeholderTextColor={Colors.textSubtle}
+                maxLength={80}
+              />
+              {localityError && <Text style={styles.errorText}>Locality needs at least 2 characters, or leave it empty</Text>}
+            </View>
+          )}
         </View>
 
         {formError && (
@@ -370,6 +482,78 @@ const styles = StyleSheet.create({
   },
   timingTextActive: {
     color: '#065F46'
+  },
+  radioRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingVertical: 6
+  },
+  radioOuter: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: Colors.borderDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1
+  },
+  radioOuterOn: {
+    borderColor: Colors.primary
+  },
+  radioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: Colors.primary
+  },
+  radioText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.textMain,
+    lineHeight: 17
+  },
+  customBox: {
+    marginTop: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border
+  },
+  subLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    marginBottom: 6
+  },
+  cityHeading: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: Colors.textSubtle,
+    marginBottom: 4
+  },
+  chipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6
+  },
+  areaChip: {
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: Radius.full,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    backgroundColor: '#FFFFFF'
+  },
+  areaChipActive: {
+    backgroundColor: '#F0FDF4',
+    borderColor: Colors.primary
+  },
+  areaChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.textMain
   },
   broadcastBtn: {
     backgroundColor: Colors.primary,

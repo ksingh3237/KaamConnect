@@ -149,12 +149,22 @@ export interface Page<T> {
 }
 
 // ── jobs (customer)
+/** A one-off job address typed for a single job (not saved to the profile). lat and lng go together or not at all. */
+export interface JobAddressInput {
+  areaId: number;
+  line: string;
+  localityName?: string;
+  lat?: number;
+  lng?: number;
+}
 export interface CreateJobBody {
   categoryId: string;
   title: string;
   description?: string;
   timing: JobTiming;
+  /** Send exactly one of addressId (saved address) or address (typed for this job). */
   addressId?: string;
+  address?: JobAddressInput;
   photoKeys?: string[];
   voiceNote?: { key: string; durationSec: number };
 }
