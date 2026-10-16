@@ -11,7 +11,8 @@ import { userMessage } from '../../api/errors';
 import type { JobListItem, JobListPage, JobStatus, JobTab, PendingQuote, WorkerJobItem, WorkerJobsPage } from '../../api/types';
 import { callPhone, confirmAction, notify } from '../../utils/dialog';
 import { timeAgo, whenLabel } from '../../utils/time';
-import { EmptyBlock, ErrorBlock, LoadingBlock } from '../../components/StateBlocks';
+import { EmptyBlock, ErrorBlock } from '../../components/StateBlocks';
+import { ActivityJobSkeleton } from '../../components/skeletons/ActivityJobSkeleton';
 
 const POLL_MS = 12000;
 const STATUS_TEXT: Record<JobStatus, string> = {
@@ -238,7 +239,7 @@ export default function ActivityScreen() {
           </View>
         )}
 
-        {jobs.loading && <LoadingBlock label="Loading your jobs… / जॉब लोड हो रहे हैं…" />}
+        {jobs.loading && <ActivityJobSkeleton />}
         {jobs.error && !jobs.data && <ErrorBlock message={jobs.error} onRetry={() => void jobs.reload()} />}
 
         {/* Quotes the worker sent that are still waiting for an answer */}

@@ -13,6 +13,7 @@ import { currentPosition } from '../../utils/position';
 import { notify } from '../../utils/dialog';
 import { timeAgo, whenLabel } from '../../utils/time';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../../components/StateBlocks';
+import { LeadCardSkeleton } from '../../components/skeletons/LeadCardSkeleton';
 import ServiceCard from '../../components/ServiceCard';
 
 const LEAD_FILTERS: { id: 'all' | 'immediate' | 'scheduled'; label: string }[] = [
@@ -169,7 +170,7 @@ export default function LeadsScreen() {
               })}
             </ScrollView>
 
-            {leads.loading && <LoadingBlock label="Looking for requests… / अनुरोध खोज रहे हैं…" />}
+            {leads.loading && <LeadCardSkeleton />}
             {leads.error && !leads.data && <ErrorBlock message={leads.error} onRetry={() => void leads.reload()} />}
             {leads.errorCode === 'WORKER_NOT_VERIFIED' && <EmptyBlock title="Profile under review" hint="Leads open up once the team has verified your Aadhaar. / सत्यापन के बाद लीड दिखेंगे" />}
             {leads.data && visibleLeads.length === 0 && (

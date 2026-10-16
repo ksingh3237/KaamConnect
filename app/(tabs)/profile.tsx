@@ -23,6 +23,7 @@ import { getSavings } from '../../api/endpoints';
 import Avatar from '../../components/Avatar';
 import DeleteAccountModal from '../../components/DeleteAccountModal';
 import { ErrorBlock } from '../../components/StateBlocks';
+import { ProfileSavingsSkeleton } from '../../components/skeletons/ProfileSavingsSkeleton';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -98,6 +99,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* Zero-Commission Cumulative Savings Banner */}
+        {savings.loading ? <ProfileSavingsSkeleton /> : (
         <View style={styles.savingsBanner}>
           <View style={styles.savingsHeader}>
             <Text style={styles.savingsTitle}>0% Commission Charter Savings</Text>
@@ -116,6 +118,7 @@ export default function ProfileScreen() {
               : 'Money saved by connecting directly with local artisans without middleman commission!'}
           </Text>
         </View>
+        )}
 
         {/* Role Toggle Section */}
         <View style={styles.card}>

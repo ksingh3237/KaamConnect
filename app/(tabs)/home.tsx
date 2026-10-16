@@ -12,7 +12,8 @@ import { useSession } from '../../store/useSession';
 import { useAsync } from '../../api/useAsync';
 import { getCategories } from '../../api/endpoints';
 import ServiceCard from '../../components/ServiceCard';
-import { EmptyBlock, ErrorBlock, LoadingBlock } from '../../components/StateBlocks';
+import { EmptyBlock, ErrorBlock } from '../../components/StateBlocks';
+import { CategoryGridSkeleton } from '../../components/skeletons/CategoryGridSkeleton';
 import { notify } from '../../utils/dialog';
 import AppMenu from '../../components/AppMenu';
 import WorkerHome from '../../components/WorkerHome';
@@ -157,7 +158,7 @@ function CustomerHome() {
           )}
         </View>
 
-        {categories.loading && <LoadingBlock label="Loading services… / सेवाएँ लोड हो रही हैं…" />}
+        {categories.loading && <CategoryGridSkeleton />}
         {categories.error && !categories.data && <ErrorBlock message={categories.error} onRetry={() => void categories.reload()} />}
         {searching && categories.data && shown.length === 0 && (
           <EmptyBlock title="No matching service" hint="Try another word, or post your job and nearby pros will quote. / काम पोस्ट करें" />
