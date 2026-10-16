@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryContainer
   },
   topPillText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     color: Colors.primaryDark
   },
@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '800',
     color: Colors.primaryDark
   },

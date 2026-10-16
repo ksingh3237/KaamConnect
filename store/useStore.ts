@@ -2,6 +2,7 @@
 // jobs, workers, leads, money figures) is NOT here: it is fetched through api/endpoints.ts and held by the screens, and
 // who is signed in lives in store/useSession.ts. No mock data.
 import { create } from 'zustand';
+import { saveRole } from '../api/storage';
 
 export type Language = 'en' | 'hi' | 'pa';
 export type UserRole = 'customer' | 'worker';
@@ -38,8 +39,17 @@ export const useStore = create<AppState>((set) => ({
   activeJobId: null,
 
   setLanguage: (lang) => set({ language: lang }),
-  setRole: (role) => set({ role }),
-  toggleRole: () => set((state) => ({ role: state.role === 'worker' ? 'customer' : 'worker' })),
+  // Remembered on the device so a restart (or a web reload) reopens the same side
+  setRole: (role) => {
+    set({ role });
+    void saveRole(role);
+  },
+  toggleRole: () =>
+    set((state) => {
+      const role: UserRole = state.role === 'worker' ? 'customer' : 'worker';
+      void saveRole(role);
+      return { role };
+    }),
   setMobile: (num) => set({ mobile: num }),
   setSelectedSector: (label, areaId = null) => set({ selectedSector: label, selectedAreaId: areaId }),
   setSelectedCategory: (cat) => set({ selectedCategory: cat }),

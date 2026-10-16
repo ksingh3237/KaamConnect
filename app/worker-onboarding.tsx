@@ -7,7 +7,6 @@ import {
   Medal, Minus, Plus, X, Globe, Check, CheckCircle2, PlusCircle, MapPin, Lock, CreditCard, Save, Camera, IdCard, Phone, Shield,
   Wind, Paintbrush, Sparkles, Tv, Truck
 } from 'lucide-react-native';
-import ModeSwitchCard from '../components/ModeSwitchCard';
 import { useStore } from '../store/useStore';
 import { resetTo } from '../utils/navigation';
 import { useSession } from '../store/useSession';
@@ -17,6 +16,8 @@ import { isApiError, userMessage } from '../api/errors';
 import { uploadFile, type PickedFile } from '../api/upload';
 import { pickImage } from '../utils/pickImage';
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks';
+import SectorPicker from '../components/SectorPicker';
+import { serviceIcon } from '../constants/services';
 import type { DocumentType, Lang, VerificationStatus } from '../api/types';
 
 const ID_PLACEHOLDER = require('../assets/images/id-card-placeholder.png');
@@ -39,7 +40,6 @@ const HtmlColors = {
   error: '#ba1a1a'
 };
 
-const ICONS: Record<string, typeof Zap> = { Zap, Droplet, Wind, Hammer, Paintbrush, Sparkles, Tv, Truck, Monitor };
 const MAX_TRADES = 2;
 
 export default function WorkerOnboardingScreen() {
@@ -63,6 +63,9 @@ export default function WorkerOnboardingScreen() {
   const [addingSkill, setAddingSkill] = useState(false);
   const [languages, setLanguages] = useState<Lang[]>(existing?.languages ?? ['hi']);
   const [baseAreaId, setBaseAreaId] = useState<number | null>(existing?.baseArea.id ?? null);
+  // Typed locality when the base is not in the list (baseAreaId is then the city's "Other area")
+  const [localityName, setLocalityName] = useState<string | null>(existing?.locality ?? null);
+  const [shopAddress, setShopAddress] = useState(existing?.addressLine ?? '');
   const [pickingBase, setPickingBase] = useState(false);
   const [radius, setRadius] = useState(existing ? `${existing.radiusKm} km` : '6 km');
   const [vehicle, setVehicle] = useState(existing?.vehicle ?? '');
@@ -83,10 +86,10 @@ export default function WorkerOnboardingScreen() {
   const baseLabel = useMemo(() => {
     for (const city of locations.data ?? []) {
       const area = city.areas.find((a) => a.id === baseAreaId);
-      if (area) return { title: `Base: ${area.name}, ${city.name.replace(/\s*\(.*\)/, '')}`, city: city.name };
+      if (area) return { title: `Base: ${localityName ?? area.name}, ${city.name.replace(/\s*\(.*\)/, '')}`, city: city.name };
     }
     return null;
-  }, [locations.data, baseAreaId]);
+  }, [locations.data, baseAreaId, localityName]);
 
   const displayPhone = (user?.phone ?? '').replace(/^\+91/, '');
 
@@ -151,6 +154,7 @@ export default function WorkerOnboardingScreen() {
     if (trades.length === 0) return fail('Choose at least one trade. / कम से कम एक काम चुनें');
     if (languages.length === 0) return fail('Choose at least one language. / कम से कम एक भाषा चुनें');
     if (baseAreaId === null) return fail('Choose your base sector. / अपना बेस सेक्टर चुनें');
+    if (shopAddress.trim().length > 0 && shopAddress.trim().length < 3) return fail('Write your full shop / home address. / पूरा पता लिखें');
     const haveFront = !!docs.AADHAAR_FRONT || !!existing?.documents.AADHAAR_FRONT;
     const haveBack = !!docs.AADHAAR_BACK || !!existing?.documents.AADHAAR_BACK;
     if (!haveFront || !haveBack) return fail('Add both Aadhaar photos (front and back). / आधार की दोनों फ़ोटो जोड़ें');
@@ -170,6 +174,8 @@ export default function WorkerOnboardingScreen() {
         skills,
         languages,
         baseAreaId,
+        ...(localityName ? { localityName } : {}),
+        ...(shopAddress.trim() ? { addressLine: shopAddress.trim() } : {}),
         radiusKm: parseInt(radius, 10) as 3 | 6 | 12,
         ...(upiId.trim() ? { upiId: upiId.trim() } : {}),
         ...(vehicle.trim() ? { vehicle: vehicle.trim() } : {}),
@@ -195,16 +201,10 @@ export default function WorkerOnboardingScreen() {
     setFormError(message);
   }
 
-  // replace (not push) so Back from the other setup screen returns to Role Selection
-  const handleSwitchToCustomer = () => {
-    setRole('customer');
-    router.replace('/customer-onboarding');
-  };
-
   const handleGoDashboard = () => {
     setShowModal(false);
     setRole('worker');
-    resetTo('/(tabs)/leads');
+    resetTo('/(tabs)/home');
   };
 
   return (
@@ -223,7 +223,7 @@ export default function WorkerOnboardingScreen() {
           <View style={styles.logo}>
             <Wrench color={HtmlColors.onPrimary} size={18} />
           </View>
-          <Text style={styles.headerTitle} numberOfLines={1}>Worker Detail Direct Call</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>Worker Profile</Text>
         </View>
         <View style={styles.headerRight}>
           <View style={styles.tricityBadge}><Text style={styles.tricityBadgeText}>Tricity</Text></View>
@@ -242,8 +242,6 @@ export default function WorkerOnboardingScreen() {
         </View>
 
         {/* Worker Mode Card */}
-        <ModeSwitchCard mode="worker" onSwitch={handleSwitchToCustomer} />
-
         {/* Header Section & Public Privacy Trust Pill */}
         <View style={styles.formHeader}>
           <View style={styles.formHeaderTitleRow}>
@@ -327,7 +325,7 @@ export default function WorkerOnboardingScreen() {
             {(categories.data ?? []).map((cat) => {
               const id = cat.id;
               const label = `${cat.title.en} (${cat.title.hi})`;
-              const Icon = ICONS[cat.iconKey] ?? Wrench;
+              const Icon = serviceIcon(cat.iconKey);
               const isPrimary = trades[0] === id;
               const isSecondary = !isPrimary && trades.includes(id);
               return (
@@ -451,29 +449,36 @@ export default function WorkerOnboardingScreen() {
             <View style={{ marginTop: 10 }}>
               {locations.loading && <LoadingBlock label="Loading sectors… / सेक्टर लोड हो रहे हैं…" />}
               {locations.error && !locations.data && <ErrorBlock message={locations.error} onRetry={() => void locations.reload()} />}
-              {(locations.data ?? []).map((city) => (
-                <View key={city.id} style={{ marginBottom: 8 }}>
-                  <Text style={styles.labelHighlight}>{city.name.toUpperCase()}</Text>
-                  <View style={styles.chipsWrap}>
-                    {city.areas.map((area) => {
-                      const on = baseAreaId === area.id;
-                      return (
-                        <TouchableOpacity
-                          key={area.id}
-                          style={[styles.skillChip, on && { backgroundColor: HtmlColors.primaryContainer }]}
-                          onPress={() => { setBaseAreaId(area.id); setPickingBase(false); }}
-                          accessibilityRole="button"
-                          accessibilityState={{ selected: on }}
-                        >
-                          <Text style={styles.skillChipText}>{area.name.replace('Sector', 'Sec')} {on ? '✓' : ''}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-              ))}
+              {locations.data && (
+                <SectorPicker
+                  locations={locations.data}
+                  value={baseAreaId}
+                  locality={localityName}
+                  onChange={(id, _label, locality) => { setBaseAreaId(id); setLocalityName(locality); setPickingBase(false); }}
+                  placeholder="Choose your base sector / बेस सेक्टर चुनें"
+                />
+              )}
             </View>
           )}
+
+          <View style={[styles.inputGroup, { marginTop: 14 }]}>
+            <View style={styles.labelRow}>
+              <Text style={styles.label}>Address / Workshop / Shop (दुकान या कार्यशाला का पता)</Text>
+            </View>
+            <View style={styles.inputWrapper}>
+              <MapPin color={HtmlColors.onSurfaceVariant} size={20} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                value={shopAddress}
+                onChangeText={setShopAddress}
+                placeholder="Shop / house no., street, landmark"
+                placeholderTextColor={HtmlColors.outline}
+                maxLength={200}
+                accessibilityLabel="Address, workshop or shop"
+              />
+            </View>
+            <Text style={styles.addressHint}>Private: only you and the KaamConnect verification team see it. / यह निजी है</Text>
+          </View>
 
           <View style={[styles.labelRow, { marginTop: 12, marginBottom: 8 }]}>
             <Text style={styles.label}>Job Alert Radius (कार्य क्षेत्र):</Text>
@@ -640,7 +645,7 @@ export default function WorkerOnboardingScreen() {
             </View>
 
             <TouchableOpacity style={styles.modalBtn} onPress={handleGoDashboard}>
-              <Text style={styles.modalBtnText}>Open Worker Radar (राडार खोलें)</Text>
+              <Text style={styles.modalBtnText}>Open my dashboard (डैशबोर्ड खोलें)</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -705,7 +710,7 @@ const styles = StyleSheet.create({
     borderRadius: 16
   },
   tricityBadgeText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: HtmlColors.onSurfaceVariant
   },
@@ -740,7 +745,7 @@ const styles = StyleSheet.create({
   },
   trustBannerText: {
     flexShrink: 1,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: HtmlColors.onPrimaryContainer
   },
@@ -751,7 +756,7 @@ const styles = StyleSheet.create({
     borderRadius: 16
   },
   tricityVerifiedText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: HtmlColors.primary
   },
@@ -779,7 +784,7 @@ const styles = StyleSheet.create({
     borderRadius: 16
   },
   freePillText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: HtmlColors.primary
   },
@@ -877,7 +882,7 @@ const styles = StyleSheet.create({
     marginTop: 12
   },
   photoCheckText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: HtmlColors.onSurfaceVariant
   },
@@ -922,7 +927,7 @@ const styles = StyleSheet.create({
     color: HtmlColors.onSurfaceVariant
   },
   labelHighlight: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: HtmlColors.primary
   },
@@ -954,12 +959,12 @@ const styles = StyleSheet.create({
     borderRadius: 16
   },
   verifiedTagText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: HtmlColors.primary
   },
   maxText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: HtmlColors.onSurfaceVariant
   },
@@ -1000,7 +1005,7 @@ const styles = StyleSheet.create({
     borderRadius: 16
   },
   expBadgeText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: HtmlColors.primary
   },
@@ -1046,7 +1051,7 @@ const styles = StyleSheet.create({
     color: HtmlColors.onSurfaceVariant
   },
   skillsLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: HtmlColors.onSurfaceVariant,
     marginBottom: 6
@@ -1135,7 +1140,7 @@ const styles = StyleSheet.create({
     color: HtmlColors.onSurfaceVariant
   },
   changeLink: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: HtmlColors.primary,
     textDecorationLine: 'underline'
@@ -1181,7 +1186,7 @@ const styles = StyleSheet.create({
     borderRadius: 16
   },
   mandatoryBadgeText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: HtmlColors.primary
   },
@@ -1246,7 +1251,7 @@ const styles = StyleSheet.create({
     marginTop: 4
   },
   idBoxAction: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: HtmlColors.onSurfaceVariant,
     backgroundColor: HtmlColors.surfaceContainerLowest,
@@ -1256,7 +1261,7 @@ const styles = StyleSheet.create({
     marginTop: 8
   },
   idBoxActionPrimary: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: HtmlColors.primary,
     backgroundColor: HtmlColors.surfaceContainerLowest,
@@ -1363,7 +1368,7 @@ const styles = StyleSheet.create({
   },
   footerNote: {
     textAlign: 'center',
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: HtmlColors.onSurfaceVariant,
     marginTop: 6
@@ -1432,5 +1437,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: HtmlColors.onPrimary
+  },
+  addressHint: {
+    fontSize: 12,
+    color: '#475569',
+    marginTop: 6
   }
 });

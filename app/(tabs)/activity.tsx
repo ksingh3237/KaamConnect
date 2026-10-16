@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Phone, FileText, RotateCcw } from 'lucide-react-native';
@@ -9,7 +9,7 @@ import { useAsync } from '../../api/useAsync';
 import { cancelJob, getEarnings, getReceipt, listMyJobs, listWorkerJobs } from '../../api/endpoints';
 import { userMessage } from '../../api/errors';
 import type { JobListItem, JobListPage, JobStatus, JobTab, PendingQuote, WorkerJobItem, WorkerJobsPage } from '../../api/types';
-import { confirmAction, notify } from '../../utils/dialog';
+import { callPhone, confirmAction, notify } from '../../utils/dialog';
 import { timeAgo, whenLabel } from '../../utils/time';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../../components/StateBlocks';
 
@@ -77,7 +77,7 @@ export default function ActivityScreen() {
     }
   };
 
-  const callNumber = (phone: string) => void Linking.openURL(`tel:${phone.replace(/\s+/g, '')}`);
+  const callNumber = (phone: string, name: string) => void callPhone(phone, name);
 
   const tabLabel = (tab: JobTab, label: string) => `${label}${counts ? ` (${counts[tab]})` : ''}`;
 
@@ -106,7 +106,7 @@ export default function ActivityScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.stripName}>{job.worker.name}</Text>
             </View>
-            <TouchableOpacity style={styles.stripCallBtn} onPress={() => callNumber(job.worker!.phone)} activeOpacity={0.8} accessibilityRole="button">
+            <TouchableOpacity style={styles.stripCallBtn} onPress={() => callNumber(job.worker!.phone, job.worker!.name)} activeOpacity={0.8} accessibilityRole="button">
               <Phone color="#065F46" size={13} />
               <Text style={styles.stripCallText}>Call</Text>
             </TouchableOpacity>
@@ -150,7 +150,7 @@ export default function ActivityScreen() {
                   <Text style={styles.rebookBtnText}>Leave Review</Text>
                 </TouchableOpacity>
               )}
-              <TouchableOpacity style={styles.rebookBtn} onPress={() => { setSelectedCategory(job.category.id); router.push('/(tabs)/post-job'); }} activeOpacity={0.7} accessibilityRole="button">
+              <TouchableOpacity style={styles.rebookBtn} onPress={() => { setSelectedCategory(job.category.id); router.navigate('/(tabs)/post-job'); }} activeOpacity={0.7} accessibilityRole="button">
                 <RotateCcw color={Colors.primary} size={14} />
                 <Text style={styles.rebookBtnText}>Re-Book ↻</Text>
               </TouchableOpacity>
@@ -292,7 +292,7 @@ const styles = StyleSheet.create({
     color: Colors.textMain
   },
   headerSubtitle: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.textMuted
   },
   headerPill: {
@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryContainer
   },
   headerPillText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     color: Colors.primaryDark
   },
@@ -347,7 +347,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xs
   },
   earningsSub: {
-    fontSize: 11,
+    fontSize: 13,
     color: 'rgba(255,255,255,0.85)',
     fontWeight: '700'
   },
@@ -367,7 +367,7 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(255,255,255,0.2)'
   },
   earningsMetaItem: {
-    fontSize: 11,
+    fontSize: 13,
     color: 'rgba(255,255,255,0.9)'
   },
   card: {
@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   activePillText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '800',
     color: Colors.primaryDark
   },
@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
     color: Colors.textMain
   },
   jobSubtitle: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.textMuted,
     marginTop: 2
   },
@@ -423,7 +423,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.secondaryLight
   },
   amountPillText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     color: Colors.secondaryDark
   },
@@ -442,7 +442,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full
   },
   stripName: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: Colors.textMain
   },
@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
     borderColor: '#A7F3D0'
   },
   stripCallText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: '#065F46'
   },
@@ -520,7 +520,7 @@ const styles = StyleSheet.create({
     color: Colors.primary
   },
   pastJobMeta: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.textMuted,
     marginBottom: Spacing.md
   },
@@ -540,7 +540,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   receiptBtnText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: Colors.tertiary
   },
@@ -550,7 +550,7 @@ const styles = StyleSheet.create({
     gap: 4
   },
   rebookBtnText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: Colors.primary
   }

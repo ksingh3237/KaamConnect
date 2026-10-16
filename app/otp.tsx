@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Platform, AppState } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, MapPin, MailCheck, Edit2, Volume2, Clock, MessageSquare, Verified, Lock, AlertCircle } from 'lucide-react-native';
@@ -8,20 +8,26 @@ import { noFocusRing } from '../constants/theme';
 import { useStore } from '../store/useStore';
 import { useSession } from '../store/useSession';
 import { isApiError, userMessage } from '../api/errors';
+import { getWidgetClient, isMsg91WidgetConfigured } from '../api/msg91';
+import { notify } from '../utils/dialog';
 
-const OTP_LENGTH = 6;
+// Seconds until "resend" is allowed again, from a deadline so the count stays right after the app was in the background.
+const secondsUntil = (deadline: number) => Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
 
 export default function OtpScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { mobile } = useStore();
-  const { verifyOtp, requestOtp, devNotice, resendAfterSec } = useSession();
+  const { verifyOtp, resendOtp, devNotice, resendAfterSec, otpLength: OTP_LENGTH } = useSession();
   // The whole code lives in ONE hidden input; the six boxes only display it.
   // Six separate inputs need focus hand-offs, which drop keystrokes when typing fast
   // and leave earlier boxes empty when a box in the middle is tapped first.
   const [code, setCode] = useState('');
   const [isFocused, setIsFocused] = useState(false);
+  const [resendAt, setResendAt] = useState(() => Date.now() + resendAfterSec * 1000);
   const [secondsLeft, setSecondsLeft] = useState(resendAfterSec);
+  // A ref, not state: two fast taps would both read the same stale `false` from state.
+  const busy = useRef(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [showError, setShowError] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -33,15 +39,22 @@ export default function OtpScreen() {
   const input = useRef<TextInput>(null);
 
   useEffect(() => {
-    if (!mobile) router.replace('/login');
+    // No number, or (MSG91) no live request to verify, e.g. the screen was restored after the app was killed
+    if (!mobile || (isMsg91WidgetConfigured() && !getWidgetClient().hasRequest())) router.replace('/login');
   }, [mobile, router]);
 
+  // Counts down to a deadline and re-reads the clock when the app returns to the foreground
   useEffect(() => {
-    if (secondsLeft > 0) {
-      const timerId = setTimeout(() => setSecondsLeft(secondsLeft - 1), 1000);
-      return () => clearTimeout(timerId);
-    }
-  }, [secondsLeft]);
+    setSecondsLeft(secondsUntil(resendAt));
+    const timerId = setInterval(() => setSecondsLeft(secondsUntil(resendAt)), 1000);
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setSecondsLeft(secondsUntil(resendAt));
+    });
+    return () => {
+      clearInterval(timerId);
+      sub.remove();
+    };
+  }, [resendAt]);
 
   // Accepts typing, backspace, paste and SMS autofill alike
   const handleCodeChange = (text: string) => {
@@ -53,38 +66,46 @@ export default function OtpScreen() {
   // On success the session store flips to "signed in" and the root layout moves the person to the right screen
   // (role selection for a new account, the marketplace otherwise), so there is nothing to navigate to here.
   const handleVerify = async () => {
-    if (isVerifying) return;
+    if (busy.current) return;
     if (code.length < OTP_LENGTH) {
       setShowError(true);
       input.current?.focus();
       return;
     }
+    busy.current = true;
     setIsVerifying(true);
     setApiError(null);
     try {
       await verifyOtp(mobile, code);
     } catch (error) {
       setApiError(userMessage(error));
-      if (isApiError(error) && (error.code === 'OTP_INVALID' || error.code === 'OTP_LOCKED')) setCode('');
+      if (isApiError(error) && ['OTP_INVALID', 'OTP_LOCKED', 'OTP_EXPIRED'].includes(error.code)) setCode('');
+      // The MSG91 request is gone (killed app, finished request): nothing left to verify here
+      if (isApiError(error) && error.code === 'OTP_SESSION_LOST') router.replace('/login');
       input.current?.focus();
     } finally {
+      busy.current = false;
       setIsVerifying(false);
     }
   };
 
   const handleResend = async () => {
-    if (isResending) return;
+    if (busy.current || secondsLeft > 0) return;
+    busy.current = true;
     setIsResending(true);
     setApiError(null);
     setNotice(null);
     try {
-      const result = await requestOtp(mobile);
-      setSecondsLeft(result.resendAfterSec);
+      const result = await resendOtp(mobile);
+      setCode('');
+      setResendAt(Date.now() + result.resendAfterSec * 1000);
       setNotice('A new code has been sent. / नया कोड भेज दिया गया');
     } catch (error) {
-      if (isApiError(error) && error.retryAfterSec) setSecondsLeft(error.retryAfterSec);
+      if (isApiError(error) && error.retryAfterSec) setResendAt(Date.now() + error.retryAfterSec * 1000);
+      if (isApiError(error) && error.code === 'OTP_SESSION_LOST') router.replace('/login');
       setApiError(userMessage(error));
     } finally {
+      busy.current = false;
       setIsResending(false);
     }
   };
@@ -137,7 +158,7 @@ export default function OtpScreen() {
             Verify Phone Number <Text style={{ color: '#006c46' }}>/</Text> <Text style={{ fontSize: 20, color: '#3d4a41', fontWeight: '700' }}>ओटीपी सत्यापन</Text>
           </Text>
           <Text style={styles.subTitle}>
-            Enter 6-digit code sent to <Text style={{ fontWeight: '600', color: '#111c2d' }}>+91 {mobile}</Text>
+            Enter {OTP_LENGTH}-digit code sent to <Text style={{ fontWeight: '600', color: '#111c2d' }}>+91 {mobile}</Text>
           </Text>
           <TouchableOpacity
             style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, alignSelf: 'flex-start' }}
@@ -160,7 +181,7 @@ export default function OtpScreen() {
           </View>
         )}
 
-        {/* 6-Digit OTP Input Boxes */}
+        {/* OTP input boxes (as many as the code is long) */}
         <View style={styles.otpSection}>
           {Array.from({ length: OTP_LENGTH }, (_, i) => {
             const digit = code[i] ?? '';
@@ -209,14 +230,14 @@ export default function OtpScreen() {
             autoComplete="sms-otp"
             caretHidden
             contextMenuHidden
-            accessibilityLabel="Enter 6-digit OTP"
+            accessibilityLabel={`Enter ${OTP_LENGTH}-digit OTP`}
           />
         </View>
 
         {showError && (
           <View style={styles.otpErrorRow}>
             <AlertCircle color="#ef4444" size={14} />
-            <Text style={styles.otpErrorText}>Enter the 6-digit code / 6 अंकों का कोड डालें</Text>
+            <Text style={styles.otpErrorText}>Enter the {OTP_LENGTH}-digit code / {OTP_LENGTH} अंकों का कोड डालें</Text>
           </View>
         )}
 
@@ -234,7 +255,7 @@ export default function OtpScreen() {
 
         {/* Low-Literacy Audio Assist Pill */}
         <View style={styles.audioWrap}>
-          <TouchableOpacity style={styles.audioBtn} activeOpacity={0.8} onPress={() => Alert.alert('🔊', 'Playing OTP Audio...')}>
+          <TouchableOpacity style={styles.audioBtn} activeOpacity={0.8} onPress={() => void notify('Audio help / आवाज़ सहायता', 'Spoken instructions are coming soon. / बोलकर निर्देश जल्द आ रहे हैं।')}>
             <Volume2 color="#006c46" size={19} strokeWidth={2.5} />
             <Text style={styles.audioBtnText}>Audio code help available / आवाज द्वारा ओटीपी सुनें 🔊</Text>
           </TouchableOpacity>
@@ -382,7 +403,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#00b074'
   },
   iconTitle: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: '#006c46',
     letterSpacing: 0.5
@@ -399,7 +420,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '800',
     color: '#111c2d',
-    lineHeight: 30,
+    lineHeight: 32,
     letterSpacing: -0.2
   },
   subTitle: {
@@ -635,7 +656,7 @@ const styles = StyleSheet.create({
   },
   securityNoteText: {
     flexShrink: 1,
-    fontSize: 11,
+    fontSize: 13,
     color: '#3d4a41',
     textAlign: 'center'
   }

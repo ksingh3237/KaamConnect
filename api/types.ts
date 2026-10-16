@@ -18,6 +18,10 @@ export interface OtpRequestResult {
   expiresInSec: number;
   /** Present only when the server runs with the development OTP bypass. */
   devNotice?: string;
+  /** Length of the code the person must type; set when the MSG91 widget decides it, otherwise 6. */
+  otpLength?: number;
+  /** True when the number was verified without a code (invisible OTP) and the person is already signed in. */
+  signedIn?: boolean;
 }
 export interface SessionUser {
   id: string;
@@ -56,6 +60,8 @@ export interface ServiceCategory {
 export interface AddressView {
   id: string;
   area: { id: number; name: string };
+  /** Typed by the customer when their pocket is not in the sector list (area is then the city's "Other area"). */
+  locality: string | null;
   city: { id: number; name: string };
   line: string;
   lat: number | null;
@@ -79,7 +85,13 @@ export interface WorkerView {
   skills: string[];
   languages: Lang[];
   baseArea: { id: number; name: string };
+  /** Typed locality when the base area is not in the list. */
+  locality: string | null;
   city: { id: number; name: string };
+  /** Shop / workshop / home address (private: the worker and admins only). */
+  addressLine: string | null;
+  /** "Taking jobs": off = no new-lead alerts, hidden from customers, no direct bookings. */
+  isAvailable: boolean;
   radiusKm: number;
   scheduledRadiusKm: number | null;
   visitingFee: number | null;
@@ -106,7 +118,7 @@ export interface PutCustomerBody {
   photoKey?: string;
   commLanguage: Lang;
   allowDirectCalls: boolean;
-  address: { areaId: number; line: string; lat?: number; lng?: number };
+  address: { areaId: number; line: string; lat?: number; lng?: number; localityName?: string };
 }
 export interface PutWorkerBody {
   fullName: string;
@@ -116,6 +128,8 @@ export interface PutWorkerBody {
   skills: string[];
   languages: Lang[];
   baseAreaId: number;
+  localityName?: string;
+  addressLine?: string;
   radiusKm: 3 | 6 | 12;
   upiId?: string;
   vehicle?: string;
@@ -219,6 +233,7 @@ export interface JobView {
   booking: { startAt: string; endAt: string; confirmedAt: string } | null;
   category: { id: string; title: { en: string; hi: string; pa: string } };
   area: { id: number; name: string };
+  locality: string | null;
   city: { id: number; name: string };
   isDirect: boolean;
   expiresAt: string | null;

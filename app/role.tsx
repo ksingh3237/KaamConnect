@@ -228,7 +228,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#006c46',
     letterSpacing: -0.5,
-    lineHeight: 18
+    lineHeight: 23
   },
   tricityDot: {
     width: 6,
@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
   },
   headerSub: {
     flex: 1,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '600',
     color: '#6c7a70',
     letterSpacing: 0.5
@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
     marginBottom: 8
   },
   stepBadgeText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: '#006c46',
     textTransform: 'uppercase',
@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '800',
     color: '#111c2d',
-    lineHeight: 28,
+    lineHeight: 30,
     letterSpacing: -0.5
   },
   mainTitleHindi: {
@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
   },
   recBadgeText: {
     color: '#ffffff',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 0.5
@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   cardTag: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -372,7 +372,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     color: '#111c2d',
-    lineHeight: 20
+    lineHeight: 22
   },
   cardSubtitle: {
     fontSize: 12,
@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
   },
   highlightBadgeText: {
     flexShrink: 1,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '600'
   },
   benefitsList: {
@@ -468,7 +468,7 @@ const styles = StyleSheet.create({
   },
   reassuranceText: {
     flexShrink: 1,
-    fontSize: 11.5,
+    fontSize: 13,
     fontWeight: '500',
     color: '#6c7a70'
   },
@@ -480,7 +480,7 @@ const styles = StyleSheet.create({
   },
   trustStampText: {
     flexShrink: 1,
-    fontSize: 11,
+    fontSize: 13,
     color: '#6c7a70'
   }
 });

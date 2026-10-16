@@ -36,7 +36,11 @@ export default function ProfileScreen() {
   const profile = isWorker ? workerProfile : customerProfile;
   const displayName = profile?.fullName ?? (isWorker ? me?.worker?.fullName : me?.customer?.fullName) ?? 'Your name';
   const phone = (user?.phone ?? me?.phone ?? '').replace(/^\+91/, '+91 ');
-  const place = isWorker ? workerProfile?.baseArea.name : customerProfile?.addresses.find((a) => a.isPrimary)?.area.name ?? customerProfile?.addresses[0]?.area.name;
+  const primaryAddress = customerProfile?.addresses.find((a) => a.isPrimary) ?? customerProfile?.addresses[0];
+  // A typed locality ("Sector 82 JLPL") wins over the area it is anchored to ("Other area")
+  const place = isWorker
+    ? workerProfile && (workerProfile.locality ?? workerProfile.baseArea.name)
+    : primaryAddress && (primaryAddress.locality ?? primaryAddress.area.name);
   const verified = isWorker ? me?.worker?.verificationStatus === 'VERIFIED' : false;
 
   // Switching to a side that has no profile yet starts that side's setup instead of showing an empty screen
@@ -143,14 +147,24 @@ export default function ProfileScreen() {
           {/* Saved Addresses */}
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => router.push('/customer-onboarding')}
+            onPress={() => router.push(isWorker ? '/worker-onboarding' : '/customer-onboarding')}
             activeOpacity={0.7}
+            accessibilityRole="button"
           >
             <View style={styles.menuLeft}>
               <View style={[styles.menuIconBg, { backgroundColor: '#E0F2FE' }]}>
                 <MapPin color={Colors.tertiary} size={18} />
               </View>
-              <Text style={styles.menuText}>Saved Tricity Addresses (पता प्रबंधन)</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.menuText}>
+                  {isWorker ? 'Shop / Workshop Address (दुकान का पता)' : 'Saved Tricity Addresses (पता प्रबंधन)'}
+                </Text>
+                {isWorker && (
+                  <Text style={styles.menuSub} numberOfLines={2}>
+                    {workerProfile?.addressLine ?? 'Add your shop or home address / पता जोड़ें'}
+                  </Text>
+                )}
+              </View>
             </View>
             <ChevronRight color="#94A3B8" size={18} />
           </TouchableOpacity>
@@ -255,7 +269,7 @@ const styles = StyleSheet.create({
     color: Colors.textMain
   },
   headerSubtitle: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.textMuted
   },
   langSelector: {
@@ -313,7 +327,7 @@ const styles = StyleSheet.create({
     color: Colors.textMain
   },
   userPhone: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.textMuted,
     marginTop: 2
   },
@@ -326,7 +340,7 @@ const styles = StyleSheet.create({
     marginTop: 6
   },
   aadhaarPillText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '800',
     color: Colors.primaryDark
   },
@@ -357,7 +371,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary
   },
   savedPillText: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '800',
     color: '#FFFFFF'
   },
@@ -368,7 +382,7 @@ const styles = StyleSheet.create({
     marginVertical: 4
   },
   savingsNote: {
-    fontSize: 11,
+    fontSize: 13,
     color: '#065F46'
   },
   toggleRow: {
@@ -382,7 +396,7 @@ const styles = StyleSheet.create({
     color: Colors.textMain
   },
   modeSubtitle: {
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.textMuted,
     marginTop: 2
   },
@@ -396,7 +410,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full
   },
   switchBtnText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '800',
     color: '#FFFFFF'
   },
@@ -457,5 +471,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.textMuted,
     textDecorationLine: 'underline'
+  },
+  menuSub: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    marginTop: 2
   }
 });

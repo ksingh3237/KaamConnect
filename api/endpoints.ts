@@ -48,6 +48,8 @@ export const requestOtp = (phone: string) =>
   post<OtpRequestResult>('/auth/otp/request', { phone: toE164(phone) }, { auth: false });
 export const verifyOtp = (phone: string, code: string) =>
   post<VerifyResult>('/auth/otp/verify', { phone: toE164(phone), code }, { auth: false });
+/** Real-SMS sign-in: the access token the MSG91 widget returned. The server checks it with MSG91 and takes the number from MSG91, not from the app. */
+export const msg91Verify = (accessToken: string) => post<VerifyResult>('/auth/msg91/verify', { accessToken }, { auth: false });
 export const logout = (refreshToken: string) => post<void>('/auth/logout', { refreshToken });
 
 // ── account
@@ -66,6 +68,9 @@ export const putCustomer = (body: PutCustomerBody) => put<CustomerView>('/custom
 export const getCustomer = () => get<CustomerView>('/customers/me');
 export const putWorker = (body: PutWorkerBody) => put<WorkerView>('/workers/me', body);
 export const getWorkerProfile = () => get<WorkerView>('/workers/me');
+/** Partial update; e.g. the "taking jobs" switch: patchWorker({ isAvailable: false }). */
+export const patchWorker = (body: Partial<Omit<PutWorkerBody, 'termsAccepted'>> & { isAvailable?: boolean; addressLine?: string | null; localityName?: string | null }) =>
+  patch<WorkerView>('/workers/me', body);
 export const putWorkerDocument = (type: DocumentType, key: string) =>
   put<WorkerView>(`/workers/me/documents/${type}`, { key });
 export const putWorkerLocation = (lat: number, lng: number) => put<void>('/workers/me/location', { lat, lng });

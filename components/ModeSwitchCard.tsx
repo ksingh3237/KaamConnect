@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
     borderRadius: 16
   },
   tagText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: '#003a23'
   },
