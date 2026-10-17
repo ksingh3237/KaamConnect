@@ -1,6 +1,7 @@
 // The live trip map shared by the customer's tracking screen and the worker's job screen: the worker's vehicle (it glides
 // between fixes and its arrow turns the way they travel), the job's place, and a line between them.
-// The line is straight (as the crow flies): we do not call a routing service, so it shows direction, not the road.
+// The line follows real roads (utils/directions.ts: Google Routes, else free OSRM); if neither answers it falls back to a
+// dotted straight line so the map still shows direction.
 // Native only. react-native-maps has no web build; TripMap.web.tsx is shown there instead.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -9,6 +10,7 @@ import { Home, LocateFixed, Navigation } from 'lucide-react-native';
 import { Colors, Radius } from '../constants/theme';
 import { nextHeading, vehicleEmoji, type LatLng } from '../utils/trip';
 import { mapsConfigured } from '../utils/googlePlaces';
+import { useRoadRoute } from '../utils/useRoadRoute';
 
 export interface TripMapProps {
   worker: LatLng | null;
@@ -64,6 +66,7 @@ export default function TripMap({ worker, destination, vehicle, padding = DEFAUL
   const lastFix = useRef<LatLng | null>(null);
   const [redraw, setRedraw] = useState(true); // custom marker views are redrawn only while something changed
   const glided = useGlide(worker);
+  const road = useRoadRoute(worker, destination);
 
   useEffect(() => {
     if (!worker) return undefined;
@@ -124,7 +127,15 @@ export default function TripMap({ worker, destination, vehicle, padding = DEFAUL
           </Marker>
         )}
         {worker && destination && (
-          <Polyline coordinates={[{ latitude: worker.lat, longitude: worker.lng }, { latitude: destination.lat, longitude: destination.lng }]} strokeColor={Colors.primary} strokeWidth={5} lineDashPattern={[1, 10]} lineCap="round" />
+          <Polyline
+            coordinates={(road ?? [worker, destination]).map((p) => ({ latitude: p.lat, longitude: p.lng }))}
+            strokeColor={Colors.primary}
+            strokeWidth={5}
+            // Solid along real roads; dotted when only the straight line between the two points is known
+            lineDashPattern={road ? undefined : [1, 10]}
+            lineCap="round"
+            lineJoin="round"
+          />
         )}
         {glided && (
           <Marker coordinate={{ latitude: glided.lat, longitude: glided.lng }} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={redraw} zIndex={2} title="Worker">

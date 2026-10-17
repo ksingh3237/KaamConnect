@@ -5,11 +5,13 @@
 // Location: workers share their position while on the way to a job (utils/workerTracking.ts). The "always" permission
 // lets that keep going when the worker opens Google Maps or locks the phone, so it needs ACCESS_BACKGROUND_LOCATION
 // (Android) and the location background mode (iOS). Both are native entries: rebuild the dev client / EAS build after
-// changing them. Google Play asks for a background-location declaration when an app ships this permission.
+// changing them. The trip runs as an Android foreground service (notification "KaamConnect Trip in Progress"). Google Play asks for a background-location declaration when an app ships this permission.
 module.exports = ({ config }) => {
   const key = (process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '').trim();
   return {
     ...config,
+    // POST_NOTIFICATIONS: Android 13+ shows the "KaamConnect Trip in Progress" notification only when this is allowed
+    android: { ...(config.android || {}), permissions: [...((config.android || {}).permissions || []), 'POST_NOTIFICATIONS'] },
     plugins: [
       ...(config.plugins || []),
       ['react-native-maps', { androidGoogleMapsApiKey: key, iosGoogleMapsApiKey: key }],
@@ -21,6 +23,7 @@ module.exports = ({ config }) => {
           locationAlwaysAndWhenInUsePermission:
             'KaamConnect shares your live position with the customer while you are on the way to a job, even if you switch to Google Maps. It stops when you arrive.',
           isAndroidBackgroundLocationEnabled: true,
+          isAndroidForegroundServiceEnabled: true,
           isIosBackgroundLocationEnabled: true,
         },
       ],

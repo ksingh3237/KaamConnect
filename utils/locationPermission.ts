@@ -3,7 +3,7 @@
 //   customer's map keeps moving when the worker opens Google Maps or locks the phone).
 // The explanation screen (components/WorkerLocationPermissionModal.tsx) is shown BEFORE this runs; this file only does the
 // system part and, when the person has blocked it for good, offers the way to the phone's settings.
-import { Linking, Platform } from 'react-native';
+import { Linking, PermissionsAndroid, Platform } from 'react-native';
 import * as Location from 'expo-location';
 import { confirmAction, notify } from './dialog';
 
@@ -80,6 +80,10 @@ export async function requestWorkerLocationAccess(): Promise<LocationAccess> {
       } catch {
         /* the build has no background-location entry, or the person left the settings page: foreground sharing still works */
       }
+    }
+    // 4. Android 13+: the trip notification ("Sharing your live location") is only shown if notifications are allowed
+    if (Platform.OS === 'android' && Number(Platform.Version) >= 33) {
+      await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS).catch(() => undefined);
     }
     return 'granted';
   } catch {

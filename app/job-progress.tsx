@@ -96,6 +96,19 @@ export default function JobProgressScreen() {
     if (access === 'granted' && jobId) await workerTracking.startTracking(jobId);
   };
 
+  // Development only: drive a pretend worker to the job so both screens can be tried without moving
+  const [simulating, setSimulating] = useState(() => __DEV__ && workerTracking.isSimulating());
+  const toggleSimulation = async () => {
+    if (!jobId) return;
+    if (simulating) {
+      workerTracking.stopSimulation();
+      setSimulating(false);
+      void workerTracking.startTracking(jobId); // back to the real GPS
+      return;
+    }
+    setSimulating(await workerTracking.startSimulation(jobId, { destination }));
+  };
+
   const openNavigation = async () => {
     for (const url of navigationUrls(destination, job?.addressLine, Platform.OS === 'android')) {
       try {
@@ -252,6 +265,11 @@ export default function JobProgressScreen() {
                 <TouchableOpacity style={styles.navBtn} onPress={() => void openNavigation()} activeOpacity={0.85} accessibilityRole="button">
                   <Text style={styles.navBtnText}>🗺️ Open in Google Maps Navigation</Text>
                 </TouchableOpacity>
+                {__DEV__ && (
+                  <TouchableOpacity style={styles.simBtn} onPress={() => void toggleSimulation()} activeOpacity={0.8} accessibilityRole="button">
+                    <Text style={styles.simBtnText}>{simulating ? '⏹ Stop simulated drive' : '🧪 Simulate drive from Sector 17 (dev only)'}</Text>
+                  </TouchableOpacity>
+                )}
                 {!destination && <Text style={styles.hint}>The customer did not pin an exact spot, so navigation opens their typed address.</Text>}
               </View>
             )}
@@ -839,6 +857,8 @@ const styles = StyleSheet.create({
   gpsWait: { backgroundColor: Colors.surfaceVariant, borderWidth: 1, borderColor: Colors.border },
   gpsWaitText: { fontSize: 13, fontWeight: '700', color: Colors.textMuted, textAlign: 'center' },
   navBtn: { marginTop: Spacing.md, minHeight: 48, borderRadius: Radius.md, backgroundColor: Colors.tertiary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.md },
+  simBtn: { marginTop: Spacing.sm, minHeight: 44, borderRadius: Radius.md, borderWidth: 1.5, borderStyle: 'dashed', borderColor: Colors.secondary, backgroundColor: Colors.secondaryLight, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.md },
+  simBtnText: { color: Colors.secondaryDark, fontSize: 13, fontWeight: '800' },
   navBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
   photoThumbRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
 });

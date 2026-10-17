@@ -9,7 +9,7 @@ import type { CustomerView, MeView, OtpRequestResult, SessionUser, VerifyResult,
 import { loadRole } from '../api/storage';
 import { resolveRole } from '../utils/session-routing';
 import { disconnectSocket } from '../api/socket';
-import { stopTracking } from '../utils/workerTracking';
+import { releaseOrphanedTask, stopTracking } from '../utils/workerTracking';
 import { useStore } from './useStore';
 
 export type SessionStatus =
@@ -104,6 +104,7 @@ export const useSession = create<SessionState>((set, get) => {
       endRealtime();
       set({ status: 'signedOut', user: null, me: null, customerProfile: null, workerProfile: null });
     });
+    releaseOrphanedTask(); // a trip service from an earlier run must not keep sharing
     const found = await restoreTokens();
     if (!found) {
       set({ status: 'signedOut' });
