@@ -13,6 +13,7 @@ import { getEarnings, listLeads, listWorkerJobs, patchWorker } from '../api/endp
 import { userMessage } from '../api/errors';
 import type { JobStatus, JobTiming, LeadItem } from '../api/types';
 import { notify } from '../utils/dialog';
+import { useWorkerTracking } from '../utils/useWorkerTracking';
 import { timeAgo, whenLabel } from '../utils/time';
 import { ErrorBlock, LoadingBlock } from './StateBlocks';
 import AppMenu from './AppMenu';
@@ -52,6 +53,8 @@ export default function WorkerHome() {
 
   const openLeads = (leads.data?.items ?? []).filter((l) => l.leadState !== 'DECLINED');
   const activeJobs = (jobs.data?.items ?? []).filter((j) => j.status in JOB_STATUS);
+  // The worker may leave the job screen while driving: sharing GPS follows the job's status, not the open screen
+  useWorkerTracking(jobs.data ? (jobs.data.items.find((j) => j.status === 'ASSIGNED')?.id ?? null) : undefined);
 
   const toggleAvailable = async (next: boolean) => {
     if (switching) return;

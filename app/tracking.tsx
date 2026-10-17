@@ -1,21 +1,26 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Phone, AlertTriangle } from 'lucide-react-native';
-import Svg, { Rect, Path, Circle, Text as SvgText, G } from 'react-native-svg';
 import { Colors, Spacing, Radius } from '../constants/theme';
 import { useStore } from '../store/useStore';
 import { useAsync } from '../api/useAsync';
 import { getJob, getTracking, raiseSos } from '../api/endpoints';
+import { isSocketConnected, onConnectionChange, onJobLocation, onJobStatus, unwatchJob, watchJob } from '../api/socket';
 import { userMessage } from '../api/errors';
-import type { JobView, Tracking } from '../api/types';
+import type { JobLocationPayload, JobView, Tracking } from '../api/types';
 import Avatar from '../components/Avatar';
+import TripMap from '../components/TripMap';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../components/StateBlocks';
 import { callPhone, confirmAction, notify } from '../utils/dialog';
 import { currentPosition } from '../utils/position';
+import { timeAgo } from '../utils/time';
+import { trackingPill } from '../utils/trip';
 
-const POLL_MS = 6000; // the customer sees the worker's progress by polling; REST is the source of truth
+const POLL_MS = 6000; // REST polling while the socket is down: the customer still sees the worker move
+const POLL_SOCKET_UP_MS = 20000; // with a live socket, polling is only a safety net for status changes
+const STALE_MS = 2 * 60 * 1000; // same as the server: an older fix is shown as "last seen"
 
 const STATUS_LABEL: Record<string, string> = {
   OPEN: 'WAITING FOR THE WORKER',
@@ -37,6 +42,8 @@ export default function TrackingScreen() {
   const insets = useSafeAreaInsets();
   const { activeJobId } = useStore();
   const [sosBusy, setSosBusy] = useState(false);
+  const [live, setLive] = useState<JobLocationPayload | null>(null); // newest `job.location` event
+  const [socketUp, setSocketUp] = useState(isSocketConnected());
 
   const state = useAsync<Loaded | null>(
     async () => {
@@ -47,11 +54,51 @@ export default function TrackingScreen() {
       return { job, tracking };
     },
     [activeJobId],
-    { pollMs: POLL_MS },
+    { pollMs: socketUp ? POLL_SOCKET_UP_MS : POLL_MS },
   );
   const job = state.data?.job ?? null;
   const tracking = state.data?.tracking ?? null;
   const worker = job?.worker ?? null;
+  const reloadRef = useRef(state.reload);
+  reloadRef.current = state.reload;
+
+  useEffect(() => {
+    setSocketUp(isSocketConnected());
+    return onConnectionChange(setSocketUp);
+  }, []);
+
+  // Live updates: join the job's room while this screen is open, leave it when it closes
+  const following = Boolean(activeJobId && worker);
+  useEffect(() => {
+    if (!activeJobId || !following) return undefined;
+    watchJob(activeJobId);
+    const offLocation = onJobLocation((p) => {
+      if (p.jobId === activeJobId) setLive(p);
+    });
+    const offStatus = onJobStatus((p) => {
+      if (p.jobId === activeJobId) void reloadRef.current(); // arrived, cancelled...: refresh the card and the arrival code
+    });
+    return () => {
+      offLocation();
+      offStatus();
+      unwatchJob(activeJobId);
+      setLive(null);
+    };
+  }, [activeJobId, following]);
+
+  // The newest position from either door: a socket event or the last REST answer
+  const polled = tracking?.location ?? null;
+  const liveIsNewer = live !== null && (polled === null || Date.parse(live.updatedAt) >= Date.parse(polled.updatedAt));
+  const fix = liveIsNewer ? live : polled;
+  const workerPoint = fix ? { lat: fix.lat, lng: fix.lng } : null;
+  const destination = typeof job?.lat === 'number' && typeof job?.lng === 'number' ? { lat: job.lat, lng: job.lng } : null;
+  const eta = liveIsNewer ? live.etaMinutes : (tracking?.etaMinutes ?? null);
+  const away = liveIsNewer ? live.distanceKm : (tracking?.distanceKm ?? null);
+  const stale = fix ? Date.now() - Date.parse(fix.updatedAt) > STALE_MS : false;
+  const status = tracking?.status ?? job?.status ?? 'OPEN';
+  const pill =
+    trackingPill({ status, hasLocation: fix !== null, stale, etaMinutes: eta, distanceKm: away, lastSeen: fix ? timeAgo(fix.updatedAt) : undefined }) ||
+    (STATUS_LABEL[status] ?? '');
 
   const handleSos = async () => {
     if (!activeJobId || sosBusy) return;
@@ -91,14 +138,17 @@ export default function TrackingScreen() {
     if (phone) void callPhone(phone, worker?.name ?? 'your worker');
   };
 
-  const etaText = (() => {
-    if (!tracking || tracking.status !== 'ASSIGNED') return STATUS_LABEL[job?.status ?? 'OPEN'] ?? '';
-    if (tracking.etaMinutes === null) return 'On the way • waiting for the worker\'s location';
-    return `Arriving in ${tracking.etaMinutes} min${tracking.distanceKm !== null ? ` • ${tracking.distanceKm} km away` : ''}`;
-  })();
-
   return (
     <View style={styles.container}>
+      {/* Live Google map: worker, route line and your location (fills the screen, the card below floats over it) */}
+      <TripMap
+        fill
+        worker={workerPoint}
+        destination={destination}
+        vehicle={tracking?.worker?.vehicle ?? worker?.vehicle}
+        padding={{ top: insets.top + 110, right: 50, bottom: 220, left: 50 }}
+      />
+
       {/* Floating Header */}
       <View style={[styles.floatingHeader, { top: insets.top + 14 }]}>
         <TouchableOpacity
@@ -117,52 +167,12 @@ export default function TrackingScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* SVG Map Canvas */}
-      <View style={styles.mapCanvas}>
-        <Svg viewBox="0 0 400 450" style={styles.svgMap}>
-          <Rect width="400" height="450" fill="#E8EEF5" />
-
-          {/* Landmarks */}
-          <Rect x="20" y="30" width="100" height="70" rx="12" fill="#D1E7DD" />
-          <SvgText x="30" y="70" fill="#4A7C59" fontSize="10" fontWeight="bold">Rose Garden</SvgText>
-
-          <Rect x="260" y="180" width="110" height="80" rx="12" fill="#D1E7DD" />
-          <SvgText x="270" y="225" fill="#4A7C59" fontSize="10" fontWeight="bold">Sec 22 Market</SvgText>
-
-          {/* Road Grid */}
-          <Path d="M 0 140 L 400 140" stroke="#FFFFFF" strokeWidth="14" />
-          <Path d="M 180 0 L 180 450" stroke="#FFFFFF" strokeWidth="16" />
-          <Path d="M 0 320 L 400 320" stroke="#FFFFFF" strokeWidth="14" />
-
-          {/* Active Navigation Path */}
-          <Path
-            d="M 90 140 L 180 140 L 180 280 L 250 280"
-            fill="none"
-            stroke="#00B074"
-            strokeWidth="6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-
-          {/* Destination Pin */}
-          <Circle cx="250" cy="280" r="14" fill="#0284C7" />
-          <Circle cx="250" cy="280" r="6" fill="#FFFFFF" />
-          <SvgText x="210" y="310" fill="#0F172A" fontSize="11" fontWeight="bold">Your location</SvgText>
-
-          {/* Motorbike Moving Pin */}
-          <G transform="translate(130, 140)">
-            <Circle cx="0" cy="0" r="20" fill="rgba(0, 176, 116, 0.25)" />
-            <Circle cx="0" cy="0" r="14" fill="#00B074" />
-            <SvgText x="-6" y="5" fontSize="11">🏍️</SvgText>
-          </G>
-        </Svg>
-
-        {/* Floating ETA Badge */}
-        <View style={[styles.floatingEta, { top: insets.top + 66 }]}>
-          <Text style={{ color: Colors.primary, fontWeight: '800' }}>⚡</Text>
-          <Text style={styles.floatingEtaText}>{etaText}</Text>
+      {/* Floating ETA pill */}
+      {pill ? (
+        <View style={[styles.floatingEta, { top: insets.top + 66 }]} accessibilityLiveRegion="polite">
+          <Text style={styles.floatingEtaText}>{pill}</Text>
         </View>
-      </View>
+      ) : null}
 
       {/* Technician Bottom Drawer Card */}
       <View style={[styles.bottomDrawer, { paddingBottom: Math.max(insets.bottom, 24) }]}>
@@ -269,32 +279,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     elevation: 4
   },
-  mapCanvas: {
-    flex: 1,
-    position: 'relative'
-  },
-  svgMap: {
-    width: '100%',
-    height: '100%'
-  },
   floatingEta: {
     position: 'absolute',
     alignSelf: 'center',
+    maxWidth: '92%',
+    zIndex: 40,
     backgroundColor: '#1E293B',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: Radius.full,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
     elevation: 6
   },
   floatingEtaText: {
     color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '800'
+    fontSize: 13,
+    fontWeight: '800',
+    textAlign: 'center'
   },
   bottomDrawer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
@@ -315,11 +321,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     marginBottom: 12
-  },
-  workerAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25
   },
   workerName: {
     flexShrink: 1,

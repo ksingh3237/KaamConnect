@@ -15,8 +15,11 @@ import { getCategories, getLocations, putWorker, putWorkerDocument } from '../ap
 import { isApiError, userMessage } from '../api/errors';
 import { uploadFile, type PickedFile } from '../api/upload';
 import { pickImage } from '../utils/pickImage';
+import { getLocationAccess } from '../utils/locationPermission';
+import WorkerLocationPermissionModal from '../components/WorkerLocationPermissionModal';
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks';
 import SectorPicker from '../components/SectorPicker';
+import GoogleLocationPicker, { type PickedLocation } from '../components/GoogleLocationPicker';
 import { serviceIcon } from '../constants/services';
 import type { DocumentType, Lang, VerificationStatus } from '../api/types';
 
@@ -67,6 +70,8 @@ export default function WorkerOnboardingScreen() {
   const [localityName, setLocalityName] = useState<string | null>(existing?.locality ?? null);
   const [shopAddress, setShopAddress] = useState(existing?.addressLine ?? '');
   const [pickingBase, setPickingBase] = useState(false);
+  // The address text the map filled in, so a later pick can replace it but never the person's own typing
+  const [autoLine, setAutoLine] = useState('');
   const [radius, setRadius] = useState(existing ? `${existing.radiusKm} km` : '6 km');
   const [vehicle, setVehicle] = useState(existing?.vehicle ?? '');
   const [upiId, setUpiId] = useState(existing?.upiId ?? '');
@@ -74,6 +79,7 @@ export default function WorkerOnboardingScreen() {
   const [agreed, setAgreed] = useState(false);
   const [agreeError, setAgreeError] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [showLocation, setShowLocation] = useState(false);
   const [resultStatus, setResultStatus] = useState<VerificationStatus>('PENDING');
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -92,6 +98,19 @@ export default function WorkerOnboardingScreen() {
   }, [locations.data, baseAreaId, localityName]);
 
   const displayPhone = (user?.phone ?? '').replace(/^\+91/, '');
+
+  // The map/search/GPS picker found the workshop: select its sector (when matched) and fill the address unless typed.
+  // The server keeps the area, locality and address line for a worker; it has no field for the exact pin yet.
+  const handlePicked = (loc: PickedLocation) => {
+    if (loc.areaId !== null) {
+      setBaseAreaId(loc.areaId);
+      setLocalityName(loc.localityName);
+      setPickingBase(false);
+    }
+    setShopAddress((prev) => (prev.trim() === '' || prev === autoLine ? loc.line : prev));
+    setAutoLine(loc.line);
+    setFormError(null);
+  };
 
   const toggleTrade = (id: string) => {
     setTrades((prev) => {
@@ -201,10 +220,16 @@ export default function WorkerOnboardingScreen() {
     setFormError(message);
   }
 
-  const handleGoDashboard = () => {
-    setShowModal(false);
+  const openDashboard = () => {
     setRole('worker');
     resetTo('/(tabs)/home');
+  };
+
+  // Last step of onboarding: explain and ask for the location permission (once), then go to the dashboard
+  const handleGoDashboard = async () => {
+    setShowModal(false);
+    if ((await getLocationAccess()) === 'granted') openDashboard();
+    else setShowLocation(true);
   };
 
   return (
@@ -231,7 +256,7 @@ export default function WorkerOnboardingScreen() {
         </View>
       </View>
 
-      <ScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Subtle Trust Banner Header */}
         <View style={styles.trustBanner}>
           <View style={styles.trustBannerLeft}>
@@ -434,6 +459,12 @@ export default function WorkerOnboardingScreen() {
             </View>
             <Text style={styles.labelHighlight}>{baseLabel?.city ?? 'Choose base'}</Text>
           </View>
+
+          {locations.data && (
+            <View style={{ marginBottom: 12 }}>
+              <GoogleLocationPicker locations={locations.data} onChange={handlePicked} />
+            </View>
+          )}
 
           <View style={styles.baseSector}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
@@ -644,12 +675,20 @@ export default function WorkerOnboardingScreen() {
               <Text style={styles.modalInfoText}>No commission cuts will ever be deducted from your earnings.</Text>
             </View>
 
-            <TouchableOpacity style={styles.modalBtn} onPress={handleGoDashboard}>
+            <TouchableOpacity style={styles.modalBtn} onPress={() => void handleGoDashboard()}>
               <Text style={styles.modalBtnText}>Open my dashboard (डैशबोर्ड खोलें)</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
+
+      <WorkerLocationPermissionModal
+        visible={showLocation}
+        onDone={() => {
+          setShowLocation(false);
+          openDashboard();
+        }}
+      />
     </SafeAreaView>
   );
 }

@@ -24,6 +24,9 @@ import { uploadFile, type PickedFile } from "../../api/upload";
 import { pickImage } from "../../utils/pickImage";
 import type { CreateJobBody, JobTiming } from "../../api/types";
 import { ErrorBlock, LoadingBlock } from "../../components/StateBlocks";
+import GoogleLocationPicker, {
+  type PickedLocation,
+} from "../../components/GoogleLocationPicker";
 
 const MAX_PHOTOS = 4;
 /** Approximate width of one service pill plus the gap, used to scroll the chosen one into view. */
@@ -64,6 +67,12 @@ export default function PostJobScreen() {
   const [customLine, setCustomLine] = useState("");
   const [customAreaId, setCustomAreaId] = useState<number | null>(null);
   const [customLocality, setCustomLocality] = useState("");
+  const [customCoords, setCustomCoords] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
+  // What the map last filled in, so a later pick replaces it but never the person's own typing
+  const [autoFill, setAutoFill] = useState({ line: "", locality: "" });
   const [lineError, setLineError] = useState(false);
   const [areaError, setAreaError] = useState(false);
   const [localityError, setLocalityError] = useState(false);
@@ -117,6 +126,26 @@ export default function PostJobScreen() {
     }
   };
 
+  // The map/search/GPS picker found the job site: keep the pin, select its sector (when matched) and fill the address
+  // fields unless the person has typed their own.
+  const handlePicked = (loc: PickedLocation) => {
+    setCustomCoords({ lat: loc.lat, lng: loc.lng });
+    if (loc.areaId !== null) {
+      setCustomAreaId(loc.areaId);
+      setAreaError(false);
+    }
+    const locality = loc.areaId !== null ? (loc.localityName ?? "") : "";
+    setCustomLine((prev) =>
+      prev.trim() === "" || prev === autoFill.line ? loc.line : prev,
+    );
+    setCustomLocality((prev) =>
+      prev.trim() === "" || prev === autoFill.locality ? locality : prev,
+    );
+    setAutoFill({ line: loc.line, locality });
+    setLineError(false);
+    setLocalityError(false);
+  };
+
   const handleBroadcast = async () => {
     if (posting || uploading) return;
     setFormError(null);
@@ -144,6 +173,7 @@ export default function PostJobScreen() {
           areaId: customAreaId,
           line,
           ...(locality ? { localityName: locality } : {}),
+          ...(customCoords ?? {}),
         },
       };
     } else {
@@ -174,6 +204,8 @@ export default function PostJobScreen() {
       setCustomLine("");
       setCustomAreaId(null);
       setCustomLocality("");
+      setCustomCoords(null);
+      setAutoFill({ line: "", locality: "" });
       router.push("/compare-offers");
     } catch (error) {
       const fields = isApiError(error)
@@ -432,6 +464,14 @@ export default function PostJobScreen() {
 
           {addressMode === "CUSTOM" && (
             <View style={styles.customBox}>
+              {locations.data && (
+                <View style={{ marginBottom: 14 }}>
+                  <GoogleLocationPicker
+                    locations={locations.data}
+                    onChange={handlePicked}
+                  />
+                </View>
+              )}
               <Text style={styles.subLabel}>
                 House / Flat / Street / मकान नंबर, गली *
               </Text>

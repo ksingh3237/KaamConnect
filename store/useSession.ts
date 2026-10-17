@@ -8,6 +8,8 @@ import { getWidgetClient, isMsg91WidgetConfigured } from '../api/msg91';
 import type { CustomerView, MeView, OtpRequestResult, SessionUser, VerifyResult, WorkerView } from '../api/types';
 import { loadRole } from '../api/storage';
 import { resolveRole } from '../utils/session-routing';
+import { disconnectSocket } from '../api/socket';
+import { stopTracking } from '../utils/workerTracking';
 import { useStore } from './useStore';
 
 export type SessionStatus =
@@ -47,6 +49,12 @@ async function loadProfiles(me: MeView): Promise<{ customerProfile: CustomerView
     me.worker ? endpoints.getWorkerProfile().catch(() => null) : Promise.resolve(null),
   ]);
   return { customerProfile, workerProfile };
+}
+
+/** A login ended: nothing may keep sharing the person's location or listening on their behalf. */
+function endRealtime(): void {
+  stopTracking();
+  disconnectSocket();
 }
 
 export const useSession = create<SessionState>((set, get) => {
@@ -92,7 +100,10 @@ export const useSession = create<SessionState>((set, get) => {
   otpLength: 6,
 
   bootstrap: async () => {
-    onSessionEnded(() => set({ status: 'signedOut', user: null, me: null, customerProfile: null, workerProfile: null }));
+    onSessionEnded(() => {
+      endRealtime();
+      set({ status: 'signedOut', user: null, me: null, customerProfile: null, workerProfile: null });
+    });
     const found = await restoreTokens();
     if (!found) {
       set({ status: 'signedOut' });
@@ -177,11 +188,13 @@ export const useSession = create<SessionState>((set, get) => {
     } catch {
       /* best effort: the local login is cleared either way */
     }
+    endRealtime();
     await setTokens(null);
     set({ status: 'signedOut', user: null, me: null, customerProfile: null, workerProfile: null });
   },
 
   clearLocal: async () => {
+    endRealtime();
     await setTokens(null);
     set({ status: 'signedOut', user: null, me: null, customerProfile: null, workerProfile: null });
   },

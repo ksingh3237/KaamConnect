@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, ActivityIndicator } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, ActivityIndicator, Linking, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, CheckCircle2, Phone, ShieldCheck, Zap } from 'lucide-react-native';
@@ -10,7 +10,14 @@ import { addWorkPhoto, approveBill, completeWork, getBill, getJob, payJob, putBi
 import { isApiError, userMessage } from '../api/errors';
 import { uploadFile } from '../api/upload';
 import { pickImage } from '../utils/pickImage';
-import { callPhone, confirmAction } from '../utils/dialog';
+import { callPhone, confirmAction, notify } from '../utils/dialog';
+import { getLocationAccess, requestWorkerLocationAccess } from '../utils/locationPermission';
+import { workerTracking } from '../utils/workerTracking';
+import { useWorkerTracking } from '../utils/useWorkerTracking';
+import { navigationUrls } from '../utils/trip';
+import { useSession } from '../store/useSession';
+import TripMap from '../components/TripMap';
+import WorkerLocationPermissionModal from '../components/WorkerLocationPermissionModal';
 import type { BillItemKind, BillView, JobView, PaymentMethod } from '../api/types';
 import Avatar from '../components/Avatar';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../components/StateBlocks';
@@ -42,7 +49,10 @@ interface DraftItem {
 
 export default function JobProgressScreen() {
   const router = useRouter();
-  const { activeJobId } = useStore();
+  const { activeJobId, currentLat, currentLng, isTrackingActive, trackingIssue } = useStore();
+  const workerProfile = useSession((s) => s.workerProfile);
+  const [askLocation, setAskLocation] = useState(false);
+  const askedFor = useRef<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [code, setCode] = useState('');
@@ -63,6 +73,40 @@ export default function JobProgressScreen() {
   const bill = state.data?.bill ?? null;
   const isWorker = job?.viewer === 'worker';
   const other = isWorker ? job?.customer : job?.worker;
+
+  // Worker on the way: share GPS for this job while it stays ASSIGNED, stop the moment it is not (arrived, cancelled...)
+  const enRoute = isWorker && job?.status === 'ASSIGNED';
+  const jobId = job?.id;
+  useWorkerTracking(!job ? undefined : enRoute ? job.id : null);
+
+  // The first time a job turns ASSIGNED, check the permission and explain it if it was never granted
+  useEffect(() => {
+    if (!enRoute || !jobId || askedFor.current === jobId) return;
+    askedFor.current = jobId;
+    void getLocationAccess().then((access) => {
+      if (access === 'ask') setAskLocation(true);
+    });
+  }, [enRoute, jobId]);
+
+  const workerPoint = currentLat !== null && currentLng !== null ? { lat: currentLat, lng: currentLng } : null;
+  const destination = typeof job?.lat === 'number' && typeof job?.lng === 'number' ? { lat: job.lat, lng: job.lng } : null;
+
+  const reenableGps = async () => {
+    const access = await requestWorkerLocationAccess();
+    if (access === 'granted' && jobId) await workerTracking.startTracking(jobId);
+  };
+
+  const openNavigation = async () => {
+    for (const url of navigationUrls(destination, job?.addressLine, Platform.OS === 'android')) {
+      try {
+        await Linking.openURL(url);
+        return;
+      } catch {
+        /* no app for this link: try the next one */
+      }
+    }
+    void notify('Navigation not available', 'The customer has not shared a map location or address for this job. Please call them for directions.');
+  };
 
   // Runs one server action, shows its error under the buttons, and refreshes the screen on success
   const run = async (name: string, action: () => Promise<unknown>, after?: () => void) => {
@@ -179,6 +223,39 @@ export default function JobProgressScreen() {
               </View>
             )}
 
+            {/* Worker on the way: live GPS status, map and turn-by-turn navigation */}
+            {enRoute && (
+              <View style={styles.card}>
+                <Text style={styles.sectionTitle}>On the way (रास्ते में)</Text>
+                {isTrackingActive ? (
+                  <View style={[styles.gpsPill, styles.gpsOn]} accessibilityLiveRegion="polite">
+                    <Text style={styles.gpsOnText}>🟢 Live GPS Sharing Active • Customer can see your arrival</Text>
+                  </View>
+                ) : trackingIssue ? (
+                  <TouchableOpacity style={[styles.gpsPill, styles.gpsOff]} onPress={() => void reenableGps()} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel="GPS paused. Tap to re-enable location">
+                    <Text style={styles.gpsOffText}>
+                      ⚠️ GPS Paused • Tap to re-enable location{trackingIssue === 'SERVICES_OFF' ? ' (phone location is off)' : ''}
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={[styles.gpsPill, styles.gpsWait]}>
+                    <Text style={styles.gpsWaitText}>Starting GPS…</Text>
+                  </View>
+                )}
+
+                {(workerPoint || destination) && (
+                  <View style={{ marginTop: Spacing.md }}>
+                    <TripMap worker={workerPoint} destination={destination} vehicle={workerProfile?.vehicle} height={200} />
+                  </View>
+                )}
+
+                <TouchableOpacity style={styles.navBtn} onPress={() => void openNavigation()} activeOpacity={0.85} accessibilityRole="button">
+                  <Text style={styles.navBtnText}>🗺️ Open in Google Maps Navigation</Text>
+                </TouchableOpacity>
+                {!destination && <Text style={styles.hint}>The customer did not pin an exact spot, so navigation opens their typed address.</Text>}
+              </View>
+            )}
+
             {/* Milestones */}
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Service Milestones (कार्य प्रगति)</Text>
@@ -219,7 +296,10 @@ export default function JobProgressScreen() {
                   <TouchableOpacity
                     style={[styles.smallBtn, (code.length !== 4 || busy !== null) && { opacity: 0.6 }]}
                     disabled={code.length !== 4 || busy !== null}
-                    onPress={() => void run('arrival', () => verifyArrival(activeJobId!, code), () => setCode(''))}
+                    onPress={() => void run('arrival', () => verifyArrival(activeJobId!, code), () => {
+                      setCode('');
+                      workerTracking.stopTracking(); // arrived: the customer no longer needs the live dot
+                    })}
                     accessibilityRole="button"
                   >
                     {busy === 'arrival' ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.smallBtnText}>Verify arrival</Text>}
@@ -383,6 +463,14 @@ export default function JobProgressScreen() {
           </>
         )}
       </ScrollView>
+
+      <WorkerLocationPermissionModal
+        visible={askLocation}
+        onDone={(result) => {
+          setAskLocation(false);
+          if (result === 'granted' && jobId) void workerTracking.startTracking(jobId);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -743,5 +831,14 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 13, fontWeight: '700', color: Colors.textMuted },
   chipTextOn: { color: Colors.primaryDark },
   itemBox: { borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, padding: 10, marginTop: 8, backgroundColor: '#FAFCFE' },
+  gpsPill: { borderRadius: Radius.full, paddingHorizontal: 14, paddingVertical: 9 },
+  gpsOn: { backgroundColor: Colors.successLight, borderWidth: 1, borderColor: '#A7F3D0' },
+  gpsOnText: { fontSize: 13, fontWeight: '700', color: '#065F46', textAlign: 'center' },
+  gpsOff: { backgroundColor: Colors.secondaryLight, borderWidth: 1, borderColor: '#FCD34D' },
+  gpsOffText: { fontSize: 13, fontWeight: '800', color: Colors.secondaryDark, textAlign: 'center' },
+  gpsWait: { backgroundColor: Colors.surfaceVariant, borderWidth: 1, borderColor: Colors.border },
+  gpsWaitText: { fontSize: 13, fontWeight: '700', color: Colors.textMuted, textAlign: 'center' },
+  navBtn: { marginTop: Spacing.md, minHeight: 48, borderRadius: Radius.md, backgroundColor: Colors.tertiary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.md },
+  navBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
   photoThumbRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
 });

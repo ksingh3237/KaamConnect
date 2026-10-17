@@ -423,3 +423,15 @@ export interface PresignResult {
   key: string;
   expiresInSec: number;
 }
+
+// ── realtime (Socket.IO /realtime)
+/** The `job.location` event: the worker's position on the way to a job. distanceKm / etaMinutes are null without real coordinates. */
+export interface JobLocationPayload {
+  jobId: string;
+  lat: number;
+  lng: number;
+  updatedAt: string;
+  distanceKm: number | null;
+  etaMinutes: number | null;
+  distanceBasis: 'JOB_COORDINATES' | 'AREA_CENTROID' | null;
+}
