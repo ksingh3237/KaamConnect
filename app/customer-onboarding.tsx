@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Switch, Platform, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -11,14 +11,16 @@ import { useAsync } from '../api/useAsync';
 import { getLocations, putCustomer } from '../api/endpoints';
 import { isApiError, userMessage } from '../api/errors';
 import { uploadFile } from '../api/upload';
-import { pickImage } from '../utils/pickImage';
-import { currentPosition, type Position } from '../utils/position';
+import { useImagePicker } from '../components/ImageSourceModal';
+import type { Position } from '../utils/position';
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks';
 import SectorPicker from '../components/SectorPicker';
+import GoogleLocationPicker, { type PickedLocation } from '../components/GoogleLocationPicker';
 
 export default function CustomerOnboardingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { pick: pickImage, modal: imageSourceModal } = useImagePicker();
   const { selectedAreaId, setSelectedSector, setRole } = useStore();
   const { customerProfile, user, refreshMe } = useSession();
   const locations = useAsync(() => getLocations(), [], { reloadOnFocus: false });
@@ -41,21 +43,22 @@ export default function CustomerOnboardingScreen() {
   const [photoKey, setPhotoKey] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [coords, setCoords] = useState<Position | null>(null);
-  const [gps, setGps] = useState<'idle' | 'busy' | 'done' | 'unavailable'>('idle');
+  // The address text the map filled in; while the field still equals it we remind the person to add the flat number
+  const [autoLine, setAutoLine] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const scrollRef = useRef<ScrollView>(null);
   const personalCardY = useRef(0);
 
-  // "Sector 22, Chandigarh" for the chosen area, built from the server's list
-  const areaLabel = useMemo(() => {
+  // "Sector 22, Chandigarh" for an area, built from the server's list
+  const labelOf = (id: number, locality: string | null) => {
     for (const city of locations.data ?? []) {
-      const area = city.areas.find((a) => a.id === areaId);
-      if (area) return `${localityName ?? area.name}, ${city.name.replace(/\s*\(.*\)/, '')}`;
+      const area = city.areas.find((a) => a.id === id);
+      if (area) return `${locality ?? area.name}, ${city.name.replace(/\s*\(.*\)/, '')}`;
     }
     return '';
-  }, [locations.data, areaId, localityName]);
+  };
 
   const displayPhone = (user?.phone ?? '').replace(/^\+91/, '');
 
@@ -66,16 +69,14 @@ export default function CustomerOnboardingScreen() {
     setSelectedSector(label, id);
   };
 
-  // Captures real coordinates for the address when the device can give them. It does not pick a sector:
-  // that needs the area's own coordinates, which are not loaded yet, so the person still taps their sector.
-  const handleGpsDetect = async () => {
-    setGps('busy');
-    try {
-      setCoords(await currentPosition());
-      setGps('done');
-    } catch {
-      setGps('unavailable');
-    }
+  // The map/search/GPS picker found a place: keep its coordinates, select the matching sector (when it found one) and
+  // fill the address line unless the person has already typed their own.
+  const handlePicked = (loc: PickedLocation) => {
+    setCoords({ lat: loc.lat, lng: loc.lng });
+    if (loc.areaId !== null) chooseArea(loc.areaId, labelOf(loc.areaId, loc.localityName), loc.localityName);
+    setAddress((prev) => (prev.trim() === '' || prev === autoLine ? loc.line : prev));
+    setAutoLine(loc.line);
+    setFormError(null);
   };
 
   const handlePickPhoto = async () => {
@@ -274,18 +275,15 @@ export default function CustomerOnboardingScreen() {
             </View>
           </View>
 
-          <TouchableOpacity style={styles.gpsBtn} onPress={() => void handleGpsDetect()} activeOpacity={0.8} disabled={gps === 'busy'}>
-            <MapPin color="#006c46" size={20} strokeWidth={2} />
-            <Text style={styles.gpsBtnText}>
-              {gps === 'busy'
-                ? 'Finding your location… / स्थान खोज रहे हैं…'
-                : gps === 'done'
-                  ? 'Location captured ✓ (now tap your sector)'
-                  : gps === 'unavailable'
-                    ? 'Location unavailable here — tap your sector below'
-                    : 'Auto-Detect GPS Location / वर्तमान स्थान'}
-            </Text>
-          </TouchableOpacity>
+          {locations.data && (
+            <View style={{ marginBottom: 16 }}>
+              <GoogleLocationPicker
+                locations={locations.data}
+                onChange={handlePicked}
+                initial={primary?.lat != null && primary?.lng != null ? { lat: primary.lat, lng: primary.lng } : null}
+              />
+            </View>
+          )}
 
           <View style={styles.inputGroup}>
             <Text style={styles.labelText}>House / Flat / Landmark</Text>
@@ -299,6 +297,9 @@ export default function CustomerOnboardingScreen() {
                 placeholderTextColor="#6c7a70"
               />
             </View>
+            {address !== '' && address === autoLine && (
+              <Text style={styles.hintText}>Filled from the map. Add your house / flat number at the start. / घर या फ़्लैट नंबर आगे जोड़ें</Text>
+            )}
           </View>
 
           <View style={styles.sectorSelectionWrap}>
@@ -314,16 +315,6 @@ export default function CustomerOnboardingScreen() {
                 <SectorPicker locations={locations.data} value={areaId} locality={localityName} onChange={chooseArea} />
               </View>
             )}
-          </View>
-
-          {/* Placeholder Map View */}
-          <View style={styles.mapPlaceholder}>
-            <View style={styles.mapOverlay}>
-              <View style={styles.mapTextRow}>
-                <MapPin color="#53de9e" size={20} strokeWidth={2.5} />
-                <Text style={styles.mapText}>{areaLabel ? `${areaLabel}, India` : 'Select your sector above'}</Text>
-              </View>
-            </View>
           </View>
         </View>
 
@@ -402,6 +393,7 @@ export default function CustomerOnboardingScreen() {
           <Text style={styles.footerNoteText}>Aadhaar-free instant signup for Chandigarh, Mohali & Panchkula</Text>
         </View>
       </View>
+      {imageSourceModal}
     </SafeAreaView>
   );
 }
@@ -722,26 +714,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111c2d'
   },
-  gpsBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    width: '100%',
-    minHeight: 52,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#dee8ff',
-    borderRadius: 8,
-    marginBottom: 16
-  },
-  gpsBtnText: {
-    flexShrink: 1,
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#006c46'
-  },
   sectorSelectionWrap: {
     marginTop: 8
   },
@@ -783,36 +755,6 @@ const styles = StyleSheet.create({
   sectorChipTextActive: {
     color: '#ffffff',
     fontWeight: '700'
-  },
-  mapPlaceholder: {
-    width: '100%',
-    height: 144,
-    backgroundColor: '#e7eeff', // solid fallback
-    borderRadius: 12,
-    marginTop: 16,
-    overflow: 'hidden',
-    position: 'relative'
-  },
-  mapOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 60,
-    backgroundColor: 'rgba(38, 49, 67, 0.5)',
-    justifyContent: 'flex-end',
-    padding: 12
-  },
-  mapTextRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8
-  },
-  mapText: {
-    flexShrink: 1,
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#ffffff'
   },
   commGrid: {
     flexDirection: 'row',

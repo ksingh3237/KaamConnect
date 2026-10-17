@@ -14,14 +14,32 @@
       "bundleIdentifier": "com.kaamconnect.app"
     },
     "android": {
-      "package": "com.kaamconnect.app"
+      "package": "com.kaamconnect.app",
+      "permissions": [
+        "CAMERA"
+      ],
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "bundler": "metro"
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "KaamConnect needs your photos so you can attach pictures to jobs and your profile.",
+          "cameraPermission": "KaamConnect needs the camera so you can take photos of the job and your documents."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#00B074",
+          "defaultChannel": "default"
+        }
+      ]
     ],
     "extra": {
       "router": {},

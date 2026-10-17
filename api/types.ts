@@ -163,12 +163,22 @@ export interface Page<T> {
 }
 
 // ── jobs (customer)
+/** A one-off job address typed for a single job (not saved to the profile). lat and lng go together or not at all. */
+export interface JobAddressInput {
+  areaId: number;
+  line: string;
+  localityName?: string;
+  lat?: number;
+  lng?: number;
+}
 export interface CreateJobBody {
   categoryId: string;
   title: string;
   description?: string;
   timing: JobTiming;
+  /** Send exactly one of addressId (saved address) or address (typed for this job). */
   addressId?: string;
+  address?: JobAddressInput;
   photoKeys?: string[];
   voiceNote?: { key: string; durationSec: number };
 }
@@ -412,4 +422,38 @@ export interface PresignResult {
   headers: Record<string, string>;
   key: string;
   expiresInSec: number;
+}
+
+// ── realtime (Socket.IO /realtime)
+/** The `job.location` event: the worker's position on the way to a job. distanceKm / etaMinutes are null without real coordinates. */
+export interface JobLocationPayload {
+  jobId: string;
+  lat: number;
+  lng: number;
+  updatedAt: string;
+  distanceKm: number | null;
+  etaMinutes: number | null;
+  distanceBasis: 'JOB_COORDINATES' | 'AREA_CENTROID' | null;
+}
+
+// ── notifications (bell inbox + push)
+export type NotificationType =
+  | 'NEW_LEAD'
+  | 'DIRECT_REQUEST'
+  | 'NEW_QUOTE'
+  | 'BOOKING_CONFIRMED'
+  | 'WORKER_EN_ROUTE'
+  | 'WORKER_ARRIVED'
+  | 'BILL_CREATED'
+  | 'WORK_COMPLETED';
+
+export interface NotificationItem {
+  id: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  /** Always has `type`; job notifications also have `jobId`. */
+  data: Record<string, unknown>;
+  isRead: boolean;
+  createdAt: string;
 }

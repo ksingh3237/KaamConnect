@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -7,13 +7,15 @@ import { Colors, Spacing, Radius } from '../../constants/theme';
 import { useStore } from '../../store/useStore';
 import { useSession } from '../../store/useSession';
 import { useAsync } from '../../api/useAsync';
-import { acceptDirect, declineDirect, getCategories, listLeads, listWorkerJobs, putWorkerLocation } from '../../api/endpoints';
+import { acceptDirect, declineDirect, getCategories, listLeads, listWorkerJobs } from '../../api/endpoints';
 import { userMessage } from '../../api/errors';
-import { currentPosition } from '../../utils/position';
+import { useWorkerTracking } from '../../utils/useWorkerTracking';
 import { notify } from '../../utils/dialog';
 import { timeAgo, whenLabel } from '../../utils/time';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../../components/StateBlocks';
+import { LeadCardSkeleton } from '../../components/skeletons/LeadCardSkeleton';
 import ServiceCard from '../../components/ServiceCard';
+import NotificationBell from '../../components/NotificationBell';
 
 const LEAD_FILTERS: { id: 'all' | 'immediate' | 'scheduled'; label: string }[] = [
   { id: 'all', label: 'All Leads' },
@@ -21,7 +23,6 @@ const LEAD_FILTERS: { id: 'all' | 'immediate' | 'scheduled'; label: string }[] =
   { id: 'scheduled', label: 'Scheduled' },
 ];
 const LEADS_POLL_MS = 15000; // new requests show up while the radar is open
-const PING_MS = 20000; // while a job is on the way, the customer sees the worker move
 
 export default function LeadsScreen() {
   const router = useRouter();
@@ -36,24 +37,8 @@ export default function LeadsScreen() {
   const myJobs = useAsync(() => (isWorker ? listWorkerJobs('ongoing') : Promise.resolve(null)), [isWorker], { pollMs: isWorker ? LEADS_POLL_MS : undefined });
   const visibleLeads = leads.data?.items ?? [];
   const activeJobs = myJobs.data?.items ?? [];
-  const onTheWay = activeJobs.some((j) => j.status === 'ASSIGNED');
-
-  // Best effort: share the device position while a job is on the way, so the customer's tracker can move
-  useEffect(() => {
-    if (!isWorker || !onTheWay) return undefined;
-    let stopped = false;
-    const ping = () => {
-      currentPosition(5000)
-        .then((p) => (stopped ? undefined : putWorkerLocation(p.lat, p.lng)))
-        .catch(() => undefined);
-    };
-    ping();
-    const timer = setInterval(ping, PING_MS);
-    return () => {
-      stopped = true;
-      clearInterval(timer);
-    };
-  }, [isWorker, onTheWay]);
+  // Share the device position while a job is on the way, so the customer's tracker can move (utils/workerTracking.ts)
+  useWorkerTracking(!isWorker || !myJobs.data ? undefined : (activeJobs.find((j) => j.status === 'ASSIGNED')?.id ?? null));
 
   const answerDirect = async (jobId: string, accept: boolean) => {
     if (directBusy) return;
@@ -103,6 +88,7 @@ export default function LeadsScreen() {
             </Text>
             <Text style={styles.headerSub}>Chandigarh • Mohali • Panchkula</Text>
           </View>
+          <NotificationBell />
         </View>
 
         {isWorker ? (
@@ -169,7 +155,7 @@ export default function LeadsScreen() {
               })}
             </ScrollView>
 
-            {leads.loading && <LoadingBlock label="Looking for requests… / अनुरोध खोज रहे हैं…" />}
+            {leads.loading && <LeadCardSkeleton />}
             {leads.error && !leads.data && <ErrorBlock message={leads.error} onRetry={() => void leads.reload()} />}
             {leads.errorCode === 'WORKER_NOT_VERIFIED' && <EmptyBlock title="Profile under review" hint="Leads open up once the team has verified your Aadhaar. / सत्यापन के बाद लीड दिखेंगे" />}
             {leads.data && visibleLeads.length === 0 && (

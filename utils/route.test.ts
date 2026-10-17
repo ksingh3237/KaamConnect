@@ -1,0 +1,74 @@
+import { describe, expect, it } from 'vitest';
+import { decodePolyline, offRouteMeters, parseGoogleRoute, parseOsrmRoute, remainingPath, resample } from './route';
+import { distanceKm } from './trip';
+
+// Straight road going east along one latitude, about 1.1 km long
+const road = [
+  { lat: 30.7333, lng: 76.77 },
+  { lat: 30.7333, lng: 76.775 },
+  { lat: 30.7333, lng: 76.78 },
+];
+
+describe('decodePolyline', () => {
+  it('decodes the example from Google\'s documentation', () => {
+    const points = decodePolyline('_p~iF~ps|U_ulLnnqC_mqNvxq`@');
+    expect(points).toEqual([
+      { lat: 38.5, lng: -120.2 },
+      { lat: 40.7, lng: -120.95 },
+      { lat: 43.252, lng: -126.453 },
+    ]);
+  });
+  it('returns nothing for an empty string', () => {
+    expect(decodePolyline('')).toEqual([]);
+  });
+});
+
+describe('route answers', () => {
+  it('reads a Google Routes answer and rejects an empty one', () => {
+    expect(parseGoogleRoute({ routes: [{ polyline: { encodedPolyline: '_p~iF~ps|U_ulLnnqC' } }] })).toHaveLength(2);
+    expect(parseGoogleRoute({})).toBeNull();
+    expect(parseGoogleRoute({ routes: [{ polyline: { encodedPolyline: '' } }] })).toBeNull();
+    expect(parseGoogleRoute(null)).toBeNull();
+  });
+  it('reads an OSRM answer (lng first) and rejects errors', () => {
+    const ok = { code: 'Ok', routes: [{ geometry: { coordinates: [[76.77, 30.73], [76.78, 30.74]] } }] };
+    expect(parseOsrmRoute(ok)).toEqual([{ lat: 30.73, lng: 76.77 }, { lat: 30.74, lng: 76.78 }]);
+    expect(parseOsrmRoute({ code: 'NoRoute', routes: [] })).toBeNull();
+    expect(parseOsrmRoute({ code: 'Ok', routes: [{ geometry: { coordinates: 'x' } }] })).toBeNull();
+  });
+});
+
+describe('offRouteMeters / remainingPath', () => {
+  it('is ~0 on the road and grows beside it', () => {
+    expect(offRouteMeters(road, { lat: 30.7333, lng: 76.7725 })).toBeLessThan(1);
+    const beside = offRouteMeters(road, { lat: 30.7342, lng: 76.7725 }); // 0.0009 deg north is about 100 m
+    expect(beside).toBeGreaterThan(90);
+    expect(beside).toBeLessThan(110);
+    expect(offRouteMeters([road[0]], road[0])).toBe(Infinity);
+  });
+  it('drops the part already driven and starts at the worker', () => {
+    const worker = { lat: 30.7333, lng: 76.7765 };
+    expect(remainingPath(road, worker)).toEqual([worker, road[2]]);
+  });
+});
+
+describe('resample', () => {
+  it('spaces points evenly and ends on the last point', () => {
+    const points = resample(road, 100);
+    expect(points[0]).toEqual(road[0]);
+    expect(points[points.length - 1]).toEqual(road[2]);
+    for (let i = 1; i < points.length - 1; i++) {
+      expect(distanceKm(points[i - 1], points[i]) * 1000).toBeGreaterThan(95);
+      expect(distanceKm(points[i - 1], points[i]) * 1000).toBeLessThan(105);
+    }
+    expect(points.length).toBeGreaterThan(10);
+  });
+  it('keeps the spacing across a corner', () => {
+    const corner = [{ lat: 30.7333, lng: 76.77 }, { lat: 30.7333, lng: 76.7712 }, { lat: 30.7345, lng: 76.7712 }];
+    const points = resample(corner, 50);
+    for (let i = 1; i < points.length - 1; i++) {
+      expect(distanceKm(points[i - 1], points[i]) * 1000).toBeGreaterThan(30); // shorter chord across the corner, never a jump
+      expect(distanceKm(points[i - 1], points[i]) * 1000).toBeLessThan(52);
+    }
+  });
+});

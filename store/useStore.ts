@@ -6,6 +6,7 @@ import { saveRole } from '../api/storage';
 
 export type Language = 'en' | 'hi' | 'pa';
 export type UserRole = 'customer' | 'worker';
+export type TrackingIssue = 'PERMISSION' | 'SERVICES_OFF';
 
 interface AppState {
   language: Language;
@@ -19,6 +20,12 @@ interface AppState {
   selectedCategory: string;
   /** The job the customer or worker is currently following (tracking, progress, rating). */
   activeJobId: string | null;
+  /** Worker side: the last GPS fix sent while on the way to a job, and whether the GPS is being shared right now. */
+  currentLat: number | null;
+  currentLng: number | null;
+  isTrackingActive: boolean;
+  /** Why sharing is paused: the person turned the permission or the phone's location off (null when nothing is wrong). */
+  trackingIssue: TrackingIssue | null;
 
   setLanguage: (lang: Language) => void;
   setRole: (role: UserRole) => void;
@@ -27,6 +34,8 @@ interface AppState {
   setSelectedSector: (label: string, areaId?: number | null) => void;
   setSelectedCategory: (cat: string) => void;
   setActiveJobId: (id: string | null) => void;
+  setTrackingFix: (lat: number, lng: number) => void;
+  setTrackingState: (active: boolean, issue: TrackingIssue | null) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -37,6 +46,10 @@ export const useStore = create<AppState>((set) => ({
   selectedAreaId: null,
   selectedCategory: '',
   activeJobId: null,
+  currentLat: null,
+  currentLng: null,
+  isTrackingActive: false,
+  trackingIssue: null,
 
   setLanguage: (lang) => set({ language: lang }),
   // Remembered on the device so a restart (or a web reload) reopens the same side
@@ -54,4 +67,8 @@ export const useStore = create<AppState>((set) => ({
   setSelectedSector: (label, areaId = null) => set({ selectedSector: label, selectedAreaId: areaId }),
   setSelectedCategory: (cat) => set({ selectedCategory: cat }),
   setActiveJobId: (id) => set({ activeJobId: id }),
+  setTrackingFix: (lat, lng) => set({ currentLat: lat, currentLng: lng }),
+  // Stopping for good (no issue) also forgets the old fix, so the next trip never starts from a stale dot
+  setTrackingState: (active, issue) =>
+    set(active ? { isTrackingActive: true, trackingIssue: null } : { isTrackingActive: false, trackingIssue: issue, ...(issue ? {} : { currentLat: null, currentLng: null }) }),
 }));

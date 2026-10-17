@@ -8,6 +8,7 @@ import { useStore } from '../store/useStore';
 import { OPEN_TO_ALL_SEGMENTS, PUBLIC_SEGMENTS, destinationFor } from '../utils/session-routing';
 import { resetTo } from '../utils/navigation';
 import DialogHost from '../components/DialogHost';
+import PushHost from '../components/PushHost';
 
 // Restores the stored login once, then keeps the person on the right side of the sign-in wall:
 //  - signed out on a screen that needs a login -> the welcome screen;
@@ -95,6 +96,7 @@ export default function RootLayout() {
           <Stack.Screen name="legal" options={{ animation: 'slide_from_bottom' }} />
         </Stack>
       </SessionGate>
+      <PushHost />
       <DialogHost />
     </SafeAreaProvider>
   );
