@@ -11,7 +11,7 @@ import { useAsync } from '../api/useAsync';
 import { getLocations, putCustomer } from '../api/endpoints';
 import { isApiError, userMessage } from '../api/errors';
 import { uploadFile } from '../api/upload';
-import { pickImage } from '../utils/pickImage';
+import { useImagePicker } from '../components/ImageSourceModal';
 import type { Position } from '../utils/position';
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks';
 import SectorPicker from '../components/SectorPicker';
@@ -20,6 +20,7 @@ import GoogleLocationPicker, { type PickedLocation } from '../components/GoogleL
 export default function CustomerOnboardingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { pick: pickImage, modal: imageSourceModal } = useImagePicker();
   const { selectedAreaId, setSelectedSector, setRole } = useStore();
   const { customerProfile, user, refreshMe } = useSession();
   const locations = useAsync(() => getLocations(), [], { reloadOnFocus: false });
@@ -392,6 +393,7 @@ export default function CustomerOnboardingScreen() {
           <Text style={styles.footerNoteText}>Aadhaar-free instant signup for Chandigarh, Mohali & Panchkula</Text>
         </View>
       </View>
+      {imageSourceModal}
     </SafeAreaView>
   );
 }

@@ -9,7 +9,7 @@ import { useAsync } from '../api/useAsync';
 import { addWorkPhoto, approveBill, completeWork, getBill, getJob, payJob, putBillItems, verifyArrival } from '../api/endpoints';
 import { isApiError, userMessage } from '../api/errors';
 import { uploadFile } from '../api/upload';
-import { pickImage } from '../utils/pickImage';
+import { useImagePicker } from '../components/ImageSourceModal';
 import { callPhone, confirmAction, notify } from '../utils/dialog';
 import { getLocationAccess, requestWorkerLocationAccess } from '../utils/locationPermission';
 import { workerTracking } from '../utils/workerTracking';
@@ -52,6 +52,7 @@ export default function JobProgressScreen() {
   const { activeJobId, currentLat, currentLng, isTrackingActive, trackingIssue } = useStore();
   const workerProfile = useSession((s) => s.workerProfile);
   const [askLocation, setAskLocation] = useState(false);
+  const { pick: pickImage, modal: imageSourceModal } = useImagePicker();
   const askedFor = useRef<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -132,7 +133,8 @@ export default function JobProgressScreen() {
       after?.();
     } catch (error) {
       const fields = isApiError(error) ? error.details.map((d) => `${d.field}: ${d.issue}`).join('; ') : '';
-      setActionError(userMessage(error) + (fields ? ` (${fields})` : ''));
+      const message = error instanceof Error && !isApiError(error) ? error.message : userMessage(error);
+      setActionError(message + (fields ? ` (${fields})` : ''));
     } finally {
       setBusy(null);
     }
@@ -489,6 +491,7 @@ export default function JobProgressScreen() {
           if (result === 'granted' && jobId) void workerTracking.startTracking(jobId);
         }}
       />
+      {imageSourceModal}
     </SafeAreaView>
   );
 }

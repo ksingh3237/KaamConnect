@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
-  MapPin, Bell, Volume2, Search, Mic, Menu, X,
+  MapPin, Volume2, Search, Mic, Menu, X,
   ShieldCheck, Zap, Wallet, ClipboardList, PhoneCall, BadgeIndianRupee, ArrowRight,
 } from 'lucide-react-native';
 import { Colors, Spacing, Radius, noFocusRing } from '../../constants/theme';
@@ -17,6 +17,7 @@ import { CategoryGridSkeleton } from '../../components/skeletons/CategoryGridSke
 import { notify } from '../../utils/dialog';
 import AppMenu from '../../components/AppMenu';
 import WorkerHome from '../../components/WorkerHome';
+import NotificationBell from '../../components/NotificationBell';
 
 /** How many services Home shows before "View all" (searching shows every match). */
 const HOME_SERVICES = 6;
@@ -93,10 +94,7 @@ function CustomerHome() {
             <TouchableOpacity style={styles.iconCircle} onPress={() => void notify('Audio help / आवाज़ सहायता', 'Spoken instructions are coming soon. / बोलकर निर्देश जल्द आ रहे हैं।')} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Audio assistance">
               <Volume2 color={Colors.textMain} size={20} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.iconCircle} onPress={() => router.navigate('/(tabs)/activity')} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Notifications">
-              <Bell color={Colors.textMain} size={20} />
-              <View style={styles.notifDot} />
-            </TouchableOpacity>
+            <NotificationBell />
           </View>
         </View>
 
@@ -259,7 +257,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  notifDot: { position: 'absolute', top: 9, right: 10, width: 9, height: 9, borderRadius: 5, backgroundColor: Colors.secondary },
   searchBar: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1.5,

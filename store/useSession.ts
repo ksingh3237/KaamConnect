@@ -10,6 +10,7 @@ import { loadRole } from '../api/storage';
 import { resolveRole } from '../utils/session-routing';
 import { disconnectSocket } from '../api/socket';
 import { releaseOrphanedTask, stopTracking } from '../utils/workerTracking';
+import { forgetPushToken, registerForPush, unregisterFromPush } from '../utils/pushRegistration';
 import { useStore } from './useStore';
 
 export type SessionStatus =
@@ -62,6 +63,7 @@ export const useSession = create<SessionState>((set, get) => {
   const finishSignIn = async (result: VerifyResult) => {
     await setTokens({ accessToken: result.accessToken, refreshToken: result.refreshToken });
     set({ status: 'signedIn', user: result.user });
+    void registerForPush(); // best effort; never blocks or fails the login
     try {
       const me = await endpoints.getMe();
       set({ me, ...(await loadProfiles(me)) });
@@ -122,6 +124,7 @@ export const useSession = create<SessionState>((set, get) => {
         ...profiles,
         user: { id: me.id, phone: me.phone, language: me.language, hasCustomerProfile: me.customer !== null, hasWorkerProfile: me.worker !== null },
       });
+      void registerForPush(); // a restored login re-registers, so a rotated or lost token heals itself
     } catch (error) {
       if (isApiError(error) && (error.code === 'NETWORK' || error.code === 'TIMEOUT')) {
         set({ status: 'unreachable' });
@@ -184,6 +187,7 @@ export const useSession = create<SessionState>((set, get) => {
 
   signOut: async () => {
     const refresh = getRefreshToken();
+    await unregisterFromPush(); // while the access token still works: this phone stops getting this person's pushes
     try {
       if (refresh) await endpoints.logout(refresh);
     } catch {
@@ -195,6 +199,7 @@ export const useSession = create<SessionState>((set, get) => {
   },
 
   clearLocal: async () => {
+    forgetPushToken();
     endRealtime();
     await setTokens(null);
     set({ status: 'signedOut', user: null, me: null, customerProfile: null, workerProfile: null });

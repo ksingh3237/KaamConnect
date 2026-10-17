@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import {
   ArrowLeft, ShieldCheck, User, Wrench, Zap, Monitor, Droplet, Hammer,
   Medal, Minus, Plus, X, Globe, Check, CheckCircle2, PlusCircle, MapPin, Lock, CreditCard, Save, Camera, IdCard, Phone, Shield,
-  Wind, Paintbrush, Sparkles, Tv, Truck
+  Wind, Paintbrush, Sparkles, Tv, Truck, Star, Pencil
 } from 'lucide-react-native';
 import { useStore } from '../store/useStore';
 import { resetTo } from '../utils/navigation';
@@ -14,14 +14,16 @@ import { useAsync } from '../api/useAsync';
 import { getCategories, getLocations, putWorker, putWorkerDocument } from '../api/endpoints';
 import { isApiError, userMessage } from '../api/errors';
 import { uploadFile, type PickedFile } from '../api/upload';
-import { pickImage } from '../utils/pickImage';
+import { useImagePicker } from '../components/ImageSourceModal';
 import { getLocationAccess } from '../utils/locationPermission';
 import WorkerLocationPermissionModal from '../components/WorkerLocationPermissionModal';
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks';
 import SectorPicker from '../components/SectorPicker';
+import TradePickerModal from '../components/TradePickerModal';
 import GoogleLocationPicker, { type PickedLocation } from '../components/GoogleLocationPicker';
 import { serviceIcon } from '../constants/services';
-import type { DocumentType, Lang, VerificationStatus } from '../api/types';
+import { noFocusRing } from '../constants/theme';
+import type { DocumentType, Lang, ServiceCategory, VerificationStatus } from '../api/types';
 
 const ID_PLACEHOLDER = require('../assets/images/id-card-placeholder.png');
 const AVATAR_PLACEHOLDER = require('../assets/images/avatar-placeholder.png');
@@ -43,11 +45,10 @@ const HtmlColors = {
   error: '#ba1a1a'
 };
 
-const MAX_TRADES = 2;
-
 export default function WorkerOnboardingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { pick: pickImage, modal: imageSourceModal } = useImagePicker();
   const { setRole } = useStore();
   const { workerProfile, user, refreshMe } = useSession();
   const scrollRef = useRef<ScrollView>(null);
@@ -60,6 +61,14 @@ export default function WorkerOnboardingScreen() {
   const [name, setName] = useState(existing?.fullName ?? '');
   // First entry is the primary trade, the optional second one is the secondary
   const [trades, setTrades] = useState<string[]>(existing?.trades.map((t) => t.categoryId) ?? []);
+  const [pickingTrades, setPickingTrades] = useState(false);
+  // The grey box around an input shows the focus border, not the browser's ring on the smaller input inside it
+  const [focused, setFocused] = useState<string | null>(null);
+  const focusProps = (key: string) => ({
+    onFocus: () => setFocused(key),
+    onBlur: () => setFocused((cur) => (cur === key ? null : cur)),
+  });
+  const wrapStyle = (key: string) => [styles.inputWrapper, focused === key && styles.inputWrapperFocus];
   const [exp, setExp] = useState(existing?.experienceYears ?? 3);
   const [skills, setSkills] = useState<string[]>(existing?.skills ?? []);
   const [skillDraft, setSkillDraft] = useState('');
@@ -110,13 +119,6 @@ export default function WorkerOnboardingScreen() {
     setShopAddress((prev) => (prev.trim() === '' || prev === autoLine ? loc.line : prev));
     setAutoLine(loc.line);
     setFormError(null);
-  };
-
-  const toggleTrade = (id: string) => {
-    setTrades((prev) => {
-      if (prev.includes(id)) return prev.filter((t) => t !== id); // at least one is checked again on save
-      return prev.length < MAX_TRADES ? [...prev, id] : [prev[0]!, id];
-    });
   };
 
   const adjustExp = (delta: number) => {
@@ -317,9 +319,9 @@ export default function WorkerOnboardingScreen() {
               <Text style={styles.label}>Full Name / ਪੂਰਾ ਨਾਂ</Text>
               <Text style={styles.labelHighlight}>As per Govt ID</Text>
             </View>
-            <View style={styles.inputWrapper}>
+            <View style={wrapStyle("name")}>
               <User color={HtmlColors.onSurfaceVariant} size={20} style={styles.inputIcon} />
-              <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Your full name / ਪੂਰਾ ਨਾਂ" placeholderTextColor={HtmlColors.outline} maxLength={80} />
+              <TextInput style={styles.input} {...focusProps("name")} value={name} onChangeText={setName} placeholder="Your full name / ਪੂਰਾ ਨਾਂ" placeholderTextColor={HtmlColors.outline} maxLength={80} />
             </View>
           </View>
           <View style={styles.inputGroup}>
@@ -335,7 +337,7 @@ export default function WorkerOnboardingScreen() {
           </View>
         </View>
 
-        {/* Section 3: Primary Trade */}
+        {/* Section 3: Trades. Two slots however long the catalogue is; the full list lives in TradePickerModal */}
         <View style={styles.card}>
           <View style={[styles.cardHeader, { justifyContent: 'space-between' }]}>
             <View style={styles.cardHeaderMain}>
@@ -344,35 +346,20 @@ export default function WorkerOnboardingScreen() {
             </View>
             <Text style={styles.maxText}>Max 2</Text>
           </View>
-          <View style={styles.chipsWrap}>
-            {categories.loading && <LoadingBlock label="Loading trades… / काम लोड हो रहे हैं…" />}
-            {categories.error && !categories.data && <ErrorBlock message={categories.error} onRetry={() => void categories.reload()} />}
-            {(categories.data ?? []).map((cat) => {
-              const id = cat.id;
-              const label = `${cat.title.en} (${cat.title.hi})`;
-              const Icon = serviceIcon(cat.iconKey);
-              const isPrimary = trades[0] === id;
-              const isSecondary = !isPrimary && trades.includes(id);
-              return (
-                <TouchableOpacity
-                  key={id}
-                  style={[styles.tradeChip, isPrimary && styles.tradeChipActive, isSecondary && styles.tradeChipSecondary]}
-                  onPress={() => toggleTrade(id)}
-                  activeOpacity={0.8}
-                  accessibilityRole="button"
-                  aria-selected={isPrimary || isSecondary}
-                >
-                  <Icon color={isPrimary ? HtmlColors.onPrimary : isSecondary ? HtmlColors.onSurface : HtmlColors.onSurfaceVariant} size={18} />
-                  <Text style={[styles.tradeChipText, isPrimary && styles.tradeChipTextActive, isSecondary && { color: HtmlColors.onSurface }]}>
-                    {label}
-                  </Text>
-                  {isPrimary && <CheckCircle2 color={HtmlColors.onPrimary} size={16} />}
-                  {isSecondary && <CheckCircle2 color={HtmlColors.primary} size={16} />}
-                  {!isPrimary && !isSecondary && <Plus color={HtmlColors.primary} size={16} />}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          {categories.loading && <LoadingBlock label="Loading trades… / काम लोड हो रहे हैं…" />}
+          {categories.error && !categories.data && <ErrorBlock message={categories.error} onRetry={() => void categories.reload()} />}
+          {categories.data && (
+            <View style={styles.tradeSlots}>
+              <TradeSlot kind="primary" id={trades[0]} categories={categories.data} onOpen={() => setPickingTrades(true)} />
+              <TradeSlot
+                kind="secondary"
+                id={trades[1]}
+                categories={categories.data}
+                onOpen={() => setPickingTrades(true)}
+                onRemove={() => setTrades((prev) => prev.slice(0, 1))}
+              />
+            </View>
+          )}
         </View>
 
         {/* Section 4: Experience & Skills */}
@@ -405,7 +392,7 @@ export default function WorkerOnboardingScreen() {
             {addingSkill ? (
               <View style={[styles.addSkillChip, { paddingVertical: 4 }]}>
                 <TextInput
-                  style={[styles.addSkillChipText, { minWidth: 120, padding: 4 }]}
+                  style={[styles.addSkillChipText, { minWidth: 120, padding: 4 }, noFocusRing]}
                   value={skillDraft}
                   onChangeText={setSkillDraft}
                   onSubmitEditing={commitSkill}
@@ -496,10 +483,10 @@ export default function WorkerOnboardingScreen() {
             <View style={styles.labelRow}>
               <Text style={styles.label}>Address / Workshop / Shop (दुकान या कार्यशाला का पता)</Text>
             </View>
-            <View style={styles.inputWrapper}>
+            <View style={wrapStyle("address")}>
               <MapPin color={HtmlColors.onSurfaceVariant} size={20} style={styles.inputIcon} />
               <TextInput
-                style={styles.input}
+                style={styles.input} {...focusProps("address")}
                 value={shopAddress}
                 onChangeText={setShopAddress}
                 placeholder="Shop / house no., street, landmark"
@@ -598,20 +585,20 @@ export default function WorkerOnboardingScreen() {
           </View>
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Visiting fee ₹ / विज़िटिंग फ़ीस</Text>
-            <View style={styles.inputWrapper}>
-              <TextInput style={styles.input} value={visitingFee} onChangeText={(t) => setVisitingFee(t.replace(/[^0-9]/g, '').slice(0, 6))} placeholder="e.g. 200" placeholderTextColor={HtmlColors.outline} keyboardType="number-pad" />
+            <View style={wrapStyle("fee")}>
+              <TextInput style={styles.input} {...focusProps("fee")} value={visitingFee} onChangeText={(t) => setVisitingFee(t.replace(/[^0-9]/g, '').slice(0, 6))} placeholder="e.g. 200" placeholderTextColor={HtmlColors.outline} keyboardType="number-pad" />
             </View>
           </View>
           <View style={styles.inputGroup}>
             <Text style={styles.label}>UPI ID / यूपीआई आईडी</Text>
-            <View style={styles.inputWrapper}>
-              <TextInput style={styles.input} value={upiId} onChangeText={setUpiId} placeholder="name@bank" placeholderTextColor={HtmlColors.outline} autoCapitalize="none" maxLength={80} />
+            <View style={wrapStyle("upi")}>
+              <TextInput style={styles.input} {...focusProps("upi")} value={upiId} onChangeText={setUpiId} placeholder="name@bank" placeholderTextColor={HtmlColors.outline} autoCapitalize="none" maxLength={80} />
             </View>
           </View>
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Vehicle / वाहन</Text>
-            <View style={styles.inputWrapper}>
-              <TextInput style={styles.input} value={vehicle} onChangeText={setVehicle} placeholder="e.g. Hero Splendor (CH 01 AB 1234)" placeholderTextColor={HtmlColors.outline} maxLength={80} />
+            <View style={wrapStyle("vehicle")}>
+              <TextInput style={styles.input} {...focusProps("vehicle")} value={vehicle} onChangeText={setVehicle} placeholder="e.g. Hero Splendor (CH 01 AB 1234)" placeholderTextColor={HtmlColors.outline} maxLength={80} />
             </View>
           </View>
         </View>
@@ -689,7 +676,79 @@ export default function WorkerOnboardingScreen() {
           openDashboard();
         }}
       />
+      {imageSourceModal}
+      {categories.data && (
+        <TradePickerModal
+          visible={pickingTrades}
+          categories={categories.data}
+          selectedTradeIds={trades}
+          onSave={(ids) => {
+            setTrades(ids);
+            setFormError(null);
+          }}
+          onClose={() => setPickingTrades(false)}
+        />
+      )}
     </SafeAreaView>
+  );
+}
+
+// One of the two trade rows on the form (50px each, so Section 3 stays about 110px for any catalogue size).
+// Empty: a button that opens the picker. Filled: icon, bilingual name, badge, and Edit (Primary) or Remove (Secondary).
+function TradeSlot({
+  kind, id, categories, onOpen, onRemove,
+}: {
+  kind: 'primary' | 'secondary';
+  id: string | undefined;
+  categories: ServiceCategory[];
+  onOpen: () => void;
+  onRemove?: () => void;
+}) {
+  const primary = kind === 'primary';
+  if (id === undefined) {
+    return (
+      <TouchableOpacity
+        style={[styles.slot, primary ? styles.slotEmptyPrimary : styles.slotEmptySecondary]}
+        onPress={onOpen}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={primary ? 'Select primary trade' : 'Add secondary trade, optional'}
+      >
+        <Plus color={HtmlColors.primary} size={20} />
+        <Text style={styles.slotEmptyText} numberOfLines={1}>
+          {primary ? 'Select Primary Trade / मुख्य काम चुनें' : 'Add Secondary Trade / दूसरा काम (Optional)'}
+        </Text>
+      </TouchableOpacity>
+    );
+  }
+  const cat = categories.find((c) => c.id === id);
+  const Icon = cat ? serviceIcon(cat.iconKey) : Wrench;
+  const title = cat ? `${cat.title.en} (${cat.title.hi})` : id;
+  return (
+    <View style={[styles.slot, styles.slotFilled]}>
+      <TouchableOpacity style={styles.slotMain} onPress={onOpen} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={`${primary ? 'Primary' : 'Secondary'} trade: ${title}. Change`}>
+        <View style={[styles.slotIcon, { backgroundColor: cat?.bgColor ?? HtmlColors.surfaceContainer }]}>
+          <Icon color={cat?.color ?? HtmlColors.onSurfaceVariant} size={20} />
+        </View>
+        <View style={styles.slotBody}>
+          <Text style={styles.slotTitle} numberOfLines={1}>{title}</Text>
+          <View style={[styles.slotBadge, !primary && styles.slotBadgeSecondary]}>
+            {primary && <Star color={HtmlColors.primary} size={12} fill={HtmlColors.primary} />}
+            <Text style={[styles.slotBadgeText, !primary && styles.slotBadgeTextSecondary]}>{primary ? 'Primary • मुख्य' : '2nd Trade • दूसरा'}</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.slotAction}
+        onPress={primary ? onOpen : onRemove}
+        hitSlop={{ top: 6, bottom: 6 }}
+        accessibilityRole="button"
+        accessibilityLabel={primary ? 'Edit trades' : 'Remove secondary trade'}
+      >
+        {primary ? <Pencil color={HtmlColors.primary} size={14} /> : <X color={HtmlColors.error} size={14} />}
+        <Text style={[styles.slotActionText, !primary && { color: HtmlColors.error }]}>{primary ? 'Edit / बदलें' : 'Remove'}</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -975,7 +1034,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: HtmlColors.surfaceContainerLow,
     borderRadius: 8,
-    paddingHorizontal: 12
+    paddingHorizontal: 12,
+    borderWidth: 1.5,
+    borderColor: 'transparent'
+  },
+  inputWrapperFocus: {
+    borderColor: HtmlColors.primary,
+    backgroundColor: HtmlColors.surfaceContainerLowest
   },
   inputIcon: {
     marginRight: 8
@@ -986,7 +1051,8 @@ const styles = StyleSheet.create({
     height: 48,
     fontSize: 16,
     fontWeight: '500',
-    color: HtmlColors.onSurface
+    color: HtmlColors.onSurface,
+    ...noFocusRing
   },
   verifiedTag: {
     flexDirection: 'row',
@@ -1012,30 +1078,104 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8
   },
-  tradeChip: {
+  tradeSlots: {
+    gap: 8
+  },
+  slot: {
+    height: 50,
     flexDirection: 'row',
     alignItems: 'center',
+    borderRadius: 12
+  },
+  slotEmptyPrimary: {
+    justifyContent: 'center',
     gap: 8,
-    maxWidth: '100%',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1.5,
+    borderColor: HtmlColors.primary,
+    backgroundColor: 'rgba(0,108,70,0.06)'
+  },
+  slotEmptySecondary: {
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: HtmlColors.outline,
     backgroundColor: HtmlColors.surfaceContainerLow
   },
-  tradeChipActive: {
-    backgroundColor: HtmlColors.primary
-  },
-  tradeChipSecondary: {
-    backgroundColor: HtmlColors.surfaceContainer
-  },
-  tradeChipText: {
+  slotEmptyText: {
     flexShrink: 1,
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
+    color: HtmlColors.primary
+  },
+  slotFilled: {
+    paddingLeft: 8,
+    paddingRight: 4,
+    backgroundColor: HtmlColors.surfaceContainerLow
+  },
+  slotMain: {
+    flex: 1,
+    minWidth: 0,
+    height: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10
+  },
+  slotIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  slotBody: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'flex-start'
+  },
+  slotTitle: {
+    alignSelf: 'stretch',
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '700',
+    color: HtmlColors.onSurface
+  },
+  slotBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,108,70,0.12)'
+  },
+  slotBadgeSecondary: {
+    backgroundColor: HtmlColors.surfaceContainerHigh
+  },
+  slotBadgeText: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+    color: HtmlColors.primary
+  },
+  slotBadgeTextSecondary: {
     color: HtmlColors.onSurfaceVariant
   },
-  tradeChipTextActive: {
-    color: HtmlColors.onPrimary
+  slotAction: {
+    minWidth: 48,
+    height: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    borderRadius: 8
+  },
+  slotActionText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: HtmlColors.primary
   },
   expBadge: {
     backgroundColor: HtmlColors.surfaceContainerHigh,

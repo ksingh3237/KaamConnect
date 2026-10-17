@@ -15,6 +15,7 @@ import type {
   LeadItem,
   LocationCity,
   MeView,
+  NotificationItem,
   OfferForCustomer,
   OtpRequestResult,
   Page,
@@ -127,5 +128,14 @@ export const raiseSos = (jobId: string, position?: { lat: number; lng: number })
   post<SosStatusView & { repeated: boolean }>(`/jobs/${jobId}/sos`, position ?? {});
 /** The caller's own SOS alerts on this job: sent, received by the safety desk, acknowledged, resolved. */
 export const getSosStatus = (jobId: string) => get<SosStatusView[]>(`/jobs/${jobId}/sos`);
+
+// ── notifications
+export const registerDeviceToken = (token: string, platform: 'ANDROID' | 'IOS' | 'WEB') =>
+  post<void>('/notifications/device-token', { token, platform });
+export const unregisterDeviceToken = (token: string) => del<void>('/notifications/device-token', { body: { token } });
+export const listNotifications = (cursor?: string) => get<Page<NotificationItem>>('/notifications', { query: { cursor } });
+export const getUnreadCount = () => get<{ count: number }>('/notifications/unread-count');
+export const markNotificationRead = (id: string) => patch<void>(`/notifications/${id}/read`);
+export const markAllNotificationsRead = () => patch<{ updated: number }>('/notifications/read-all');
 
 export { del };

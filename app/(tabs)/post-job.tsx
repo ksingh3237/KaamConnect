@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -21,12 +21,14 @@ import { useAsync } from "../../api/useAsync";
 import { createJob, getCategories, getLocations } from "../../api/endpoints";
 import { isApiError, userMessage } from "../../api/errors";
 import { uploadFile, type PickedFile } from "../../api/upload";
-import { pickImage } from "../../utils/pickImage";
+import { useImagePicker } from "../../components/ImageSourceModal";
 import type { CreateJobBody, JobTiming } from "../../api/types";
 import { ErrorBlock, LoadingBlock } from "../../components/StateBlocks";
 import GoogleLocationPicker, {
   type PickedLocation,
 } from "../../components/GoogleLocationPicker";
+import SectorPicker from "../../components/SectorPicker";
+import { isOtherArea } from "../../utils/sectors";
 
 const MAX_PHOTOS = 4;
 /** Approximate width of one service pill plus the gap, used to scroll the chosen one into view. */
@@ -39,6 +41,7 @@ const TIMINGS: { id: JobTiming; label: string }[] = [
 
 export default function PostJobScreen() {
   const router = useRouter();
+  const { pick: pickImage, modal: imageSourceModal } = useImagePicker();
   const { selectedCategory, setSelectedCategory, setActiveJobId } = useStore();
   const { customerProfile } = useSession();
   const categories = useAsync(() => getCategories(), [], {
@@ -51,16 +54,6 @@ export default function PostJobScreen() {
   const locations = useAsync(() => getLocations(), [], {
     reloadOnFocus: false,
   });
-  // Sector chips grouped by city, from GET /locations (same source as onboarding)
-  const sectors = useMemo(
-    () =>
-      (locations.data ?? []).map((c) => ({
-        city: c.name.replace(/\s*\(.*\)/, ""),
-        areas: c.areas,
-      })),
-    [locations.data],
-  );
-
   const [addressMode, setAddressMode] = useState<"PRIMARY" | "CUSTOM">(
     "PRIMARY",
   );
@@ -146,6 +139,24 @@ export default function PostJobScreen() {
     setLocalityError(false);
   };
 
+  // The sector sheet / quick pick chose an area. A typed locality (custom area) fills the locality field; a listed
+  // sector keeps the landmark the person typed, but drops a locality that only an earlier custom area put there.
+  const handleSectorChange = (
+    areaId: number,
+    _label: string,
+    locality: string | null,
+  ) => {
+    setCustomAreaId(areaId);
+    setAreaError(false);
+    if (locality !== null) {
+      setCustomLocality(locality);
+      setLocalityError(false);
+    } else {
+      setCustomLocality((prev) => (prev === autoFill.locality ? "" : prev));
+    }
+    setAutoFill((prev) => ({ ...prev, locality: locality ?? "" }));
+  };
+
   const handleBroadcast = async () => {
     if (posting || uploading) return;
     setFormError(null);
@@ -162,7 +173,11 @@ export default function PostJobScreen() {
       const line = customLine.trim();
       const locality = customLocality.trim();
       const badLine = line.length < 3;
-      const badArea = customAreaId === null;
+      // A city's "Other area" is only a real choice together with the typed locality (it is what workers see)
+      const badArea =
+        customAreaId === null ||
+        (isOtherArea(locations.data ?? [], customAreaId) &&
+          locality.length < 2);
       const badLocality = locality.length === 1;
       setLineError(badLine);
       setAreaError(badArea);
@@ -494,7 +509,7 @@ export default function PostJobScreen() {
               )}
 
               <Text style={[styles.subLabel, { marginTop: 12 }]}>
-                Tricity Sector / Area *
+                Sector / Area • इलाका *
               </Text>
               {locations.loading && (
                 <LoadingBlock label="Loading sectors… / सेक्टर लोड हो रहे हैं…" />
@@ -505,40 +520,14 @@ export default function PostJobScreen() {
                   onRetry={() => void locations.reload()}
                 />
               )}
-              {sectors.map((group) => (
-                <View key={group.city} style={{ marginTop: 6 }}>
-                  <Text style={styles.cityHeading}>
-                    {group.city.toUpperCase()}
-                  </Text>
-                  <View style={styles.chipWrap}>
-                    {group.areas.map((area) => {
-                      const on = customAreaId === area.id;
-                      return (
-                        <TouchableOpacity
-                          key={area.id}
-                          style={[styles.areaChip, on && styles.areaChipActive]}
-                          onPress={() => {
-                            setCustomAreaId(area.id);
-                            setAreaError(false);
-                          }}
-                          accessibilityRole="button"
-                          accessibilityState={{ selected: on }}
-                        >
-                          <Text
-                            style={[
-                              styles.areaChipText,
-                              on && styles.timingTextActive,
-                            ]}
-                          >
-                            {area.name.replace("Sector", "Sec")}
-                            {on ? " ✓" : ""}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-              ))}
+              {locations.data && (
+                <SectorPicker
+                  locations={locations.data}
+                  value={customAreaId}
+                  locality={customLocality.trim() || null}
+                  onChange={handleSectorChange}
+                />
+              )}
               {areaError && (
                 <Text style={styles.errorText}>
                   Choose the sector / area / सेक्टर चुनें
@@ -598,6 +587,7 @@ export default function PostJobScreen() {
           </Text>
         </TouchableOpacity>
       </ScrollView>
+      {imageSourceModal}
     </SafeAreaView>
   );
 }
@@ -820,34 +810,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Colors.textMuted,
     marginBottom: 6,
-  },
-  cityHeading: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Colors.textSubtle,
-    marginBottom: 4,
-  },
-  chipWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  areaChip: {
-    paddingVertical: 7,
-    paddingHorizontal: 10,
-    borderRadius: Radius.full,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    backgroundColor: "#FFFFFF",
-  },
-  areaChipActive: {
-    backgroundColor: "#F0FDF4",
-    borderColor: Colors.primary,
-  },
-  areaChipText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Colors.textMain,
   },
   broadcastBtn: {
     backgroundColor: Colors.primary,

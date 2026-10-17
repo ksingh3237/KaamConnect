@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { citiesWithOtherArea, flattenSectors, normalise, otherAreaId, popularSectors, searchSectors } from './sectors';
+import { buildRows, citiesWithOtherArea, cityNames, flattenSectors, isOtherArea, normalise, otherAreaId, popularSectors, quickPicks, searchSectors } from './sectors';
 
 const cities = [
   { id: 1, name: 'Chandigarh', areas: [{ id: 10, name: 'Sector 35' }, { id: 11, name: 'Sector 2' }, { id: 12, name: 'Manimajra' }, { id: 13, name: 'Sector 15' }, { id: 14, name: 'Sector 22' }] },
@@ -16,6 +16,13 @@ describe('sector helpers', () => {
     expect(otherAreaId(cities, 'Mohali')).toBe(25);
     expect(otherAreaId(cities, 'Chandigarh')).toBeNull();
     expect(citiesWithOtherArea(cities)).toEqual(['Mohali']);
+  });
+
+  it('knows which ids are an "Other area" anchor', () => {
+    expect(isOtherArea(cities, 25)).toBe(true);
+    expect(isOtherArea(cities, 10)).toBe(false);
+    expect(isOtherArea(cities, 999)).toBe(false);
+    expect(isOtherArea(cities, null)).toBe(false);
   });
 
   it('sorts naturally (phases, then sectors, MDC, named places) and drops the "(SAS Nagar)" suffix', () => {
@@ -75,5 +82,45 @@ describe('sector helpers', () => {
       'Panchkula|MDC Sector 4',
     ]);
     expect(names(popularSectors(items, 'Panchkula'))).toEqual(['Panchkula|Sector 11', 'Panchkula|MDC Sector 4']);
+  });
+
+  it('quick picks keep the curated order, skip missing sectors and top up from the popular list', () => {
+    // no "Sector 20" in the Panchkula test data: filled from the popular list instead
+    expect(names(quickPicks(items))).toEqual([
+      'Chandigarh|Sector 15',
+      'Chandigarh|Sector 22',
+      'Chandigarh|Sector 35',
+      'Mohali|Phase 7',
+      'Mohali|Sector 70',
+    ]);
+    expect(quickPicks(items, 2)).toHaveLength(2);
+    expect(quickPicks([])).toEqual([]);
+  });
+
+  it('lists the cities that have areas, in server order, for any number of cities', () => {
+    expect(cityNames(items)).toEqual(['Chandigarh', 'Mohali', 'Panchkula']);
+    const more = flattenSectors([...cities, { id: 4, name: 'Ludhiana', areas: [{ id: 40, name: 'Model Town' }, { id: 41, name: 'Other area' }] }, { id: 5, name: 'Ambala', areas: [{ id: 50, name: 'Other area' }] }]);
+    expect(cityNames(more)).toEqual(['Chandigarh', 'Mohali', 'Panchkula', 'Ludhiana']);
+  });
+
+  it('finds areas by multi-word queries and city names, and forgives a typo', () => {
+    const more = flattenSectors([...cities, { id: 4, name: 'Ludhiana', areas: [{ id: 40, name: 'Model Town' }, { id: 41, name: 'Sarabha Nagar' }] }]);
+    expect(names(searchSectors(more, 'model town'))).toEqual(['Ludhiana|Model Town']);
+    expect(names(searchSectors(more, 'model town ludhiana'))).toEqual(['Ludhiana|Model Town']);
+    expect(names(searchSectors(more, 'Ludhiana'))).toEqual(['Ludhiana|Model Town', 'Ludhiana|Sarabha Nagar']);
+    expect(names(searchSectors(more, 'sec 35 chandigarh'))).toEqual(['Chandigarh|Sector 35']);
+    expect(names(searchSectors(more, 'ludhiyana'))).toEqual(['Ludhiana|Model Town', 'Ludhiana|Sarabha Nagar']);
+    expect(names(searchSectors(more, 'sarabaha'))).toEqual(['Ludhiana|Sarabha Nagar']);
+    expect(names(searchSectors(more, 'sectar 35'))).toEqual(['Chandigarh|Sector 35']);
+    expect(searchSectors(more, 'xyz')).toEqual([]);
+  });
+
+  it('adds city or group headings only when asked', () => {
+    const chd = items.filter((i) => i.city === 'Chandigarh');
+    expect(buildRows(chd, 'none').every((r) => r.kind === 'item')).toBe(true);
+    expect(buildRows(items, 'city').filter((r) => r.kind === 'header').map((r) => (r as { title: string }).title)).toEqual(['Chandigarh', 'Mohali', 'Panchkula']);
+    const mohali = buildRows(items.filter((i) => i.city === 'Mohali'), 'group');
+    expect(mohali.map((r) => (r.kind === 'header' ? `#${r.title}` : r.item.name))).toEqual(['#Phases', 'Phase 7', '#Sectors', 'Sector 70', 'Sector 135', '#Areas', 'Kharar', 'Kharar Road']);
+    expect(new Set(buildRows(items, 'city').map((r) => r.key)).size).toBe(buildRows(items, 'city').length);
   });
 });

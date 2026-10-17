@@ -435,3 +435,25 @@ export interface JobLocationPayload {
   etaMinutes: number | null;
   distanceBasis: 'JOB_COORDINATES' | 'AREA_CENTROID' | null;
 }
+
+// ── notifications (bell inbox + push)
+export type NotificationType =
+  | 'NEW_LEAD'
+  | 'DIRECT_REQUEST'
+  | 'NEW_QUOTE'
+  | 'BOOKING_CONFIRMED'
+  | 'WORKER_EN_ROUTE'
+  | 'WORKER_ARRIVED'
+  | 'BILL_CREATED'
+  | 'WORK_COMPLETED';
+
+export interface NotificationItem {
+  id: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  /** Always has `type`; job notifications also have `jobId`. */
+  data: Record<string, unknown>;
+  isRead: boolean;
+  createdAt: string;
+}

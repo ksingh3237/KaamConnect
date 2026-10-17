@@ -47,8 +47,27 @@ describe('matchArea', () => {
     const r = matchArea(locations, [comp('Peer Muchalla', 'sublocality_level_1'), comp('Zirakpur', 'locality')], 'Peer Muchalla, Zirakpur, Punjab');
     expect(r).toEqual({ areaId: 22, localityName: 'Peer Muchalla', city: 'Mohali' });
   });
-  it('returns no area outside the three cities', () => {
+  it('matches a named area by its exact name instead of falling back to "Other area"', () => {
+    const named = [
+      { id: 1, name: 'Chandigarh', areas: [{ id: 10, name: 'Manimajra' }, { id: 11, name: 'Industrial Area Phase 1' }, { id: 12, name: 'Other area' }] },
+      { id: 2, name: 'Mohali (SAS Nagar)', areas: [{ id: 20, name: 'Phase 1' }, { id: 21, name: 'Zirakpur' }, { id: 22, name: 'Other area' }] },
+      { id: 3, name: 'Panchkula', areas: [{ id: 30, name: 'Industrial Area Phase 1' }, { id: 31, name: 'Other area' }] },
+    ];
+    expect(matchArea(named, [comp('Manimajra', 'sublocality_level_1'), comp('Chandigarh', 'locality')], 'Manimajra, Chandigarh')).toEqual({ areaId: 10, localityName: null, city: 'Chandigarh' });
+    expect(matchArea(named, [comp('Zirakpur', 'locality')], 'Zirakpur, Punjab')).toEqual({ areaId: 21, localityName: null, city: 'Mohali' });
+    // same name in two cities: the city decides, and "Phase 1" is not read out of "Industrial Area Phase 1"
+    expect(matchArea(named, [comp('Industrial Area Phase 1', 'sublocality_level_1'), comp('Panchkula', 'locality')], 'Industrial Area Phase 1, Panchkula')).toMatchObject({ areaId: 30 });
+    expect(matchArea(named, [comp('Industrial Area Phase 1', 'sublocality_level_1'), comp('Chandigarh', 'locality')], 'Industrial Area Phase 1, Chandigarh')).toMatchObject({ areaId: 11 });
+    // without a city the shared name is ambiguous: no guess
+    expect(matchArea(named, [comp('Industrial Area Phase 1', 'sublocality_level_1')], 'Industrial Area Phase 1').areaId).toBeNull();
+  });
+  it('returns no area outside the cities the server lists', () => {
     expect(matchArea(locations, [comp('Ludhiana', 'locality')], 'Model Town, Ludhiana, Punjab')).toEqual({ areaId: null, localityName: null, city: null });
+  });
+  it('picks up a newly listed city without code changes', () => {
+    const more = [...locations, { id: 4, name: 'Ludhiana', areas: [{ id: 40, name: 'Model Town' }, { id: 41, name: 'Sector 32' }, { id: 42, name: 'Other area' }] }];
+    expect(matchArea(more, [comp('Ludhiana', 'locality')], 'Sector 32, Ludhiana, Punjab')).toEqual({ areaId: 41, localityName: null, city: 'Ludhiana' });
+    expect(matchArea(more, [comp('Sarabha Nagar', 'sublocality_level_1'), comp('Ludhiana', 'locality')], 'Sarabha Nagar, Ludhiana')).toEqual({ areaId: 42, localityName: 'Sarabha Nagar', city: 'Ludhiana' });
   });
 });
 

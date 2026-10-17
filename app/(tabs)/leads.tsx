@@ -15,6 +15,7 @@ import { timeAgo, whenLabel } from '../../utils/time';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../../components/StateBlocks';
 import { LeadCardSkeleton } from '../../components/skeletons/LeadCardSkeleton';
 import ServiceCard from '../../components/ServiceCard';
+import NotificationBell from '../../components/NotificationBell';
 
 const LEAD_FILTERS: { id: 'all' | 'immediate' | 'scheduled'; label: string }[] = [
   { id: 'all', label: 'All Leads' },
@@ -87,6 +88,7 @@ export default function LeadsScreen() {
             </Text>
             <Text style={styles.headerSub}>Chandigarh • Mohali • Panchkula</Text>
           </View>
+          <NotificationBell />
         </View>
 
         {isWorker ? (

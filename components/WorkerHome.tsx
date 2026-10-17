@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowRight, Bell, BadgeIndianRupee, Clock, MapPin, Menu, Radar, ShieldAlert, ShieldCheck, Wrench } from 'lucide-react-native';
+import { ArrowRight, BadgeIndianRupee, Clock, MapPin, Menu, Radar, ShieldAlert, ShieldCheck, Wrench } from 'lucide-react-native';
 import { Colors, Radius, Spacing } from '../constants/theme';
 import { useStore } from '../store/useStore';
 import { useSession } from '../store/useSession';
@@ -17,6 +17,7 @@ import { useWorkerTracking } from '../utils/useWorkerTracking';
 import { timeAgo, whenLabel } from '../utils/time';
 import { ErrorBlock, LoadingBlock } from './StateBlocks';
 import AppMenu from './AppMenu';
+import NotificationBell from './NotificationBell';
 
 const POLL_MS = 20000; // new leads appear while the dashboard is open
 const PREVIEW_LEADS = 3;
@@ -100,9 +101,7 @@ export default function WorkerHome() {
             <Text style={styles.hello} numberOfLines={1}>Namaste{firstName ? `, ${firstName}` : ''} 🙏</Text>
             <Text style={styles.helloSub}>Your work dashboard • काम डैशबोर्ड</Text>
           </View>
-          <TouchableOpacity style={styles.bellBtn} onPress={() => router.navigate('/(tabs)/activity')} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="My jobs">
-            <Bell color={Colors.textMain} size={20} />
-          </TouchableOpacity>
+          <NotificationBell />
         </View>
 
         {/* Verification state comes first: without it no leads arrive */}
@@ -248,16 +247,6 @@ const styles = StyleSheet.create({
   iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginLeft: -8 },
   hello: { fontSize: 20, fontWeight: '800', color: Colors.textMain },
   helloSub: { fontSize: 13, color: Colors.textMuted, marginTop: 1 },
-  bellBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   verifyCard: {
     flexDirection: 'row',
     alignItems: 'center',
