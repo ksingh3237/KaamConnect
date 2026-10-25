@@ -6,7 +6,7 @@ import * as Notifications from 'expo-notifications';
 import { useSession } from '../store/useSession';
 import { useNotifications } from '../store/useNotifications';
 import { openNotification } from '../utils/openNotification';
-import { registerForPush } from '../utils/pushRegistration';
+import { onFcmTokenRefresh, registerForPush } from '../utils/pushRegistration';
 
 const UNREAD_POLL_MS = 30_000;
 const native = Platform.OS === 'android' || Platform.OS === 'ios';
@@ -53,6 +53,7 @@ export default function PushHost() {
     const tapped = Notifications.addNotificationResponseReceivedListener(openFromResponse);
     // FCM rotated the token: give the server the new one
     const rotated = Notifications.addPushTokenListener(() => void registerForPush());
+    const rotatedIos = onFcmTokenRefresh(() => void registerForPush()); // iOS: Firebase's own token changes
     // A tap that launched the app from closed (handled once, then cleared so a restart does not repeat it)
     void Notifications.getLastNotificationResponseAsync().then((response) => {
       if (!response) return;
@@ -63,6 +64,7 @@ export default function PushHost() {
       received.remove();
       tapped.remove();
       rotated.remove();
+      rotatedIos();
     };
   }, [signedIn, refreshUnread]);
 
