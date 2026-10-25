@@ -14,6 +14,9 @@ export interface RoadRoute {
 
 const TIMEOUT_MS = 8000;
 
+/** Set once Google answers 403 (Routes API not enabled / key not allowed): no point asking again until the app restarts. */
+let googleRoutesDenied = false;
+
 async function getJson(url: string, init?: RequestInit): Promise<unknown> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -42,11 +45,12 @@ async function osrmRoute(from: LatLng, to: LatLng): Promise<LatLng[] | null> {
 }
 
 export async function fetchRoadRoute(from: LatLng, to: LatLng): Promise<RoadRoute | null> {
-  if (mapsConfigured) {
+  if (mapsConfigured && !googleRoutesDenied) {
     try {
       const path = await googleRoute(from, to);
       if (path) return { path, source: 'google' };
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message === 'HTTP_403') googleRoutesDenied = true;
       /* key not allowed for the Routes API, offline...: try the free service */
     }
   }

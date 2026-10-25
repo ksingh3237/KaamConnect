@@ -28,9 +28,8 @@ import * as Location from 'expo-location';
 import { Check, ChevronDown, ChevronRight, LocateFixed, MapPin, PlusCircle, Search, X } from 'lucide-react-native';
 import { Colors, Radius, noFocusRing } from '../constants/theme';
 import type { LocationCity } from '../api/types';
-import { placeFromExpo, resolveDetected, withTimeout } from '../utils/currentSector';
-import { mapsConfigured, reverseGeocode } from '../utils/googlePlaces';
-import type { ResolvedPlace } from '../utils/googlePlaces';
+import { resolveDetected, withTimeout } from '../utils/currentSector';
+import { reverseGeocodePlace } from '../utils/reverseGeocode';
 import {
   buildRows,
   citiesWithOtherArea,
@@ -70,7 +69,6 @@ const NOTES = {
 
 // Every GPS step has a limit, so the card can never spin forever
 const FIX_TIMEOUT_MS = 15_000;
-const GEOCODE_TIMEOUT_MS = 10_000;
 const LAST_KNOWN_MAX_AGE_MS = 10 * 60_000;
 
 /** A fresh fix, or (when that times out or fails) the phone's last known one if it is under 10 minutes old. */
@@ -82,18 +80,6 @@ async function currentPosition(): Promise<Location.LocationObject> {
     if (last) return last;
     throw error;
   }
-}
-
-/** GPS fix -> address: Google when the build has a key, else the phone's own geocoder. */
-async function reverseGeocodePlace(lat: number, lng: number): Promise<ResolvedPlace> {
-  if (mapsConfigured) {
-    try {
-      return await withTimeout(reverseGeocode(lat, lng), GEOCODE_TIMEOUT_MS);
-    } catch {
-      // key restricted, offline or slow: fall through to the device geocoder
-    }
-  }
-  return placeFromExpo(lat, lng, await withTimeout(Location.reverseGeocodeAsync({ latitude: lat, longitude: lng }), GEOCODE_TIMEOUT_MS));
 }
 
 const pillName = (item: SectorItem) => item.name.replace(/^Sector /, 'Sec ');
