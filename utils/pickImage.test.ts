@@ -14,9 +14,19 @@ vi.mock('expo-image-picker', () => ({
   launchCameraAsync: vi.fn(),
 }));
 
+const platform = vi.hoisted(() => ({ os: 'ios' }));
+vi.mock('react-native', () => ({
+  Platform: {
+    get OS() {
+      return platform.os;
+    },
+  },
+}));
+
 describe('pickImage utility', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    platform.os = 'ios';
   });
 
   describe('pickFromGallery / pickImage', () => {
@@ -130,6 +140,50 @@ describe('pickImage utility', () => {
 
       const res = await captureFromCamera();
       expect(res).toBeNull();
+    });
+  });
+
+  describe('Android launcher problems and permissions', () => {
+    const granted = { granted: true, status: 'granted', canAskAgain: true, expires: 'never' } as const;
+    const lost = () =>
+      new Error(
+        "Call to function 'ExponentImagePicker.launchCameraAsync' has been rejected. -> Caused by: java.lang.IllegalStateException: Attempting to launch an unregistered ActivityResultLauncher with contract expo.modules.imagepicker.contracts.CameraContract",
+      );
+
+    it('opens the Android gallery without asking for a permission first (the system picker needs none)', async () => {
+      platform.os = 'android';
+      vi.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValueOnce({ canceled: true, assets: null });
+      await pickFromGallery();
+      expect(ImagePicker.requestMediaLibraryPermissionsAsync).not.toHaveBeenCalled();
+      expect(ImagePicker.launchImageLibraryAsync).toHaveBeenCalledTimes(1);
+    });
+
+    it('still asks for photo access on iOS before opening the gallery', async () => {
+      platform.os = 'ios';
+      vi.mocked(ImagePicker.requestMediaLibraryPermissionsAsync).mockResolvedValueOnce(granted as never);
+      vi.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValueOnce({ canceled: true, assets: null });
+      await pickFromGallery();
+      expect(ImagePicker.requestMediaLibraryPermissionsAsync).toHaveBeenCalledTimes(1);
+    });
+
+    it('turns the raw lost-launcher exception into a sentence the person can act on (camera)', async () => {
+      platform.os = 'android';
+      vi.mocked(ImagePicker.requestCameraPermissionsAsync).mockResolvedValueOnce(granted as never);
+      vi.mocked(ImagePicker.launchCameraAsync).mockRejectedValueOnce(lost());
+      await expect(captureFromCamera()).rejects.toThrow(/Close KaamConnect completely/);
+    });
+
+    it('does the same for the gallery', async () => {
+      platform.os = 'android';
+      vi.mocked(ImagePicker.launchImageLibraryAsync).mockRejectedValueOnce(lost());
+      await expect(pickFromGallery()).rejects.toThrow(/Close KaamConnect completely/);
+    });
+
+    it('leaves every other error untouched', async () => {
+      platform.os = 'android';
+      vi.mocked(ImagePicker.requestCameraPermissionsAsync).mockResolvedValueOnce(granted as never);
+      vi.mocked(ImagePicker.launchCameraAsync).mockRejectedValueOnce(new Error('Camera is in use by another app'));
+      await expect(captureFromCamera()).rejects.toThrow('Camera is in use by another app');
     });
   });
 });
