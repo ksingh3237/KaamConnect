@@ -3,6 +3,7 @@ import { del, get, patch, post, put } from './client';
 import type {
   BillItemKind,
   BillView,
+  CancelBody,
   CreateJobBody,
   CreatedJob,
   DocumentType,
@@ -30,6 +31,7 @@ import type {
   ServiceCategory,
   Tracking,
   VerifyResult,
+  WorkerCancellations,
   WorkerCard,
   WorkerJobsPage,
   WorkerView,
@@ -93,7 +95,8 @@ export const getJob = (id: string) => get<JobView>(`/jobs/${id}`);
 export const listOffers = (jobId: string, sort: 'fee' | 'eta' = 'fee') =>
   get<OfferForCustomer[]>(`/jobs/${jobId}/offers`, { query: { sort } });
 export const acceptOffer = (jobId: string, offerId: string) => post<JobView>(`/jobs/${jobId}/offers/${offerId}/accept`);
-export const cancelJob = (jobId: string, reason?: string) => post<JobView>(`/jobs/${jobId}/cancel`, reason ? { reason } : {});
+/** One route for both people: the customer cancels, or the assigned worker backs out (the server decides by who owns the job). */
+export const cancelJob = (jobId: string, body: CancelBody = {}) => post<JobView>(`/jobs/${jobId}/cancel`, body);
 export const getTracking = (jobId: string) => get<Tracking>(`/jobs/${jobId}/tracking`);
 export const getBill = (jobId: string) => get<BillView>(`/jobs/${jobId}/bill`);
 export const approveBill = (jobId: string, expectedTotal: number) => post<BillView>(`/jobs/${jobId}/bill/approve`, { expectedTotal });
@@ -112,6 +115,8 @@ export const sendOffer = (leadId: string, body: { visitFee: number; etaMinutes: 
 export const declineLead = (leadId: string) => post<void>(`/leads/${leadId}/decline`);
 export const listWorkerJobs = (tab: JobTab, cursor?: string) =>
   get<WorkerJobsPage>('/workers/me/jobs', { query: { tab, limit: 20, cursor } });
+/** The worker's own cancellations (a re-opened job leaves their job list, so this is where it is kept) and the repeat back-out warning. */
+export const getMyCancellations = () => get<WorkerCancellations>('/workers/me/cancellations');
 export const acceptDirect = (jobId: string) => post<JobView>(`/jobs/${jobId}/direct/accept`);
 export const declineDirect = (jobId: string) => post<JobView>(`/jobs/${jobId}/direct/decline`);
 

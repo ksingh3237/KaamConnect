@@ -19,6 +19,22 @@ describe('notificationTarget', () => {
     }
   });
 
+  it('sends a customer-cancelled job to the worker\'s job screen, which shows the cancelled summary', () => {
+    expect(notificationTarget('JOB_CANCELLED_BY_CUSTOMER', data)).toEqual({ side: 'worker', href: '/job-progress', jobId: 'job-1' });
+  });
+
+  it('sends a worker-cancelled job to the quotes when it re-opened, and to the tracking screen when it closed', () => {
+    expect(notificationTarget('JOB_CANCELLED_BY_WORKER', { ...data, reopened: true })).toEqual({ side: 'customer', href: '/compare-offers', jobId: 'job-1' });
+    expect(notificationTarget('JOB_CANCELLED_BY_WORKER', { ...data, reopened: false })).toEqual({ side: 'customer', href: '/tracking', jobId: 'job-1' });
+    // a push from an older server has no flag: closed is the safe reading
+    expect(notificationTarget('JOB_CANCELLED_BY_WORKER', data)?.href).toBe('/tracking');
+  });
+
+  it('reads the re-opened flag from a tapped push, where every data value is text', () => {
+    expect(notificationTarget('JOB_CANCELLED_BY_WORKER', { ...data, reopened: 'true' })?.href).toBe('/compare-offers');
+    expect(notificationTarget('JOB_CANCELLED_BY_WORKER', { ...data, reopened: 'false' })?.href).toBe('/tracking');
+  });
+
   it('opens a lead by id for workers without touching the active job', () => {
     expect(notificationTarget('NEW_LEAD', data)).toEqual({
       side: 'worker',

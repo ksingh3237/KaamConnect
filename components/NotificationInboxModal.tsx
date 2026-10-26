@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Modal, Platform, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BadgeIndianRupee, Briefcase, CalendarCheck, CheckCheck, CircleCheck, MapPin, Navigation, Receipt, X, type LucideIcon } from 'lucide-react-native';
+import { BadgeIndianRupee, Briefcase, CalendarCheck, CheckCheck, CircleCheck, CircleX, MapPin, Navigation, Receipt, X, type LucideIcon } from 'lucide-react-native';
 import { Colors, Radius, Spacing } from '../constants/theme';
 import { listNotifications, markAllNotificationsRead, markNotificationRead } from '../api/endpoints';
 import { userMessage } from '../api/errors';
@@ -22,6 +22,8 @@ const ICONS: Record<NotificationType, { Icon: LucideIcon; color: string; bg: str
   WORKER_ARRIVED: { Icon: MapPin, color: '#047857', bg: '#D1FAE5' },
   BILL_CREATED: { Icon: Receipt, color: '#D97706', bg: '#FEF3C7' },
   WORK_COMPLETED: { Icon: CircleCheck, color: '#047857', bg: '#D1FAE5' },
+  JOB_CANCELLED_BY_CUSTOMER: { Icon: CircleX, color: '#B91C1C', bg: '#FEE2E2' },
+  JOB_CANCELLED_BY_WORKER: { Icon: CircleX, color: '#B91C1C', bg: '#FEE2E2' },
 };
 const FALLBACK_ICON = { Icon: Briefcase, color: Colors.textMuted, bg: Colors.surfaceVariant };
 

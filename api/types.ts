@@ -242,6 +242,8 @@ export interface JobView {
   arrivedAt: string | null;
   completedAt: string | null;
   cancelledAt: string | null;
+  /** Who cancelled; SYSTEM = it expired. Null while the job is not cancelled. */
+  cancelledBy: 'CUSTOMER' | 'WORKER' | 'SYSTEM' | null;
   cancelReason: string | null;
   photoUrls: string[];
   voiceNote: { url: string; durationSec: number | null } | null;
@@ -258,6 +260,66 @@ export interface JobView {
   arrivalResetsLeft?: number;
   review?: ReviewView | null;
   canReview?: boolean;
+  /** CANCELLED by a person (not an expiry): who, where the job was, why, and a visit fee owed to the worker directly. */
+  cancellation?: CancellationView;
+}
+
+// ── cancelling (docs/13-cancellation.md on the server). The codes mirror KaamConnectBackendAPI/src/modules/jobs/cancel-reasons.ts.
+export type CancelReasonCode =
+  | 'VEHICLE_PROBLEM'
+  | 'PERSONAL_EMERGENCY'
+  | 'DOUBLE_BOOKED'
+  | 'TOO_FAR'
+  | 'CANT_DO_WORK'
+  | 'CUSTOMER_UNREACHABLE'
+  | 'WRONG_ADDRESS'
+  | 'CUSTOMER_ASKED'
+  | 'PRICE_DISAGREEMENT'
+  | 'UNSAFE_LOCATION'
+  | 'CHANGED_MIND'
+  | 'FOUND_ANOTHER'
+  | 'WORKER_LATE'
+  | 'WORKER_UNREACHABLE'
+  | 'POSTED_BY_MISTAKE'
+  | 'PRICE_TOO_HIGH'
+  | 'OTHER';
+export type CancelActor = 'CUSTOMER' | 'WORKER';
+/** Where a job can still be cancelled: not yet taken, worker on the way, worker on site (cost not yet approved). */
+export type CancelStage = 'OPEN' | 'ASSIGNED' | 'ARRIVED';
+export interface CancelBody {
+  reasonCode?: CancelReasonCode;
+  /** The person's own words; the server requires it with `OTHER`. */
+  reason?: string;
+}
+export interface CancellationView {
+  by: CancelActor;
+  stage: JobStatus;
+  reasonCode: string;
+  reason: string;
+  visitFeeDue: number | null;
+}
+export interface BackOutSummary {
+  windowDays: number;
+  warnAt: number;
+  recent: number;
+  warn: boolean;
+}
+export interface WorkerCancellationItem {
+  id: string;
+  jobId: string;
+  reference: string;
+  title: string;
+  stage: JobStatus;
+  reasonCode: string;
+  reason: string;
+  /** The request went back to the customer for new quotes. */
+  reopened: boolean;
+  countsAgainstWorker: boolean;
+  createdAt: string;
+}
+export interface WorkerCancellations {
+  summary: BackOutSummary;
+  items: WorkerCancellationItem[];
 }
 export interface OfferForCustomer {
   offerId: string;
@@ -445,7 +507,9 @@ export type NotificationType =
   | 'WORKER_EN_ROUTE'
   | 'WORKER_ARRIVED'
   | 'BILL_CREATED'
-  | 'WORK_COMPLETED';
+  | 'WORK_COMPLETED'
+  | 'JOB_CANCELLED_BY_CUSTOMER'
+  | 'JOB_CANCELLED_BY_WORKER';
 
 export interface NotificationItem {
   id: string;

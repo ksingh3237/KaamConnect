@@ -15,7 +15,7 @@ export interface NotificationTarget {
   jobId: string | null;
 }
 
-const WORKER_TYPES: ReadonlySet<NotificationType> = new Set(['NEW_LEAD', 'DIRECT_REQUEST', 'BOOKING_CONFIRMED']);
+const WORKER_TYPES: ReadonlySet<NotificationType> = new Set(['NEW_LEAD', 'DIRECT_REQUEST', 'BOOKING_CONFIRMED', 'JOB_CANCELLED_BY_CUSTOMER']);
 
 export function notificationSide(type: NotificationType): NotificationSide {
   return WORKER_TYPES.has(type) ? 'worker' : 'customer';
@@ -44,7 +44,12 @@ export function notificationTarget(type: string, data: Record<string, unknown> |
     case 'BOOKING_CONFIRMED':
     case 'BILL_CREATED':
     case 'WORK_COMPLETED':
+    case 'JOB_CANCELLED_BY_CUSTOMER': // job progress shows the worker the cancelled summary: who, why, any visit fee
       return { side, href: '/job-progress', jobId };
+    case 'JOB_CANCELLED_BY_WORKER':
+      // Re-opened: the customer's next step is choosing another quote. Closed: the tracking screen explains why.
+      // A pushed flag arrives as the text "true" (FCM data is all strings); the inbox row keeps the real boolean.
+      return { side, href: data?.reopened === true || data?.reopened === 'true' ? '/compare-offers' : '/tracking', jobId };
     default:
       return null;
   }
