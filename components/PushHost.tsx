@@ -6,7 +6,7 @@ import * as Notifications from 'expo-notifications';
 import { useSession } from '../store/useSession';
 import { useNotifications } from '../store/useNotifications';
 import { openNotification } from '../utils/openNotification';
-import { onFcmTokenRefresh, registerForPush } from '../utils/pushRegistration';
+import { onFcmTokenRefresh, onPushTokenChanged } from '../utils/pushRegistration';
 
 const UNREAD_POLL_MS = 30_000;
 const native = Platform.OS === 'android' || Platform.OS === 'ios';
@@ -51,9 +51,13 @@ export default function PushHost() {
     const received = Notifications.addNotificationReceivedListener(() => void refreshUnread());
     // A tap while the app was running or in the background
     const tapped = Notifications.addNotificationResponseReceivedListener(openFromResponse);
-    // FCM rotated the token: give the server the new one
-    const rotated = Notifications.addPushTokenListener(() => void registerForPush());
-    const rotatedIos = onFcmTokenRefresh(() => void registerForPush()); // iOS: Firebase's own token changes
+    // FCM rotated the token: give the server the new one. Android reads it from this event; on iOS the event carries an
+    // APNs token (useless to FCM), so iOS listens to Firebase instead. Neither handler may read the token again: on
+    // Android reading it fires this very event, which once made a registration loop.
+    const rotated = Notifications.addPushTokenListener((event) => {
+      if (Platform.OS === 'android' && typeof event.data === 'string') void onPushTokenChanged(event.data);
+    });
+    const rotatedIos = onFcmTokenRefresh((token) => void onPushTokenChanged(token));
     // A tap that launched the app from closed (handled once, then cleared so a restart does not repeat it)
     void Notifications.getLastNotificationResponseAsync().then((response) => {
       if (!response) return;

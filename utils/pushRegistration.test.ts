@@ -248,3 +248,74 @@ describe('iOS', () => {
     expect(firebase.onTokenRefresh).not.toHaveBeenCalled();
   });
 });
+
+describe('never loops (regression: expo-notifications reports "new token" whenever the token is READ)', () => {
+  it('reading the token once costs exactly one read and one request, even though every read fires the token event', async () => {
+    const mod = await load();
+    // what the Android native module does: after every read it fires the listener PushHost installs
+    notifications.getDevicePushTokenAsync.mockImplementation(async () => {
+      queueMicrotask(() => void mod.onPushTokenChanged(TOKEN_A));
+      return { type: 'android', data: TOKEN_A };
+    });
+    await mod.registerForPush();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(notifications.getDevicePushTokenAsync).toHaveBeenCalledTimes(1);
+    expect(endpoints.registerDeviceToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('a token event never reads the token again', async () => {
+    const { registerForPush, onPushTokenChanged } = await load();
+    await registerForPush();
+    notifications.getDevicePushTokenAsync.mockClear();
+    await onPushTokenChanged(TOKEN_B);
+    await onPushTokenChanged(TOKEN_B);
+    expect(notifications.getDevicePushTokenAsync).not.toHaveBeenCalled();
+  });
+
+  it('a real rotation sends the new token once; the same token again sends nothing', async () => {
+    const { registerForPush, onPushTokenChanged } = await load();
+    await registerForPush();
+    await onPushTokenChanged(TOKEN_A); // same as registered
+    await onPushTokenChanged(TOKEN_B); // rotated
+    await onPushTokenChanged(TOKEN_B);
+    expect(endpoints.registerDeviceToken.mock.calls.map((c) => c[0])).toEqual([TOKEN_A, TOKEN_B]);
+  });
+
+  it('ignores a token event while nothing is registered (signed out, or permission not granted yet)', async () => {
+    const { onPushTokenChanged } = await load();
+    await onPushTokenChanged(TOKEN_A);
+    expect(endpoints.registerDeviceToken).not.toHaveBeenCalled();
+  });
+
+  it('calling registerForPush again with the same token costs no request', async () => {
+    const { registerForPush } = await load();
+    await registerForPush();
+    await registerForPush();
+    await registerForPush();
+    expect(endpoints.registerDeviceToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries a token the server refused (it is not remembered as registered)', async () => {
+    endpoints.registerDeviceToken.mockRejectedValueOnce(new Error('NETWORK'));
+    const { registerForPush } = await load();
+    await registerForPush();
+    await registerForPush();
+    expect(endpoints.registerDeviceToken).toHaveBeenCalledTimes(2);
+  });
+
+  it('a session that ended by itself is forgotten, so the next person registers the same phone again', async () => {
+    const { registerForPush, forgetPushToken } = await load();
+    await registerForPush();
+    forgetPushToken();
+    await registerForPush();
+    expect(endpoints.registerDeviceToken).toHaveBeenCalledTimes(2);
+  });
+
+  it('on iOS a Firebase rotation is sent as IOS with the token from the event', async () => {
+    env.os = 'ios';
+    const { registerForPush, onPushTokenChanged } = await load();
+    await registerForPush();
+    await onPushTokenChanged('fcm-token-IOS-rotated-xxxxxxxxxxxxx');
+    expect(endpoints.registerDeviceToken).toHaveBeenLastCalledWith('fcm-token-IOS-rotated-xxxxxxxxxxxxx', 'IOS');
+  });
+});

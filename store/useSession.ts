@@ -103,6 +103,7 @@ export const useSession = create<SessionState>((set, get) => {
 
   bootstrap: async () => {
     onSessionEnded(() => {
+      forgetPushToken(); // the login is gone: the next person to sign in on this phone must register it afresh
       endRealtime();
       set({ status: 'signedOut', user: null, me: null, customerProfile: null, workerProfile: null });
     });

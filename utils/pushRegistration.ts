@@ -40,10 +40,10 @@ async function readFcmToken(): Promise<string | null> {
 }
 
 /**
- * Calls `onChange` when Firebase gives this phone a new token. iOS only: on Android the token listener of
- * expo-notifications already reports it. Returns the function that stops listening.
+ * Calls `onChange` with the new FCM token when Firebase rotates it. iOS only: there the token listener of
+ * expo-notifications reports the APNs token instead, which is useless to FCM. Returns the function that stops listening.
  */
-export function onFcmTokenRefresh(onChange: () => void): () => void {
+export function onFcmTokenRefresh(onChange: (token: string) => void): () => void {
   if (platform !== 'IOS' || !Device.isDevice) return () => undefined;
   let stop: (() => void) | undefined;
   let cancelled = false;
@@ -84,12 +84,41 @@ export async function registerForPush(): Promise<void> {
     const token = await readFcmToken();
     if (!token) return;
     if (mine !== epoch) return; // signed out while the permission dialog or token request was open
-    pendingToken = token;
-    posting = registerDeviceToken(token, platform);
-    await posting;
-    if (mine === epoch) registeredToken = token;
+    await submit(token, platform, mine);
   } catch {
     /* no Google Play services / APNs key not set up, offline, or the server refused: the next sign-in or refresh tries again */
+  }
+}
+
+/**
+ * Gives the server a token, unless it already has exactly this one. The skip also makes any repeated call free: this
+ * module once looped (expo-notifications reports "new token" every time the token is READ, and reading it started a
+ * registration that read it again), so a repeat must never cost a request.
+ */
+async function submit(token: string, as: 'ANDROID' | 'IOS', mine: number): Promise<void> {
+  if (token === registeredToken || token === pendingToken) return;
+  pendingToken = token;
+  posting = registerDeviceToken(token, as);
+  try {
+    await posting;
+    if (mine === epoch) registeredToken = token;
+  } catch (error) {
+    if (pendingToken === token) pendingToken = null; // not accepted, so a later attempt may try it again
+    throw error;
+  }
+}
+
+/**
+ * The system says the token changed. Uses the token carried by the event and never reads it again (reading is what
+ * triggers this event). Ignored when nothing is registered yet (registerForPush decides that) or the token is the same.
+ */
+export async function onPushTokenChanged(token: string): Promise<void> {
+  if (!platform || !Device.isDevice || !token) return;
+  if (registeredToken === null && pendingToken === null) return;
+  try {
+    await submit(token, platform, epoch);
+  } catch {
+    /* the next sign-in or refresh tries again */
   }
 }
 
