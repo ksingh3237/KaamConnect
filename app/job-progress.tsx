@@ -6,10 +6,12 @@ import { ArrowLeft, CheckCircle2, Phone, ShieldCheck, Zap } from 'lucide-react-n
 import { Colors, Spacing, Radius } from '../constants/theme';
 import { useStore } from '../store/useStore';
 import { useAsync } from '../api/useAsync';
-import { addWorkPhoto, approveBill, completeWork, getBill, getJob, payJob, putBillItems, verifyArrival } from '../api/endpoints';
+import { addWorkPhoto, approveBill, completeWork, getBill, getJob, getMyCancellations, payJob, putBillItems, verifyArrival } from '../api/endpoints';
 import { isApiError, userMessage } from '../api/errors';
 import { uploadFile } from '../api/upload';
 import { useImagePicker } from '../components/ImageSourceModal';
+import { useCancelJob } from '../components/CancelReasonSheet';
+import { backOutWarning, cancelledHeadline, cancelledMessage, cancelledReason, visitFeeNotice } from '../utils/cancelReasons';
 import { callPhone, confirmAction, notify } from '../utils/dialog';
 import { getLocationAccess, requestWorkerLocationAccess } from '../utils/locationPermission';
 import { workerTracking } from '../utils/workerTracking';
@@ -49,7 +51,7 @@ interface DraftItem {
 
 export default function JobProgressScreen() {
   const router = useRouter();
-  const { activeJobId, currentLat, currentLng, isTrackingActive, trackingIssue } = useStore();
+  const { activeJobId, setActiveJobId, currentLat, currentLng, isTrackingActive, trackingIssue } = useStore();
   const workerProfile = useSession((s) => s.workerProfile);
   const [askLocation, setAskLocation] = useState(false);
   const { pick: pickImage, modal: imageSourceModal } = useImagePicker();
@@ -74,6 +76,9 @@ export default function JobProgressScreen() {
   const bill = state.data?.bill ?? null;
   const isWorker = job?.viewer === 'worker';
   const other = isWorker ? job?.customer : job?.worker;
+  const { cancel, busy: cancelling, modal: cancelModal } = useCancelJob(isWorker ? 'WORKER' : 'CUSTOMER');
+  // What the worker charged to come: owed to them directly if the visit ends without the work (shown in the cancel sheet)
+  const visitFee = bill?.items.find((i) => i.kind === 'VISIT_FEE')?.amount ?? null;
 
   // Worker on the way: share GPS for this job while it stays ASSIGNED, stop the moment it is not (arrived, cancelled...)
   const enRoute = isWorker && job?.status === 'ASSIGNED';
@@ -169,12 +174,35 @@ export default function JobProgressScreen() {
     await run('pay', () => payJob(activeJobId!, method), () => router.replace('/rating'));
   };
 
+  // The worker cannot continue (on the way, or on site). The server re-opens the request or closes it, depending on why.
+  const cancelAsWorker = (stage: 'ASSIGNED' | 'ARRIVED') =>
+    void cancel(activeJobId!, stage, {
+      visitFee,
+      onCancelled: async (result) => {
+        workerTracking.stopTracking();
+        let warning: string | null = null;
+        try {
+          warning = backOutWarning((await getMyCancellations()).summary);
+        } catch {
+          /* the warning is a courtesy: never hide that the job was cancelled because it could not be loaded */
+        }
+        const { title, message } = cancelledMessage('WORKER', result.status === 'OPEN');
+        setActiveJobId(null); // a re-opened job is no longer theirs: do not keep pointing at it
+        router.replace('/(tabs)/leads');
+        void notify(title, warning ? `${message}\n\n${warning}` : message);
+      },
+      onFailed: () => state.reload(),
+    });
+
+  // The customer, with the worker on site, refuses the cost: the job closes and the visit fee is owed directly
+  const declineCost = () => void cancel(activeJobId!, 'ARRIVED', { visitFee, onCancelled: () => state.reload(), onFailed: () => state.reload() });
+
   const call = () => {
     const phone = other?.phone;
     if (phone) void callPhone(phone, other?.name ?? 'them');
   };
 
-  const timeline = job
+  const timeline = job && job.status !== 'CANCELLED'
     ? [
         { title: 'Worker accepted the job', desc: job.assignedAt ? `At ${timeOf(job.assignedAt)}` : 'Waiting', done: !!job.assignedAt },
         { title: 'Technician arrived at location', desc: job.arrivedAt ? `Arrival code verified at ${timeOf(job.arrivedAt)}` : 'Share the arrival code when the worker reaches you', done: !!job.arrivedAt },
@@ -276,33 +304,57 @@ export default function JobProgressScreen() {
               </View>
             )}
 
-            {/* Milestones */}
-            <View style={styles.card}>
-              <Text style={styles.sectionTitle}>Service Milestones (कार्य प्रगति)</Text>
-              <View style={styles.timeline}>
-                {timeline.map((t, i) => (
-                  <React.Fragment key={t.title}>
-                    <View style={styles.timelineItem}>
-                      <View style={[styles.timelineIcon, t.done ? styles.timelineDone : i === nextIndex ? styles.timelineActive : null]}>
-                        {t.done ? <CheckCircle2 color="#FFFFFF" size={15} /> : <Text style={styles.timelineStepNumber}>{i + 1}</Text>}
-                      </View>
-                      <View style={styles.timelineContent}>
-                        <Text style={[styles.timelineTitle, i === nextIndex && { color: Colors.tertiary }]}>{t.title}</Text>
-                        <Text style={styles.timelineDesc}>{t.desc}</Text>
-                      </View>
-                    </View>
-                    {i < timeline.length - 1 && <View style={styles.timelineLine} />}
-                  </React.Fragment>
-                ))}
+            {/* Cancelled: who, why, and what (if anything) is owed. Replaces the milestones, which no longer apply. */}
+            {job.status === 'CANCELLED' && (
+              <View style={[styles.card, styles.cancelledCard]} accessibilityRole="alert">
+                <Text style={styles.cancelledTitle}>{cancelledHeadline(job, isWorker ? 'worker' : 'customer')}</Text>
+                <Text style={styles.cancelledReason}>{cancelledReason(job)}</Text>
+                {visitFeeNotice(job, isWorker ? 'worker' : 'customer') ? <Text style={styles.cancelledFee}>{visitFeeNotice(job, isWorker ? 'worker' : 'customer')}</Text> : null}
+                <TouchableOpacity
+                  style={[styles.smallBtn, { paddingVertical: 14, marginTop: Spacing.md }]}
+                  onPress={() => router.replace(isWorker ? '/(tabs)/leads' : '/(tabs)/home')}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.smallBtnText}>{isWorker ? 'Back to leads' : 'Back to home'}</Text>
+                </TouchableOpacity>
               </View>
-            </View>
+            )}
+
+            {/* Milestones */}
+            {timeline.length > 0 && (
+              <View style={styles.card}>
+                <Text style={styles.sectionTitle}>Service Milestones (कार्य प्रगति)</Text>
+                <View style={styles.timeline}>
+                  {timeline.map((t, i) => (
+                    <React.Fragment key={t.title}>
+                      <View style={styles.timelineItem}>
+                        <View style={[styles.timelineIcon, t.done ? styles.timelineDone : i === nextIndex ? styles.timelineActive : null]}>
+                          {t.done ? <CheckCircle2 color="#FFFFFF" size={15} /> : <Text style={styles.timelineStepNumber}>{i + 1}</Text>}
+                        </View>
+                        <View style={styles.timelineContent}>
+                          <Text style={[styles.timelineTitle, i === nextIndex && { color: Colors.tertiary }]}>{t.title}</Text>
+                          <Text style={styles.timelineDesc}>{t.desc}</Text>
+                        </View>
+                      </View>
+                      {i < timeline.length - 1 && <View style={styles.timelineLine} />}
+                    </React.Fragment>
+                  ))}
+                </View>
+              </View>
+            )}
 
             {/* Worker: arrival code */}
             {isWorker && job.status === 'ASSIGNED' && (
               <View style={styles.card}>
                 <Text style={styles.sectionTitle}>Arrival Code (आगमन कोड)</Text>
-                <Text style={styles.hint}>Ask the customer for the 4-digit code shown in their app to confirm you have arrived.</Text>
-                <View style={styles.inputRow}>
+                {job.arrivalLocked ? (
+                  <Text style={styles.lockedText} accessibilityRole="alert">
+                    Too many wrong codes, so entering a code is locked. Ask the customer to issue a new code from their Tracking screen, or cancel this job below. / ग्राहक से नया कोड जारी करने को कहें
+                  </Text>
+                ) : (
+                  <Text style={styles.hint}>Ask the customer for the 4-digit code shown in their app to confirm you have arrived.</Text>
+                )}
+                <View style={[styles.inputRow, job.arrivalLocked && { opacity: 0.4 }]} pointerEvents={job.arrivalLocked ? 'none' : 'auto'}>
                   <TextInput
                     style={styles.input}
                     value={code}
@@ -451,6 +503,18 @@ export default function JobProgressScreen() {
                 {busy === 'approve' ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.smallBtnText}>Approve cost {money(bill.total)} and start the work</Text>}
               </TouchableOpacity>
             )}
+            {/* Not happy with the cost: leave without starting. Once the cost is approved this is no longer possible. */}
+            {!isWorker && job.status === 'ARRIVED' && (
+              <TouchableOpacity
+                style={[styles.dangerBtn, (cancelling || busy !== null) && { opacity: 0.6 }]}
+                onPress={declineCost}
+                disabled={cancelling || busy !== null}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+              >
+                <Text style={styles.dangerBtnText}>{cancelling ? 'Cancelling…' : 'Decline the cost and cancel / दाम न मानें, रद्द करें'}</Text>
+              </TouchableOpacity>
+            )}
             {!isWorker && bill && job.status === 'WORK_COMPLETED' && (
               <View style={styles.qrCard}>
                 <Text style={styles.qrTitle}>Pay Directly to {bill.payTo.name}</Text>
@@ -479,6 +543,21 @@ export default function JobProgressScreen() {
               </TouchableOpacity>
             )}
 
+            {/* The worker cannot continue: on the way (ASSIGNED) or on site before the cost is approved (ARRIVED) */}
+            {isWorker && (job.status === 'ASSIGNED' || job.status === 'ARRIVED') && (
+              <TouchableOpacity
+                style={[styles.dangerBtn, (cancelling || busy !== null) && { opacity: 0.6 }]}
+                onPress={() => cancelAsWorker(job.status as 'ASSIGNED' | 'ARRIVED')}
+                disabled={cancelling || busy !== null}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+              >
+                <Text style={styles.dangerBtnText}>
+                  {cancelling ? 'Cancelling…' : job.status === 'ASSIGNED' ? 'Cannot make it? Cancel this job / जॉब रद्द करें' : 'Cannot do this work? Leave the job / जॉब छोड़ें'}
+                </Text>
+              </TouchableOpacity>
+            )}
+
             {actionError && <Text style={styles.errorLine} accessibilityRole="alert">{actionError}</Text>}
           </>
         )}
@@ -492,6 +571,7 @@ export default function JobProgressScreen() {
         }}
       />
       {imageSourceModal}
+      {cancelModal}
     </SafeAreaView>
   );
 }
@@ -845,6 +925,13 @@ const styles = StyleSheet.create({
   ghostBtn: { borderWidth: 1.5, borderColor: Colors.borderDark, paddingHorizontal: 12, paddingVertical: 8, borderRadius: Radius.md, backgroundColor: '#FFFFFF' },
   ghostBtnText: { color: Colors.textMain, fontSize: 12, fontWeight: '700' },
   hint: { fontSize: 13, color: Colors.textMuted, marginTop: 6, lineHeight: 18 },
+  lockedText: { fontSize: 13, fontWeight: '700', color: Colors.secondaryDark, backgroundColor: Colors.secondaryLight, borderRadius: Radius.md, padding: Spacing.md, marginTop: 6, lineHeight: 19 },
+  dangerBtn: { minHeight: 48, borderRadius: Radius.md, borderWidth: 1.5, borderColor: '#FCA5A5', backgroundColor: Colors.errorLight, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.md, paddingVertical: 10 },
+  dangerBtnText: { color: '#991B1B', fontSize: 13, fontWeight: '800', textAlign: 'center' },
+  cancelledCard: { borderColor: '#FCA5A5', backgroundColor: Colors.errorLight },
+  cancelledTitle: { fontSize: 16, fontWeight: '800', color: '#991B1B' },
+  cancelledReason: { fontSize: 14, color: Colors.textMain, marginTop: 6, lineHeight: 20 },
+  cancelledFee: { fontSize: 13, fontWeight: '700', color: Colors.secondaryDark, backgroundColor: Colors.secondaryLight, borderRadius: Radius.md, padding: Spacing.md, marginTop: Spacing.md, lineHeight: 19 },
   errorLine: { fontSize: 12, fontWeight: '600', color: Colors.error, marginTop: 8, textAlign: 'center' },
   chipRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginTop: 6 },
   chip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.borderDark, backgroundColor: '#FFFFFF' },

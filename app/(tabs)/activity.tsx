@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -6,10 +6,12 @@ import { Phone, FileText, RotateCcw } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../../constants/theme';
 import { useStore } from '../../store/useStore';
 import { useAsync } from '../../api/useAsync';
-import { cancelJob, getEarnings, getReceipt, listMyJobs, listWorkerJobs } from '../../api/endpoints';
+import { getEarnings, getMyCancellations, getReceipt, listMyJobs, listWorkerJobs } from '../../api/endpoints';
 import { userMessage } from '../../api/errors';
 import type { JobListItem, JobListPage, JobStatus, JobTab, PendingQuote, WorkerJobItem, WorkerJobsPage } from '../../api/types';
-import { callPhone, confirmAction, notify } from '../../utils/dialog';
+import { useCancelJob } from '../../components/CancelReasonSheet';
+import { backOutWarning } from '../../utils/cancelReasons';
+import { callPhone, notify } from '../../utils/dialog';
 import { timeAgo, whenLabel } from '../../utils/time';
 import { EmptyBlock, ErrorBlock } from '../../components/StateBlocks';
 import { ActivityJobSkeleton } from '../../components/skeletons/ActivityJobSkeleton';
@@ -39,6 +41,12 @@ export default function ActivityScreen() {
     { pollMs: POLL_MS },
   );
   const earnings = useAsync(() => (isWorker ? getEarnings('today') : Promise.resolve(null)), [isWorker]);
+  // The worker's own cancellations: the repeat back-out warning, and the jobs they released (those leave their job list)
+  const mine = useAsync(() => (isWorker ? getMyCancellations() : Promise.resolve(null)), [isWorker], { pollMs: POLL_MS });
+  const warning = backOutWarning(mine.data?.summary);
+  const released = (mine.data?.items ?? []).filter((i) => i.reopened);
+  const { cancel, busy: cancelling, modal: cancelModal } = useCancelJob('CUSTOMER');
+  const cancelTarget = useRef<string | null>(null);
 
   const counts = jobs.data?.meta.counts;
   const list: (JobListItem | WorkerJobItem)[] = jobs.data?.items ?? [];
@@ -49,19 +57,11 @@ export default function ActivityScreen() {
     router.push(path);
   };
 
-  const handleCancel = async (jobId: string) => {
-    if (busyId) return;
-    const ok = await confirmAction('Cancel this request?', 'Workers who already quoted will be told. You can post it again any time.', 'Yes, cancel', true);
-    if (!ok) return;
-    setBusyId(jobId);
-    try {
-      await cancelJob(jobId);
-      await jobs.reload();
-    } catch (error) {
-      notify('Could not cancel', userMessage(error));
-    } finally {
-      setBusyId(null);
-    }
+  // Asks why first (the worker is told the reason), then cancels. The sheet words it for the job's stage.
+  const handleCancel = (job: JobListItem) => {
+    if (busyId || cancelling) return;
+    cancelTarget.current = job.id;
+    void cancel(job.id, job.status === 'OPEN' ? 'OPEN' : 'ASSIGNED', { onCancelled: () => jobs.reload(), onFailed: () => jobs.reload() });
   };
 
   const showReceipt = async (jobId: string) => {
@@ -136,8 +136,8 @@ export default function ActivityScreen() {
             </TouchableOpacity>
           )}
           {ongoing && ['OPEN', 'ASSIGNED'].includes(job.status) && (
-            <TouchableOpacity style={styles.actionBtnSecondary} onPress={() => void handleCancel(job.id)} disabled={busyId !== null} activeOpacity={0.8} accessibilityRole="button">
-              <Text style={styles.actionBtnSecondaryText}>{busyId === job.id ? 'Cancelling…' : 'Cancel'}</Text>
+            <TouchableOpacity style={styles.actionBtnSecondary} onPress={() => handleCancel(job)} disabled={busyId !== null || cancelling} activeOpacity={0.8} accessibilityRole="button">
+              <Text style={styles.actionBtnSecondaryText}>{cancelling && cancelTarget.current === job.id ? 'Cancelling…' : 'Cancel'}</Text>
             </TouchableOpacity>
           )}
           {activeTab === 'completed' && (
@@ -239,6 +239,13 @@ export default function ActivityScreen() {
           </View>
         )}
 
+        {/* Worker: backed out of several jobs lately */}
+        {isWorker && warning ? (
+          <View style={styles.warnCard} accessibilityRole="alert">
+            <Text style={styles.warnText}>{warning}</Text>
+          </View>
+        ) : null}
+
         {jobs.loading && <ActivityJobSkeleton />}
         {jobs.error && !jobs.data && <ErrorBlock message={jobs.error} onRetry={() => void jobs.reload()} />}
 
@@ -258,7 +265,26 @@ export default function ActivityScreen() {
           </>
         )}
 
-        {jobs.data && list.length === 0 && pendingQuotes.length === 0 && (
+        {/* Worker, Cancelled tab: jobs they released. The request went back to other workers, so it is no longer in their job list. */}
+        {isWorker && activeTab === 'cancelled' && released.length > 0 && (
+          <>
+            <Text style={styles.sectionHeading}>JOBS YOU RELEASED (आपने छोड़े गए काम)</Text>
+            {released.map((r) => (
+              <View key={r.id} style={styles.card}>
+                <View style={styles.pastJobHeader}>
+                  <Text style={styles.pastJobTitle}>{r.title}</Text>
+                </View>
+                <Text style={styles.pastJobMeta}>
+                  {r.reference} • {r.stage === 'ARRIVED' ? 'on site' : 'on the way'} • {timeAgo(r.createdAt)}
+                </Text>
+                <Text style={styles.pastJobMeta}>Reason: {r.reason}</Text>
+                <Text style={styles.pastJobMeta}>The customer’s request was opened to other workers.</Text>
+              </View>
+            ))}
+          </>
+        )}
+
+        {jobs.data && list.length === 0 && pendingQuotes.length === 0 && !(isWorker && activeTab === 'cancelled' && released.length > 0) && (
           <EmptyBlock
             title={activeTab === 'ongoing' ? 'Nothing ongoing' : activeTab === 'completed' ? 'No completed jobs yet' : 'No cancelled jobs'}
             hint={isWorker ? 'Jobs you win show up here. / जीते हुए काम यहाँ दिखेंगे' : 'Post a job or book a pro from Home. / होम से काम पोस्ट करें'}
@@ -267,11 +293,25 @@ export default function ActivityScreen() {
 
         {list.map((job) => (isWorker ? renderWorkerCard(job as WorkerJobItem) : renderCustomerCard(job as JobListItem)))}
       </ScrollView>
+      {cancelModal}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  warnCard: {
+    backgroundColor: Colors.secondaryLight,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    padding: Spacing.md
+  },
+  warnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.secondaryDark,
+    lineHeight: 19
+  },
   container: {
     flex: 1,
     backgroundColor: Colors.background

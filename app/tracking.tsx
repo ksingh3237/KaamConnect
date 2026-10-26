@@ -6,13 +6,15 @@ import { ArrowLeft, Phone, AlertTriangle } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../constants/theme';
 import { useStore } from '../store/useStore';
 import { useAsync } from '../api/useAsync';
-import { getJob, getTracking, raiseSos } from '../api/endpoints';
+import { getJob, getTracking, raiseSos, resetArrivalCode } from '../api/endpoints';
 import { isSocketConnected, onConnectionChange, onJobLocation, onJobStatus, unwatchJob, watchJob } from '../api/socket';
 import { userMessage } from '../api/errors';
 import type { JobLocationPayload, JobView, Tracking } from '../api/types';
 import Avatar from '../components/Avatar';
 import TripMap from '../components/TripMap';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../components/StateBlocks';
+import { useCancelJob } from '../components/CancelReasonSheet';
+import { cancelledHeadline, cancelledMessage, cancelledReason, visitFeeNotice } from '../utils/cancelReasons';
 import { callPhone, confirmAction, notify } from '../utils/dialog';
 import { currentPosition } from '../utils/position';
 import { timeAgo } from '../utils/time';
@@ -44,6 +46,8 @@ export default function TrackingScreen() {
   const [sosBusy, setSosBusy] = useState(false);
   const [live, setLive] = useState<JobLocationPayload | null>(null); // newest `job.location` event
   const [socketUp, setSocketUp] = useState(isSocketConnected());
+  const [resetting, setResetting] = useState(false);
+  const { cancel, busy: cancelling, modal: cancelModal } = useCancelJob('CUSTOMER');
 
   const state = useAsync<Loaded | null>(
     async () => {
@@ -59,6 +63,10 @@ export default function TrackingScreen() {
   const job = state.data?.job ?? null;
   const tracking = state.data?.tracking ?? null;
   const worker = job?.worker ?? null;
+  const cancelled = job?.status === 'CANCELLED';
+  // A broadcast request with no worker that I got here from: the worker backed out and it re-opened for quotes
+  const reopened = !!job && job.status === 'OPEN' && !job.isDirect;
+  const showWorker = !!job && !!worker && !cancelled;
   const reloadRef = useRef(state.reload);
   reloadRef.current = state.reload;
 
@@ -133,6 +141,36 @@ export default function TrackingScreen() {
     }
   };
 
+  // The worker typed five wrong codes and is locked out: a new code unlocks them (the old one stops working)
+  const handleNewCode = async () => {
+    if (!activeJobId || resetting) return;
+    setResetting(true);
+    try {
+      await resetArrivalCode(activeJobId);
+      await state.reload();
+      void notify('New code issued', 'Share the new code with your worker when they arrive. The old one no longer works.');
+    } catch (error) {
+      void notify('Could not issue a new code', userMessage(error));
+      await state.reload();
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  // Cancel while the worker is on the way, or decline the cost once they are on site. Failure usually means the job just changed.
+  const handleCancel = () => {
+    if (!activeJobId || !job) return;
+    const stage = job.status === 'ARRIVED' ? 'ARRIVED' : 'ASSIGNED';
+    void cancel(activeJobId, stage, {
+      onCancelled: async () => {
+        await state.reload();
+        const { title, message } = cancelledMessage('CUSTOMER', false);
+        void notify(title, message);
+      },
+      onFailed: () => state.reload(),
+    });
+  };
+
   const handleCall = () => {
     const phone = tracking?.worker?.phone ?? worker?.phone;
     if (phone) void callPhone(phone, worker?.name ?? 'your worker');
@@ -181,13 +219,27 @@ export default function TrackingScreen() {
         {state.loading && <LoadingBlock label="Loading your job… / जॉब लोड हो रहा है…" />}
         {state.error && !state.data && <ErrorBlock message={state.error} onRetry={() => void state.reload()} />}
         {!activeJobId && <EmptyBlock title="No job selected" hint="Book a pro or accept a quote first. / पहले बुक करें" />}
-        {job && !worker && (
-          <EmptyBlock
-            title={job.status === 'CANCELLED' ? 'This request was cancelled' : 'Waiting for the worker to accept'}
-            hint={job.status === 'CANCELLED' ? job.cancelReason ?? undefined : 'You will see the worker here as soon as they accept. This page refreshes by itself.'}
-          />
+        {job && cancelled && (
+          <>
+            <EmptyBlock title={cancelledHeadline(job, 'customer')} hint={[cancelledReason(job), visitFeeNotice(job, 'customer')].filter(Boolean).join('\n')} />
+            <TouchableOpacity style={styles.standaloneBtn} onPress={() => router.replace('/(tabs)/home')} accessibilityRole="button">
+              <Text style={styles.standaloneBtnText}>Back to home</Text>
+            </TouchableOpacity>
+          </>
         )}
-        {job && worker && (
+        {/* The worker backed out of a broadcast request: it is open again, so the next step is choosing another quote */}
+        {reopened && (
+          <>
+            <EmptyBlock title="Your worker had to cancel" hint="Your request is open again so other workers can quote. Choose a new quote to continue." />
+            <TouchableOpacity style={styles.standaloneBtn} onPress={() => router.replace('/compare-offers')} accessibilityRole="button">
+              <Text style={styles.standaloneBtnText}>View quotes</Text>
+            </TouchableOpacity>
+          </>
+        )}
+        {job && !cancelled && !reopened && !worker && (
+          <EmptyBlock title="Waiting for the worker to accept" hint="You will see the worker here as soon as they accept. This page refreshes by itself." />
+        )}
+        {showWorker && job && worker && (
           <>
             <View style={styles.drawerHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
@@ -217,20 +269,45 @@ export default function TrackingScreen() {
                 </Text>
               </View>
             ) : null}
+
+            {/* Five wrong codes lock the worker out: a new code unlocks them */}
+            {job.arrivalLocked ? (
+              <View style={styles.lockedBox} accessibilityRole="alert">
+                <Text style={styles.lockedText}>Your worker entered a wrong code too many times and is locked out.</Text>
+                {(job.arrivalResetsLeft ?? 0) > 0 ? (
+                  <TouchableOpacity style={[styles.newCodeBtn, resetting && { opacity: 0.6 }]} onPress={() => void handleNewCode()} disabled={resetting} accessibilityRole="button">
+                    <Text style={styles.newCodeText}>{resetting ? 'Issuing…' : `Issue a new code (${job.arrivalResetsLeft} left)`}</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={styles.lockedText}>No new codes can be issued for this job. Call the worker, or cancel the job below.</Text>
+                )}
+              </View>
+            ) : null}
           </>
         )}
 
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          <TouchableOpacity style={styles.callBtn} onPress={handleCall}>
-            <Phone color="#FFFFFF" size={16} />
-            <Text style={styles.callBtnText}>Call Worker</Text>
-          </TouchableOpacity>
+        {showWorker && (
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <TouchableOpacity style={styles.callBtn} onPress={handleCall}>
+              <Phone color="#FFFFFF" size={16} />
+              <Text style={styles.callBtnText}>Call Worker</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity style={styles.progressBtn} onPress={() => router.push('/job-progress')}>
-            <Text style={styles.progressBtnText}>Job Progress →</Text>
+            <TouchableOpacity style={styles.progressBtn} onPress={() => router.push('/job-progress')}>
+              <Text style={styles.progressBtnText}>Job Progress →</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Cancel while the worker is on the way, or decline the cost once they are on site (not possible after approving it) */}
+        {showWorker && job && (job.status === 'ASSIGNED' || job.status === 'ARRIVED') && (
+          <TouchableOpacity style={[styles.cancelLink, cancelling && { opacity: 0.6 }]} onPress={handleCancel} disabled={cancelling} accessibilityRole="button">
+            <Text style={styles.cancelLinkText}>{cancelling ? 'Cancelling…' : job.status === 'ARRIVED' ? 'Decline the cost and cancel / रद्द करें' : 'Cancel this job / जॉब रद्द करें'}</Text>
           </TouchableOpacity>
-        </View>
+        )}
       </View>
+
+      {cancelModal}
     </View>
   );
 }
@@ -387,5 +464,61 @@ const styles = StyleSheet.create({
     color: Colors.textMain,
     fontSize: 13,
     fontWeight: '700'
+  },
+  standaloneBtn: {
+    marginTop: 10,
+    backgroundColor: Colors.primary,
+    height: 48,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  standaloneBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800'
+  },
+  lockedBox: {
+    backgroundColor: Colors.secondaryLight,
+    padding: 10,
+    borderRadius: Radius.md,
+    marginBottom: 12,
+    gap: 8
+  },
+  lockedText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.secondaryDark,
+    lineHeight: 19
+  },
+  newCodeBtn: {
+    backgroundColor: Colors.secondaryDark,
+    minHeight: 44,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12
+  },
+  newCodeText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800'
+  },
+  cancelLink: {
+    marginTop: 10,
+    minHeight: 44,
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    borderColor: '#FCA5A5',
+    backgroundColor: Colors.errorLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12
+  },
+  cancelLinkText: {
+    color: '#991B1B',
+    fontSize: 13,
+    fontWeight: '800',
+    textAlign: 'center'
   }
 });
