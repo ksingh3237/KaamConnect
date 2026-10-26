@@ -16,6 +16,13 @@ const endpoints = vi.hoisted(() => ({
   unregisterDeviceToken: vi.fn(),
 }));
 
+const firebase = vi.hoisted(() => ({
+  getMessaging: vi.fn(() => ({ fake: 'messaging' })),
+  registerDeviceForRemoteMessages: vi.fn(),
+  getToken: vi.fn(),
+  onTokenRefresh: vi.fn(),
+}));
+
 vi.mock('react-native', () => ({
   Platform: {
     get OS() {
@@ -30,6 +37,7 @@ vi.mock('expo-device', () => ({
 }));
 vi.mock('expo-notifications', () => notifications);
 vi.mock('../api/endpoints', () => endpoints);
+vi.mock('@react-native-firebase/messaging', () => firebase);
 
 type Module = typeof import('./pushRegistration');
 /** A fresh copy of the module (its token bookkeeping is module state), for the platform set in `env`. */
@@ -41,6 +49,7 @@ async function load(): Promise<Module> {
 const granted = { status: 'granted' };
 const TOKEN_A = 'fcm-token-A-xxxxxxxxxxxxxxxxxxxx';
 const TOKEN_B = 'fcm-token-B-xxxxxxxxxxxxxxxxxxxx';
+const IOS_FCM_TOKEN = 'fcm-token-IOS-xxxxxxxxxxxxxxxxxxxx';
 
 beforeEach(() => {
   env.os = 'android';
@@ -52,6 +61,9 @@ beforeEach(() => {
   notifications.getDevicePushTokenAsync.mockResolvedValue({ type: 'android', data: TOKEN_A });
   endpoints.registerDeviceToken.mockResolvedValue(undefined);
   endpoints.unregisterDeviceToken.mockResolvedValue(undefined);
+  firebase.registerDeviceForRemoteMessages.mockResolvedValue(undefined);
+  firebase.getToken.mockResolvedValue(IOS_FCM_TOKEN);
+  firebase.onTokenRefresh.mockReturnValue(vi.fn());
 });
 
 describe('registerForPush', () => {
@@ -80,8 +92,8 @@ describe('registerForPush', () => {
     expect(endpoints.registerDeviceToken).not.toHaveBeenCalled();
   });
 
-  it('does nothing on iOS (an APNs token is useless to FCM), on a simulator or on the web', async () => {
-    for (const [os, isDevice] of [['ios', true], ['android', false], ['web', true]] as const) {
+  it('does nothing on a simulator or on the web', async () => {
+    for (const [os, isDevice] of [['android', false], ['ios', false], ['web', true]] as const) {
       env.os = os;
       env.isDevice = isDevice;
       const { registerForPush } = await load();
@@ -89,6 +101,12 @@ describe('registerForPush', () => {
     }
     expect(notifications.getPermissionsAsync).not.toHaveBeenCalled();
     expect(endpoints.registerDeviceToken).not.toHaveBeenCalled();
+  });
+
+  it('never touches Firebase Messaging on Android', async () => {
+    const { registerForPush } = await load();
+    await registerForPush();
+    expect(firebase.getToken).not.toHaveBeenCalled();
   });
 
   it('never throws: Google Play services missing, offline or refused', async () => {
@@ -170,5 +188,134 @@ describe('sign-out and switching accounts', () => {
     forgetPushToken();
     await unregisterFromPush();
     expect(endpoints.unregisterDeviceToken).not.toHaveBeenCalled();
+  });
+});
+
+describe('iOS', () => {
+  beforeEach(() => {
+    env.os = 'ios';
+  });
+
+  it('registers the FCM token from Firebase (not the APNs token) as IOS, without an Android channel', async () => {
+    const { registerForPush } = await load();
+    await registerForPush();
+    expect(firebase.registerDeviceForRemoteMessages).toHaveBeenCalledTimes(1);
+    expect(endpoints.registerDeviceToken).toHaveBeenCalledWith(IOS_FCM_TOKEN, 'IOS');
+    expect(notifications.getDevicePushTokenAsync).not.toHaveBeenCalled(); // that one would be an APNs token
+    expect(notifications.setNotificationChannelAsync).not.toHaveBeenCalled();
+  });
+
+  it('asks for permission first and sends nothing when it is refused', async () => {
+    notifications.getPermissionsAsync.mockResolvedValue({ status: 'denied' });
+    notifications.requestPermissionsAsync.mockResolvedValue({ status: 'denied' });
+    const { registerForPush } = await load();
+    await registerForPush();
+    expect(firebase.getToken).not.toHaveBeenCalled();
+    expect(endpoints.registerDeviceToken).not.toHaveBeenCalled();
+  });
+
+  it('never throws when Firebase has no APNs key or the entitlement is missing', async () => {
+    firebase.getToken.mockRejectedValue(new Error('messaging/apns-token-not-set'));
+    const { registerForPush } = await load();
+    await expect(registerForPush()).resolves.toBeUndefined();
+    expect(endpoints.registerDeviceToken).not.toHaveBeenCalled();
+  });
+
+  it('sign-out removes the iOS token too', async () => {
+    const { registerForPush, unregisterFromPush } = await load();
+    await registerForPush();
+    await unregisterFromPush();
+    expect(endpoints.unregisterDeviceToken).toHaveBeenCalledWith(IOS_FCM_TOKEN);
+  });
+
+  it('re-registers when Firebase rotates the token, and stops listening on cleanup', async () => {
+    const stop = vi.fn();
+    firebase.onTokenRefresh.mockReturnValue(stop);
+    const { onFcmTokenRefresh } = await load();
+    const changed = vi.fn();
+    const unsubscribe = onFcmTokenRefresh(changed);
+    await vi.waitFor(() => expect(firebase.onTokenRefresh).toHaveBeenCalledWith({ fake: 'messaging' }, changed));
+    unsubscribe();
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not subscribe on Android', async () => {
+    env.os = 'android';
+    const { onFcmTokenRefresh } = await load();
+    const unsubscribe = onFcmTokenRefresh(vi.fn());
+    await new Promise((resolve) => setTimeout(resolve, 20)); // a subscription would be made asynchronously
+    unsubscribe();
+    expect(firebase.onTokenRefresh).not.toHaveBeenCalled();
+  });
+});
+
+describe('never loops (regression: expo-notifications reports "new token" whenever the token is READ)', () => {
+  it('reading the token once costs exactly one read and one request, even though every read fires the token event', async () => {
+    const mod = await load();
+    // what the Android native module does: after every read it fires the listener PushHost installs
+    notifications.getDevicePushTokenAsync.mockImplementation(async () => {
+      queueMicrotask(() => void mod.onPushTokenChanged(TOKEN_A));
+      return { type: 'android', data: TOKEN_A };
+    });
+    await mod.registerForPush();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(notifications.getDevicePushTokenAsync).toHaveBeenCalledTimes(1);
+    expect(endpoints.registerDeviceToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('a token event never reads the token again', async () => {
+    const { registerForPush, onPushTokenChanged } = await load();
+    await registerForPush();
+    notifications.getDevicePushTokenAsync.mockClear();
+    await onPushTokenChanged(TOKEN_B);
+    await onPushTokenChanged(TOKEN_B);
+    expect(notifications.getDevicePushTokenAsync).not.toHaveBeenCalled();
+  });
+
+  it('a real rotation sends the new token once; the same token again sends nothing', async () => {
+    const { registerForPush, onPushTokenChanged } = await load();
+    await registerForPush();
+    await onPushTokenChanged(TOKEN_A); // same as registered
+    await onPushTokenChanged(TOKEN_B); // rotated
+    await onPushTokenChanged(TOKEN_B);
+    expect(endpoints.registerDeviceToken.mock.calls.map((c) => c[0])).toEqual([TOKEN_A, TOKEN_B]);
+  });
+
+  it('ignores a token event while nothing is registered (signed out, or permission not granted yet)', async () => {
+    const { onPushTokenChanged } = await load();
+    await onPushTokenChanged(TOKEN_A);
+    expect(endpoints.registerDeviceToken).not.toHaveBeenCalled();
+  });
+
+  it('calling registerForPush again with the same token costs no request', async () => {
+    const { registerForPush } = await load();
+    await registerForPush();
+    await registerForPush();
+    await registerForPush();
+    expect(endpoints.registerDeviceToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries a token the server refused (it is not remembered as registered)', async () => {
+    endpoints.registerDeviceToken.mockRejectedValueOnce(new Error('NETWORK'));
+    const { registerForPush } = await load();
+    await registerForPush();
+    await registerForPush();
+    expect(endpoints.registerDeviceToken).toHaveBeenCalledTimes(2);
+  });
+
+  it('a session that ended by itself is forgotten, so the next person registers the same phone again', async () => {
+    const { registerForPush, forgetPushToken } = await load();
+    await registerForPush();
+    forgetPushToken();
+    await registerForPush();
+    expect(endpoints.registerDeviceToken).toHaveBeenCalledTimes(2);
+  });
+
+  it('on iOS a Firebase rotation is sent as IOS with the token from the event', async () => {
+    env.os = 'ios';
+    const { registerForPush, onPushTokenChanged } = await load();
+    await registerForPush();
+    await onPushTokenChanged('fcm-token-IOS-rotated-xxxxxxxxxxxxx');
+    expect(endpoints.registerDeviceToken).toHaveBeenLastCalledWith('fcm-token-IOS-rotated-xxxxxxxxxxxxx', 'IOS');
   });
 });

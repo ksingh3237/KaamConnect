@@ -10,7 +10,8 @@ import { Crosshair, MapPin, Search, X } from 'lucide-react-native';
 import { Colors, Radius, noFocusRing } from '../constants/theme';
 import type { LocationCity } from '../api/types';
 import PickerMap, { type MapFocus } from './PickerMap';
-import { autocomplete, mapsConfigured, newSessionToken, placeDetails, reverseGeocode, type ResolvedPlace, type Suggestion } from '../utils/googlePlaces';
+import { autocomplete, mapsConfigured, newSessionToken, placeDetails, type ResolvedPlace, type Suggestion } from '../utils/googlePlaces';
+import { reverseGeocodePlace } from '../utils/reverseGeocode';
 import { TRICITY_CENTER, cleanLine, inTricity, matchArea } from '../utils/placeMatch';
 import { shortCity } from '../utils/sectors';
 
@@ -135,7 +136,7 @@ export default function GoogleLocationPicker({ locations, onChange, initial }: P
     setBusy('resolve');
     setSuggestions([]);
     try {
-      const place = await reverseGeocode(lat, lng);
+      const place = await reverseGeocodePlace(lat, lng);
       if (mine !== seq.current) return;
       if (apply(place)) setQuery('');
     } catch {
@@ -164,11 +165,11 @@ export default function GoogleLocationPicker({ locations, onChange, initial }: P
         return;
       }
       setFocus({ lat, lng });
-      const place = await reverseGeocode(lat, lng);
+      const place = await reverseGeocodePlace(lat, lng);
       if (mine !== seq.current) return;
       if (apply(place)) setQuery('');
     } catch (error) {
-      if (mine === seq.current) setNote(error instanceof Error && error.message.startsWith('MAPS_') ? NOTES.lookup : NOTES.gps);
+      if (mine === seq.current) setNote(error instanceof Error && /^(MAPS_|GEOCODE_)/.test(error.message) ? NOTES.lookup : NOTES.gps);
     } finally {
       if (mine === seq.current) setBusy(null);
     }

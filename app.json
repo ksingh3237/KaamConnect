@@ -11,7 +11,8 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.kaamconnect.app"
+      "bundleIdentifier": "com.kaamconnect.app",
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
       "package": "com.kaamconnect.app",
@@ -33,11 +34,21 @@
           "cameraPermission": "KaamConnect needs the camera so you can take photos of the job and your documents."
         }
       ],
+      "./plugins/withFirebaseManifestFix.js",
       [
         "expo-notifications",
         {
           "color": "#00B074",
           "defaultChannel": "default"
+        }
+      ],
+      "@react-native-firebase/app",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "dynamic"
+          }
         }
       ]
     ],
