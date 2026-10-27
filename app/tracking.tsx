@@ -11,6 +11,7 @@ import { isSocketConnected, onConnectionChange, onJobLocation, onJobStatus, unwa
 import { userMessage } from '../api/errors';
 import type { JobLocationPayload, JobView, Tracking } from '../api/types';
 import Avatar from '../components/Avatar';
+import LateBanner from '../components/LateBanner';
 import TripMap from '../components/TripMap';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../components/StateBlocks';
 import { useCancelJob } from '../components/CancelReasonSheet';
@@ -241,6 +242,7 @@ export default function TrackingScreen() {
         )}
         {showWorker && job && worker && (
           <>
+            <LateBanner job={job} viewer="customer" />
             <View style={styles.drawerHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
                 <Avatar uri={worker.photoUrl} size={50} />

@@ -136,6 +136,7 @@ export function cancelledHeadline(job: CancelledJob, viewer: 'customer' | 'worke
   const by = job.cancellation?.by ?? (job.cancelledBy === 'WORKER' || job.cancelledBy === 'CUSTOMER' ? job.cancelledBy : null);
   // A direct request the worker said no to carries no cancellation record, only the system code
   if (job.cancelReason === 'DECLINED' && !job.cancellation) return viewer === 'customer' ? 'The worker declined your request' : 'You declined this request';
+  if (job.cancellation?.by === 'SYSTEM') return viewer === 'worker' ? 'You did not arrive in time' : 'Your worker did not arrive';
   if (!by) return 'This request was closed';
   if ((by === 'WORKER') === (viewer === 'worker')) return 'You cancelled this job';
   return by === 'WORKER' ? 'The worker cancelled this job' : 'The customer cancelled this job';
@@ -143,6 +144,10 @@ export function cancelledHeadline(job: CancelledJob, viewer: 'customer' | 'worke
 
 /** Why it was cancelled, in the person's own words if they gave any. */
 export function cancelledReason(job: CancelledJob, viewer: 'customer' | 'worker' = 'customer'): string {
+  if (job.cancellation?.by === 'SYSTEM')
+    return viewer === 'worker'
+      ? 'The job was released because you had not arrived. This counts as a cancellation on your record.'
+      : 'The worker did not arrive in time. You can post the request again.';
   if (job.cancellation?.reason) return job.cancellation.reason;
   if (job.cancelReason === 'DECLINED') return viewer === 'customer' ? 'The worker you asked for could not take this job. You can choose another worker.' : 'You said no to this request.';
   if (job.cancelReason === 'EXPIRED') return 'Nobody answered in time. You can choose another worker.';

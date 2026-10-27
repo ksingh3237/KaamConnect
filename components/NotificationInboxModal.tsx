@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Modal, Platform, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BadgeIndianRupee, Briefcase, CalendarCheck, CheckCheck, CircleCheck, CircleX, MapPin, Navigation, Receipt, X, type LucideIcon } from 'lucide-react-native';
+import { BadgeIndianRupee, Briefcase, CalendarCheck, CheckCheck, CircleCheck, CircleX, Clock, MapPin, Navigation, Receipt, X, type LucideIcon } from 'lucide-react-native';
 import { Colors, Radius, Spacing } from '../constants/theme';
 import { listNotifications, markAllNotificationsRead, markNotificationRead } from '../api/endpoints';
 import { userMessage } from '../api/errors';
@@ -26,6 +26,9 @@ const ICONS: Record<NotificationType, { Icon: LucideIcon; color: string; bg: str
   JOB_CANCELLED_BY_WORKER: { Icon: CircleX, color: '#B91C1C', bg: '#FEE2E2' },
   DIRECT_DECLINED: { Icon: CircleX, color: '#B91C1C', bg: '#FEE2E2' },
   DIRECT_EXPIRED: { Icon: CircleX, color: '#D97706', bg: '#FEF3C7' },
+  JOB_WORKER_LATE: { Icon: Clock, color: '#D97706', bg: '#FEF3C7' },
+  JOB_YOU_ARE_LATE: { Icon: Clock, color: '#D97706', bg: '#FEF3C7' },
+  JOB_NO_SHOW_RELEASED: { Icon: CircleX, color: '#B91C1C', bg: '#FEE2E2' },
 };
 const FALLBACK_ICON = { Icon: Briefcase, color: Colors.textMuted, bg: Colors.surfaceVariant };
 

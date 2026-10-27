@@ -16,6 +16,7 @@ import { callPhone, confirmAction, notify } from '../utils/dialog';
 import { getLocationAccess, requestWorkerLocationAccess } from '../utils/locationPermission';
 import { workerTracking } from '../utils/workerTracking';
 import { useWorkerTracking } from '../utils/useWorkerTracking';
+import LateBanner from '../components/LateBanner';
 import { navigationUrls } from '../utils/trip';
 import { useSession } from '../store/useSession';
 import TripMap from '../components/TripMap';
@@ -265,6 +266,8 @@ export default function JobProgressScreen() {
                 </View>
               </View>
             )}
+
+            {enRoute && <LateBanner job={job} viewer="worker" />}
 
             {/* Worker on the way: live GPS status, map and turn-by-turn navigation */}
             {enRoute && (
