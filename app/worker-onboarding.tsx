@@ -11,7 +11,7 @@ import { useStore } from '../store/useStore';
 import { resetTo } from '../utils/navigation';
 import { useSession } from '../store/useSession';
 import { useAsync } from '../api/useAsync';
-import { getCategories, getLocations, putWorker, putWorkerDocument } from '../api/endpoints';
+import { getCategories, getLocations, patchWorker, putWorker, putWorkerDocument } from '../api/endpoints';
 import { isApiError, userMessage } from '../api/errors';
 import { uploadFile, type PickedFile } from '../api/upload';
 import { useImagePicker } from '../components/ImageSourceModal';
@@ -23,6 +23,7 @@ import TradePickerModal from '../components/TradePickerModal';
 import GoogleLocationPicker, { type PickedLocation } from '../components/GoogleLocationPicker';
 import { serviceIcon } from '../constants/services';
 import { noFocusRing } from '../constants/theme';
+import { reconcileScheduledRadius, scheduledRadiusChoices } from '../utils/radius';
 import type { DocumentType, Lang, ServiceCategory, VerificationStatus } from '../api/types';
 
 const ID_PLACEHOLDER = require('../assets/images/id-card-placeholder.png');
@@ -82,6 +83,8 @@ export default function WorkerOnboardingScreen() {
   // The address text the map filled in, so a later pick can replace it but never the person's own typing
   const [autoLine, setAutoLine] = useState('');
   const [radius, setRadius] = useState(existing ? `${existing.radiusKm} km` : '6 km');
+  // null = the same as the radius above (what the server stores as no value)
+  const [scheduledRadius, setScheduledRadius] = useState<number | null>(existing?.scheduledRadiusKm ?? null);
   const [vehicle, setVehicle] = useState(existing?.vehicle ?? '');
   const [upiId, setUpiId] = useState(existing?.upiId ?? '');
   const [visitingFee, setVisitingFee] = useState(existing?.visitingFee ? String(existing.visitingFee) : '');
@@ -198,11 +201,14 @@ export default function WorkerOnboardingScreen() {
         ...(localityName ? { localityName } : {}),
         ...(shopAddress.trim() ? { addressLine: shopAddress.trim() } : {}),
         radiusKm: parseInt(radius, 10) as 3 | 6 | 12,
+        ...(scheduledRadius ? { scheduledRadiusKm: scheduledRadius } : {}),
         ...(upiId.trim() ? { upiId: upiId.trim() } : {}),
         ...(vehicle.trim() ? { vehicle: vehicle.trim() } : {}),
         ...(visitingFee !== '' ? { visitingFee: parseInt(visitingFee, 10) } : {}),
         termsAccepted: true,
       });
+      // The profile save cannot clear a value (null is only accepted by the partial update)
+      if (!scheduledRadius && existing?.scheduledRadiusKm) await patchWorker({ scheduledRadiusKm: null });
       for (const type of ['AADHAAR_FRONT', 'AADHAAR_BACK'] as const) {
         const file = docs[type];
         if (file) await putWorkerDocument(type, await uploadFile('AADHAAR', file));
@@ -507,7 +513,10 @@ export default function WorkerOnboardingScreen() {
               <TouchableOpacity
                 key={r}
                 style={[styles.radiusBtn, radius === r && styles.radiusBtnActive]}
-                onPress={() => setRadius(r)}
+                onPress={() => {
+                  setRadius(r);
+                  setScheduledRadius((current) => reconcileScheduledRadius(current, parseInt(r, 10)));
+                }}
               >
                 <Text style={[styles.radiusBtnText, radius === r && styles.radiusBtnTextActive]}>
                   {r} {r === '6 km' && '★'}
@@ -516,6 +525,25 @@ export default function WorkerOnboardingScreen() {
             ))}
           </View>
           <Text style={styles.radiusNote}>Higher radius means more customer call notifications across Mohali & Panchkula.</Text>
+
+          <View style={[styles.labelRow, { marginTop: 16, marginBottom: 8 }]}>
+            <Text style={styles.label}>Future bookings (आगे की बुकिंग):</Text>
+            <Text style={styles.radiusLabelHighlight}>{scheduledRadius ? `${scheduledRadius} km` : 'Same as above'}</Text>
+          </View>
+          <View style={styles.radiusGrid}>
+            {[null, ...scheduledRadiusChoices(parseInt(radius, 10))].map((km) => (
+              <TouchableOpacity
+                key={km ?? 'same'}
+                style={[styles.radiusBtn, scheduledRadius === km && styles.radiusBtnActive]}
+                onPress={() => setScheduledRadius(km)}
+                accessibilityRole="button"
+                accessibilityLabel={km ? `Future bookings within ${km} km` : 'Future bookings: same radius as live jobs'}
+              >
+                <Text style={[styles.radiusBtnText, scheduledRadius === km && styles.radiusBtnTextActive]}>{km ? `${km} km` : 'Same'}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.radiusNote}>Jobs booked for a later day are matched from your base sector, so you can accept work farther away.</Text>
         </View>
 
         {/* Section 7: ID Verification */}

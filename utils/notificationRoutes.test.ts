@@ -23,6 +23,20 @@ describe('notificationTarget', () => {
     expect(notificationTarget('JOB_CANCELLED_BY_CUSTOMER', data)).toEqual({ side: 'worker', href: '/job-progress', jobId: 'job-1' });
   });
 
+  it('sends a declined or unanswered direct request to the customer tracking screen', () => {
+    expect(notificationTarget('DIRECT_DECLINED', data)).toEqual({ side: 'customer', href: '/tracking', jobId: 'job-1' });
+    expect(notificationTarget('DIRECT_EXPIRED', data)).toEqual({ side: 'customer', href: '/tracking', jobId: 'job-1' });
+  });
+
+  it('sends the no-show notices to the right side and screen', () => {
+    expect(notificationTarget('JOB_WORKER_LATE', data)).toEqual({ side: 'customer', href: '/tracking', jobId: 'job-1' });
+    expect(notificationTarget('JOB_YOU_ARE_LATE', data)).toEqual({ side: 'worker', href: '/job-progress', jobId: 'job-1' });
+    expect(notificationTarget('JOB_NO_SHOW_RELEASED', { ...data, reopened: false })).toEqual({ side: 'worker', href: '/job-progress', jobId: 'job-1' });
+    // re-opened: the job left the worker's list, so go Home (the flag arrives as text in a push)
+    expect(notificationTarget('JOB_NO_SHOW_RELEASED', { ...data, reopened: true })).toEqual({ side: 'worker', href: '/(tabs)/home', jobId: null });
+    expect(notificationTarget('JOB_NO_SHOW_RELEASED', { ...data, reopened: 'true' })?.href).toBe('/(tabs)/home');
+  });
+
   it('sends a worker-cancelled job to the quotes when it re-opened, and to the tracking screen when it closed', () => {
     expect(notificationTarget('JOB_CANCELLED_BY_WORKER', { ...data, reopened: true })).toEqual({ side: 'customer', href: '/compare-offers', jobId: 'job-1' });
     expect(notificationTarget('JOB_CANCELLED_BY_WORKER', { ...data, reopened: false })).toEqual({ side: 'customer', href: '/tracking', jobId: 'job-1' });

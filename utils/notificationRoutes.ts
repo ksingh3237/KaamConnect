@@ -15,7 +15,14 @@ export interface NotificationTarget {
   jobId: string | null;
 }
 
-const WORKER_TYPES: ReadonlySet<NotificationType> = new Set(['NEW_LEAD', 'DIRECT_REQUEST', 'BOOKING_CONFIRMED', 'JOB_CANCELLED_BY_CUSTOMER']);
+const WORKER_TYPES: ReadonlySet<NotificationType> = new Set([
+  'NEW_LEAD',
+  'DIRECT_REQUEST',
+  'BOOKING_CONFIRMED',
+  'JOB_CANCELLED_BY_CUSTOMER',
+  'JOB_YOU_ARE_LATE',
+  'JOB_NO_SHOW_RELEASED',
+]);
 
 export function notificationSide(type: NotificationType): NotificationSide {
   return WORKER_TYPES.has(type) ? 'worker' : 'customer';
@@ -44,8 +51,17 @@ export function notificationTarget(type: string, data: Record<string, unknown> |
     case 'BOOKING_CONFIRMED':
     case 'BILL_CREATED':
     case 'WORK_COMPLETED':
+    case 'JOB_NO_SHOW_RELEASED':
+      // A re-opened job has left the worker's list (it is open to others again), so there is nothing to open: go Home.
+      // A closed one (a direct booking) stays on their cancelled tab. The pushed flag is the text "true", the inbox keeps the boolean.
+      return data?.reopened === true || data?.reopened === 'true' ? { side, href: '/(tabs)/home', jobId: null } : { side, href: '/job-progress', jobId };
+    case 'JOB_YOU_ARE_LATE':
     case 'JOB_CANCELLED_BY_CUSTOMER': // job progress shows the worker the cancelled summary: who, why, any visit fee
       return { side, href: '/job-progress', jobId };
+    case 'JOB_WORKER_LATE':
+    case 'DIRECT_DECLINED':
+    case 'DIRECT_EXPIRED':
+      return { side, href: '/tracking', jobId }; // the cancelled screen says who did not answer and offers another worker
     case 'JOB_CANCELLED_BY_WORKER':
       // Re-opened: the customer's next step is choosing another quote. Closed: the tracking screen explains why.
       // A pushed flag arrives as the text "true" (FCM data is all strings); the inbox row keeps the real boolean.

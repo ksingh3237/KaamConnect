@@ -9,7 +9,10 @@ const notifications = vi.hoisted(() => ({
   getPermissionsAsync: vi.fn(),
   requestPermissionsAsync: vi.fn(),
   getDevicePushTokenAsync: vi.fn(),
-  AndroidImportance: { HIGH: 4 },
+  AndroidImportance: { HIGH: 4, MAX: 5 },
+  AndroidNotificationVisibility: { PUBLIC: 1 },
+  AndroidAudioUsage: { NOTIFICATION_RINGTONE: 6 },
+  AndroidAudioContentType: { SONIFICATION: 4 },
 }));
 const endpoints = vi.hoisted(() => ({
   registerDeviceToken: vi.fn(),
@@ -67,10 +70,11 @@ beforeEach(() => {
 });
 
 describe('registerForPush', () => {
-  it('creates the channel, reads the FCM token and gives it to the server', async () => {
+  it('creates both channels, reads the FCM token and gives it to the server', async () => {
     const { registerForPush } = await load();
     await registerForPush();
-    expect(notifications.setNotificationChannelAsync).toHaveBeenCalledWith('default', expect.objectContaining({ importance: 4 }));
+    expect(notifications.setNotificationChannelAsync).toHaveBeenCalledWith('default', expect.objectContaining({ importance: 4, enableVibrate: true }));
+    expect(notifications.setNotificationChannelAsync).toHaveBeenCalledWith('new_leads', expect.objectContaining({ importance: 5, sound: 'new_lead.wav', enableVibrate: true }));
     expect(endpoints.registerDeviceToken).toHaveBeenCalledWith(TOKEN_A, 'ANDROID');
     expect(notifications.requestPermissionsAsync).not.toHaveBeenCalled(); // already allowed: no dialog
   });

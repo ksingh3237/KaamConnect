@@ -131,6 +131,8 @@ export interface PutWorkerBody {
   localityName?: string;
   addressLine?: string;
   radiusKm: 3 | 6 | 12;
+  /** Wider radius for jobs booked for later (3/6/12/25/50, never below radiusKm); left out = same as radiusKm. */
+  scheduledRadiusKm?: number;
   upiId?: string;
   vehicle?: string;
   visitingFee?: number;
@@ -231,6 +233,8 @@ export interface JobView {
   scheduledFor: string | null;
   durationMin: number;
   booking: { startAt: string; endAt: string; confirmedAt: string } | null;
+  /** While ASSIGNED: when the server releases the job if the worker has not arrived (promised arrival + grace). */
+  noShowReleaseAt?: string | null;
   category: { id: string; title: { en: string; hi: string; pa: string } };
   area: { id: number; name: string };
   locality: string | null;
@@ -292,7 +296,8 @@ export interface CancelBody {
   reason?: string;
 }
 export interface CancellationView {
-  by: CancelActor;
+  /** SYSTEM: the server released the job because the worker did not arrive (docs/15-no-show.md). */
+  by: CancelActor | 'SYSTEM';
   stage: JobStatus;
   reasonCode: string;
   reason: string;
@@ -315,6 +320,8 @@ export interface WorkerCancellationItem {
   /** The request went back to the customer for new quotes. */
   reopened: boolean;
   countsAgainstWorker: boolean;
+  /** The server released the job because the worker did not arrive, rather than the worker cancelling. */
+  bySystem?: boolean;
   createdAt: string;
 }
 export interface WorkerCancellations {
@@ -509,7 +516,12 @@ export type NotificationType =
   | 'BILL_CREATED'
   | 'WORK_COMPLETED'
   | 'JOB_CANCELLED_BY_CUSTOMER'
-  | 'JOB_CANCELLED_BY_WORKER';
+  | 'JOB_CANCELLED_BY_WORKER'
+  | 'DIRECT_DECLINED'
+  | 'DIRECT_EXPIRED'
+  | 'JOB_WORKER_LATE'
+  | 'JOB_YOU_ARE_LATE'
+  | 'JOB_NO_SHOW_RELEASED';
 
 export interface NotificationItem {
   id: string;

@@ -16,6 +16,7 @@ import { callPhone, confirmAction, notify } from '../utils/dialog';
 import { getLocationAccess, requestWorkerLocationAccess } from '../utils/locationPermission';
 import { workerTracking } from '../utils/workerTracking';
 import { useWorkerTracking } from '../utils/useWorkerTracking';
+import LateBanner from '../components/LateBanner';
 import { navigationUrls } from '../utils/trip';
 import { useSession } from '../store/useSession';
 import TripMap from '../components/TripMap';
@@ -266,6 +267,8 @@ export default function JobProgressScreen() {
               </View>
             )}
 
+            {enRoute && <LateBanner job={job} viewer="worker" />}
+
             {/* Worker on the way: live GPS status, map and turn-by-turn navigation */}
             {enRoute && (
               <View style={styles.card}>
@@ -308,7 +311,7 @@ export default function JobProgressScreen() {
             {job.status === 'CANCELLED' && (
               <View style={[styles.card, styles.cancelledCard]} accessibilityRole="alert">
                 <Text style={styles.cancelledTitle}>{cancelledHeadline(job, isWorker ? 'worker' : 'customer')}</Text>
-                <Text style={styles.cancelledReason}>{cancelledReason(job)}</Text>
+                <Text style={styles.cancelledReason}>{cancelledReason(job, 'worker')}</Text>
                 {visitFeeNotice(job, isWorker ? 'worker' : 'customer') ? <Text style={styles.cancelledFee}>{visitFeeNotice(job, isWorker ? 'worker' : 'customer')}</Text> : null}
                 <TouchableOpacity
                   style={[styles.smallBtn, { paddingVertical: 14, marginTop: Spacing.md }]}

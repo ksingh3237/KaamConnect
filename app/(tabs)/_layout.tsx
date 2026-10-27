@@ -6,12 +6,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/theme';
 import { useStore } from '../../store/useStore';
 import { listLeads } from '../../api/endpoints';
+import { useSession } from '../../store/useSession';
+import { usePresenceLocation } from '../../utils/usePresenceLocation';
 
 export default function TabLayout() {
   const { role } = useStore();
   const isWorker = role === 'worker';
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { workerProfile } = useSession();
+  // Leads follow where the worker is now, so tell the server while the app is open and they are taking jobs
+  usePresenceLocation(isWorker && workerProfile?.verificationStatus === 'VERIFIED' && workerProfile.isAvailable);
 
   const openNewestLead = async () => {
     try {
