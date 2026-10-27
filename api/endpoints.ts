@@ -72,7 +72,7 @@ export const getCustomer = () => get<CustomerView>('/customers/me');
 export const putWorker = (body: PutWorkerBody) => put<WorkerView>('/workers/me', body);
 export const getWorkerProfile = () => get<WorkerView>('/workers/me');
 /** Partial update; e.g. the "taking jobs" switch: patchWorker({ isAvailable: false }). */
-export const patchWorker = (body: Partial<Omit<PutWorkerBody, 'termsAccepted'>> & { isAvailable?: boolean; addressLine?: string | null; localityName?: string | null }) =>
+export const patchWorker = (body: Partial<Omit<PutWorkerBody, 'termsAccepted' | 'scheduledRadiusKm'>> & { isAvailable?: boolean; addressLine?: string | null; localityName?: string | null; scheduledRadiusKm?: number | null }) =>
   patch<WorkerView>('/workers/me', body);
 export const putWorkerDocument = (type: DocumentType, key: string) =>
   put<WorkerView>(`/workers/me/documents/${type}`, { key });

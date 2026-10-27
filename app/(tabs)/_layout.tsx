@@ -6,6 +6,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/theme';
 import { useStore } from '../../store/useStore';
 import { listLeads } from '../../api/endpoints';
+import { useSession } from '../../store/useSession';
+import { usePresenceLocation } from '../../utils/usePresenceLocation';
 
 export default function TabLayout() {
   const { role } = useStore();

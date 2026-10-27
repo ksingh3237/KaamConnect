@@ -46,6 +46,9 @@ export function notificationTarget(type: string, data: Record<string, unknown> |
     case 'WORK_COMPLETED':
     case 'JOB_CANCELLED_BY_CUSTOMER': // job progress shows the worker the cancelled summary: who, why, any visit fee
       return { side, href: '/job-progress', jobId };
+    case 'DIRECT_DECLINED':
+    case 'DIRECT_EXPIRED':
+      return { side, href: '/tracking', jobId }; // the cancelled screen says who did not answer and offers another worker
     case 'JOB_CANCELLED_BY_WORKER':
       // Re-opened: the customer's next step is choosing another quote. Closed: the tracking screen explains why.
       // A pushed flag arrives as the text "true" (FCM data is all strings); the inbox row keeps the real boolean.

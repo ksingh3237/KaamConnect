@@ -17,7 +17,7 @@ interface Props {
 const REASONS = [
   { Icon: MapPin, title: 'Local Tricity Leads', text: 'Chandigarh, Mohali aur Panchkula ke paas wale kaam pane ke liye location on rakhna zaroori hai.' },
   { Icon: Clock, title: 'Live Arrival ETA', text: 'Jab aap kaam ke liye niklenge, customer ko aapka live arrival time dikhega.' },
-  { Icon: BatteryCharging, title: 'Battery-Safe', text: 'GPS sirf active trip ke dauran chalega, battery drain nahi hogi.' },
+  { Icon: BatteryCharging, title: 'Battery-Safe', text: 'Location sirf tab li jaati hai jab app khula ho aur aap kaam le rahe ho, ya trip chal rahi ho. Battery drain nahi hogi.' },
 ];
 
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

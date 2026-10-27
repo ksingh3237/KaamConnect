@@ -308,7 +308,7 @@ export default function JobProgressScreen() {
             {job.status === 'CANCELLED' && (
               <View style={[styles.card, styles.cancelledCard]} accessibilityRole="alert">
                 <Text style={styles.cancelledTitle}>{cancelledHeadline(job, isWorker ? 'worker' : 'customer')}</Text>
-                <Text style={styles.cancelledReason}>{cancelledReason(job)}</Text>
+                <Text style={styles.cancelledReason}>{cancelledReason(job, 'worker')}</Text>
                 {visitFeeNotice(job, isWorker ? 'worker' : 'customer') ? <Text style={styles.cancelledFee}>{visitFeeNotice(job, isWorker ? 'worker' : 'customer')}</Text> : null}
                 <TouchableOpacity
                   style={[styles.smallBtn, { paddingVertical: 14, marginTop: Spacing.md }]}

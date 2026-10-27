@@ -24,6 +24,8 @@ const ICONS: Record<NotificationType, { Icon: LucideIcon; color: string; bg: str
   WORK_COMPLETED: { Icon: CircleCheck, color: '#047857', bg: '#D1FAE5' },
   JOB_CANCELLED_BY_CUSTOMER: { Icon: CircleX, color: '#B91C1C', bg: '#FEE2E2' },
   JOB_CANCELLED_BY_WORKER: { Icon: CircleX, color: '#B91C1C', bg: '#FEE2E2' },
+  DIRECT_DECLINED: { Icon: CircleX, color: '#B91C1C', bg: '#FEE2E2' },
+  DIRECT_EXPIRED: { Icon: CircleX, color: '#D97706', bg: '#FEF3C7' },
 };
 const FALLBACK_ICON = { Icon: Briefcase, color: Colors.textMuted, bg: Colors.surfaceVariant };
 

@@ -131,6 +131,8 @@ export interface PutWorkerBody {
   localityName?: string;
   addressLine?: string;
   radiusKm: 3 | 6 | 12;
+  /** Wider radius for jobs booked for later (3/6/12/25/50, never below radiusKm); left out = same as radiusKm. */
+  scheduledRadiusKm?: number;
   upiId?: string;
   vehicle?: string;
   visitingFee?: number;
@@ -509,7 +511,9 @@ export type NotificationType =
   | 'BILL_CREATED'
   | 'WORK_COMPLETED'
   | 'JOB_CANCELLED_BY_CUSTOMER'
-  | 'JOB_CANCELLED_BY_WORKER';
+  | 'JOB_CANCELLED_BY_WORKER'
+  | 'DIRECT_DECLINED'
+  | 'DIRECT_EXPIRED';
 
 export interface NotificationItem {
   id: string;

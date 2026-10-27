@@ -135,6 +135,15 @@ describe('cancelledHeadline / cancelledReason / visitFeeNotice', () => {
     expect(cancelledHeadline({ cancellation: undefined, cancelledBy: null, cancelReason: null }, 'worker')).toBe('This request was closed');
   });
 
+  it('words a declined or unanswered direct request in plain language', () => {
+    const declined = { cancellation: undefined, cancelledBy: 'WORKER' as const, cancelReason: 'DECLINED' };
+    expect(cancelledHeadline(declined, 'customer')).toBe('The worker declined your request');
+    expect(cancelledHeadline(declined, 'worker')).toBe('You declined this request');
+    expect(cancelledReason(declined)).toContain('could not take this job');
+    expect(cancelledReason(declined, 'worker')).toBe('You said no to this request.');
+    expect(cancelledReason(expired)).toContain('Nobody answered in time');
+  });
+
   it('falls back to the job\'s own cancel reason, then to a plain sentence', () => {
     expect(cancelledReason(byWorker)).toBe('Could not agree on the price');
     expect(cancelledReason({ cancellation: undefined, cancelledBy: 'CUSTOMER', cancelReason: 'old text' })).toBe('old text');
