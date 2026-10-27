@@ -39,7 +39,10 @@
         "expo-notifications",
         {
           "color": "#00B074",
-          "defaultChannel": "default"
+          "defaultChannel": "default",
+          "sounds": [
+            "./assets/sounds/new_lead.wav"
+          ]
         }
       ],
       "@react-native-firebase/app",

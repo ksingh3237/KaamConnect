@@ -10,8 +10,9 @@ import { Platform } from 'react-native';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { registerDeviceToken, unregisterDeviceToken } from '../api/endpoints';
+import { DEFAULT_CHANNEL_ID, ensureAndroidChannels } from './pushChannels';
 
-export const ANDROID_CHANNEL_ID = 'default';
+export const ANDROID_CHANNEL_ID = DEFAULT_CHANNEL_ID;
 
 const platform = Platform.OS === 'android' ? 'ANDROID' : Platform.OS === 'ios' ? 'IOS' : null;
 
@@ -72,11 +73,8 @@ export async function registerForPush(): Promise<void> {
   const mine = epoch;
   try {
     if (platform === 'ANDROID') {
-      // Android 8+ needs the channel before the first notification; the backend names this channel in every message
-      await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
-        name: 'KaamConnect',
-        importance: Notifications.AndroidImportance.HIGH,
-      });
+      // Android 8+ needs the channels before the first notification; the backend names one of them in every message
+      await ensureAndroidChannels();
     }
     let { status } = await Notifications.getPermissionsAsync();
     if (status !== 'granted') ({ status } = await Notifications.requestPermissionsAsync());
