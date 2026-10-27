@@ -14,6 +14,9 @@ export default function TabLayout() {
   const isWorker = role === 'worker';
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { workerProfile } = useSession();
+  // Leads follow where the worker is now, so tell the server while the app is open and they are taking jobs
+  usePresenceLocation(isWorker && workerProfile?.verificationStatus === 'VERIFIED' && workerProfile.isAvailable);
 
   const openNewestLead = async () => {
     try {
