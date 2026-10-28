@@ -165,6 +165,19 @@ export default function WorkerHome() {
           </>
         )}
 
+        {/* Earnings: always 100% the worker's. Above the leads so the day's number is the first thing they see. */}
+        <View style={styles.earnCard}>
+          <BadgeIndianRupee color="#FFFFFF" size={30} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.earnLabel}>Today • आज की कमाई</Text>
+            <Text style={styles.earnAmount}>
+              {earnings.data ? `₹${earnings.data.amount.toLocaleString('en-IN')}` : '—'}
+              {earnings.data ? <Text style={styles.earnJobs}>  • {earnings.data.jobsDone} job{earnings.data.jobsDone === 1 ? '' : 's'}</Text> : null}
+            </Text>
+            <Text style={styles.earnSub}>Customers pay you directly by UPI or cash. 0% platform deduction, ever.</Text>
+          </View>
+        </View>
+
         {/* Lead radar preview */}
         <View style={styles.sectionRow}>
           <Text style={[styles.sectionTitle, { marginBottom: 0, flex: 1 }]}>New job requests • नई लीड</Text>
@@ -216,19 +229,6 @@ export default function WorkerHome() {
             </View>
           );
         })}
-
-        {/* Earnings: always 100% the worker's */}
-        <View style={styles.earnCard}>
-          <BadgeIndianRupee color="#FFFFFF" size={30} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.earnLabel}>Today • आज की कमाई</Text>
-            <Text style={styles.earnAmount}>
-              {earnings.data ? `₹${earnings.data.amount.toLocaleString('en-IN')}` : '—'}
-              {earnings.data ? <Text style={styles.earnJobs}>  • {earnings.data.jobsDone} job{earnings.data.jobsDone === 1 ? '' : 's'}</Text> : null}
-            </Text>
-            <Text style={styles.earnSub}>Customers pay you directly by UPI or cash. 0% platform deduction, ever.</Text>
-          </View>
-        </View>
 
         <View style={styles.trustRow}>
           <ShieldCheck color={Colors.primaryDark} size={18} />
@@ -334,7 +334,8 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: Radius.lg,
     backgroundColor: '#0F766E',
-    marginTop: 8,
+    marginTop: 4,
+    marginBottom: Spacing.lg,
   },
   earnLabel: { fontSize: 13, fontWeight: '700', color: '#CCFBF1' },
   earnAmount: { fontSize: 24, fontWeight: '900', color: '#FFFFFF', marginTop: 2 },

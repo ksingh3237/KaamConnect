@@ -1,11 +1,13 @@
 // The bell's inbox: newest notifications first, unread ones marked with a dot. Tapping a row marks it read and opens
-// the screen it is about. Loaded each time it opens, so it never shows a stale list.
+// the screen it is about; the bin removes one, "Clear all" empties the list. Loaded each time it opens, so it never
+// shows a stale list.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Modal, Platform, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BadgeIndianRupee, Briefcase, CalendarCheck, CheckCheck, CircleCheck, CircleX, Clock, MapPin, Navigation, Receipt, X, type LucideIcon } from 'lucide-react-native';
+import { BadgeIndianRupee, Briefcase, CalendarCheck, CheckCheck, CircleCheck, CircleX, Clock, MapPin, Navigation, Receipt, Trash2, X, type LucideIcon } from 'lucide-react-native';
 import { Colors, Radius, Spacing } from '../constants/theme';
-import { listNotifications, markAllNotificationsRead, markNotificationRead } from '../api/endpoints';
+import { clearNotifications, deleteNotification, listNotifications, markAllNotificationsRead, markNotificationRead } from '../api/endpoints';
+import { confirmAction } from '../utils/dialog';
 import { userMessage } from '../api/errors';
 import type { NotificationItem, NotificationType } from '../api/types';
 import { useNotifications } from '../store/useNotifications';
@@ -107,6 +109,36 @@ export default function NotificationInboxModal({ visible, onClose }: Props) {
     }
   };
 
+  // Removed on the spot; if the server refuses, reload so the list shows the truth
+  const removeOne = async (item: NotificationItem) => {
+    setItems((current) => current.filter((n) => n.id !== item.id));
+    if (!item.isRead) setUnread(unread - 1);
+    try {
+      await deleteNotification(item.id);
+    } catch {
+      void load('refresh');
+    } finally {
+      void refreshUnread();
+    }
+  };
+
+  const clearAll = async () => {
+    const ok = await confirmAction('Clear all notifications? / सभी सूचनाएं हटाएं?', 'Your notification list will be emptied. Your jobs and bookings are not affected.', 'Clear all', true);
+    if (!ok) return;
+    const before = items;
+    setItems([]);
+    setCursor(null);
+    setUnread(0);
+    try {
+      await clearNotifications();
+    } catch {
+      setItems(before);
+      void load('refresh');
+    } finally {
+      void refreshUnread();
+    }
+  };
+
   const onPressRow = async (item: NotificationItem) => {
     if (!item.isRead) {
       setItems((current) => current.map((n) => (n.id === item.id ? { ...n, isRead: true } : n)));
@@ -136,11 +168,21 @@ export default function NotificationInboxModal({ visible, onClose }: Props) {
           </TouchableOpacity>
         </View>
 
-        {hasUnread && (
-          <TouchableOpacity style={styles.markAll} onPress={() => void markAll()} activeOpacity={0.7} accessibilityRole="button">
-            <CheckCheck color={Colors.primaryDark} size={18} />
-            <Text style={styles.markAllText}>Mark all as read / सब पढ़ा हुआ करें</Text>
-          </TouchableOpacity>
+        {(hasUnread || items.length > 0) && (
+          <View style={styles.actions}>
+            {hasUnread && (
+              <TouchableOpacity style={styles.markAll} onPress={() => void markAll()} activeOpacity={0.7} accessibilityRole="button">
+                <CheckCheck color={Colors.primaryDark} size={18} />
+                <Text style={styles.markAllText}>Mark all read / सब पढ़ा</Text>
+              </TouchableOpacity>
+            )}
+            {items.length > 0 && (
+              <TouchableOpacity style={styles.clearAll} onPress={() => void clearAll()} activeOpacity={0.7} accessibilityRole="button">
+                <Trash2 color="#B91C1C" size={18} />
+                <Text style={styles.clearAllText}>Clear all / सब हटाएं</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         )}
 
         {loading && items.length === 0 ? (
@@ -162,7 +204,7 @@ export default function NotificationInboxModal({ visible, onClose }: Props) {
             ItemSeparatorComponent={() => <View style={{ height: Spacing.sm }} />}
             ListEmptyComponent={<EmptyBlock title="No notifications yet / अभी कोई सूचना नहीं" hint="New quotes, bookings and job updates will show up here." />}
             ListFooterComponent={loadingMore ? <ActivityIndicator style={{ marginTop: Spacing.md }} color={Colors.primary} /> : null}
-            renderItem={({ item }) => <Row item={item} onPress={() => void onPressRow(item)} />}
+            renderItem={({ item }) => <Row item={item} onPress={() => void onPressRow(item)} onRemove={() => void removeOne(item)} />}
           />
         )}
       </View>
@@ -170,26 +212,34 @@ export default function NotificationInboxModal({ visible, onClose }: Props) {
   );
 }
 
-function Row({ item, onPress }: { item: NotificationItem; onPress: () => void }) {
+function Row({ item, onPress, onRemove }: { item: NotificationItem; onPress: () => void; onRemove: () => void }) {
   const { Icon, color, bg } = ICONS[item.type] ?? FALLBACK_ICON;
+  // The row opens the job; the bin beside it (a separate target, so a tap can never do both) removes just this one
   return (
-    <TouchableOpacity
-      style={[styles.row, !item.isRead && styles.rowUnread]}
-      onPress={onPress}
-      activeOpacity={0.8}
-      accessibilityRole="button"
-      accessibilityLabel={`${item.isRead ? '' : 'Unread. '}${item.title}. ${item.body}`}
-    >
-      <View style={[styles.iconBox, { backgroundColor: bg }]}>
-        <Icon color={color} size={22} />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.rowTitle, !item.isRead && { fontWeight: '800' }]} numberOfLines={2}>{item.title}</Text>
-        <Text style={styles.rowBody} numberOfLines={3}>{item.body}</Text>
-        <Text style={styles.rowTime}>{timeAgo(item.createdAt)}</Text>
-      </View>
-      {!item.isRead && <View style={styles.dot} />}
-    </TouchableOpacity>
+    <View style={[styles.row, !item.isRead && styles.rowUnread]}>
+      <TouchableOpacity
+        style={styles.rowMain}
+        onPress={onPress}
+        activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.isRead ? '' : 'Unread. '}${item.title}. ${item.body}`}
+      >
+        <View style={[styles.iconBox, { backgroundColor: bg }]}>
+          <Icon color={color} size={22} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.rowTitle, !item.isRead && { fontWeight: '800' }]} numberOfLines={2}>{item.title}</Text>
+          <Text style={styles.rowBody} numberOfLines={3}>{item.body}</Text>
+          <View style={styles.timeLine}>
+            <Text style={styles.rowTime}>{timeAgo(item.createdAt)}</Text>
+            {!item.isRead && <View style={styles.dot} />}
+          </View>
+        </View>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.removeBtn} onPress={onRemove} activeOpacity={0.6} accessibilityRole="button" accessibilityLabel="Delete this notification">
+        <Trash2 color={Colors.textSubtle} size={20} />
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -198,16 +248,22 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md },
   title: { fontSize: 20, fontWeight: '800', color: Colors.textMain },
   closeBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
-  markAll: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, minHeight: 44, marginHorizontal: Spacing.lg, paddingHorizontal: 12, borderRadius: Radius.full, backgroundColor: Colors.primaryLight },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginHorizontal: Spacing.lg },
+  markAll: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 12, borderRadius: Radius.full, backgroundColor: Colors.primaryLight },
   markAllText: { fontSize: 14, fontWeight: '700', color: Colors.primaryDark },
+  clearAll: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingHorizontal: 12, borderRadius: Radius.full, backgroundColor: '#FEE2E2' },
+  clearAllText: { fontSize: 14, fontWeight: '700', color: '#B91C1C' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   pad: { padding: Spacing.lg },
   list: { padding: Spacing.lg, flexGrow: 1 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.md, borderRadius: Radius.lg, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
+  row: { flexDirection: 'row', alignItems: 'center', borderRadius: Radius.lg, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
+  rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.md },
+  removeBtn: { width: 48, minHeight: 48, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
+  timeLine: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
   rowUnread: { borderColor: Colors.primary, backgroundColor: '#F4FBF8' },
   iconBox: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   rowTitle: { fontSize: 15, fontWeight: '700', color: Colors.textMain },
   rowBody: { fontSize: 14, lineHeight: 20, color: Colors.textMuted, marginTop: 2 },
-  rowTime: { fontSize: 13, color: Colors.textSubtle, marginTop: 4 },
+  rowTime: { fontSize: 13, color: Colors.textSubtle },
   dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: Colors.primary },
 });

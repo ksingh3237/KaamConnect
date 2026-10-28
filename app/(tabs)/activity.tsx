@@ -80,7 +80,9 @@ export default function ActivityScreen() {
 
   const callNumber = (phone: string, name: string) => void callPhone(phone, name);
 
-  const tabLabel = (tab: JobTab, label: string) => `${label}${counts ? ` (${counts[tab]})` : ''}`;
+  // A released job is listed under Cancelled but is not in the server's job count (it left the worker's job list)
+  const tabCount = (tab: JobTab) => (counts ? counts[tab] + (isWorker && tab === 'cancelled' ? released.length : 0) : null);
+  const tabLabel = (tab: JobTab, label: string) => `${label}${counts ? ` (${tabCount(tab)})` : ''}`;
 
   const renderCustomerCard = (job: JobListItem) => {
     const ongoing = activeTab === 'ongoing';
