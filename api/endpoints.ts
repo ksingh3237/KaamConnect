@@ -142,5 +142,7 @@ export const listNotifications = (cursor?: string) => get<Page<NotificationItem>
 export const getUnreadCount = () => get<{ count: number }>('/notifications/unread-count');
 export const markNotificationRead = (id: string) => patch<void>(`/notifications/${id}/read`);
 export const markAllNotificationsRead = () => patch<{ updated: number }>('/notifications/read-all');
+export const deleteNotification = (id: string) => del<void>(`/notifications/${id}`);
+export const clearNotifications = () => del<{ deleted: number }>('/notifications');
 
 export { del };
