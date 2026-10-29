@@ -76,6 +76,9 @@ export const patchWorker = (body: Partial<Omit<PutWorkerBody, 'termsAccepted' | 
   patch<WorkerView>('/workers/me', body);
 export const putWorkerDocument = (type: DocumentType, key: string) =>
   put<WorkerView>(`/workers/me/documents/${type}`, { key });
+/** A short-lived link to the worker's own uploaded document, for showing it back to them. */
+export const getWorkerDocumentUrl = (type: DocumentType) =>
+  get<{ url: string; expiresInSec: number }>(`/workers/me/documents/${type}/url`);
 export const putWorkerLocation = (lat: number, lng: number) => put<void>('/workers/me/location', { lat, lng });
 export const getEarnings = (period: 'today' | 'week' | 'month' = 'today') =>
   get<Earnings>('/workers/me/earnings', { query: { period } });

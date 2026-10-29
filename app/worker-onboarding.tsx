@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Modal, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -11,10 +11,11 @@ import { useStore } from '../store/useStore';
 import { resetTo } from '../utils/navigation';
 import { useSession } from '../store/useSession';
 import { useAsync } from '../api/useAsync';
-import { getCategories, getLocations, patchWorker, putWorker, putWorkerDocument } from '../api/endpoints';
+import { getCategories, getLocations, getWorkerDocumentUrl, patchWorker, putWorker, putWorkerDocument } from '../api/endpoints';
 import { isApiError, userMessage } from '../api/errors';
 import { uploadFile, type PickedFile } from '../api/upload';
 import { useImagePicker } from '../components/ImageSourceModal';
+import { useImageViewer } from '../components/ImageViewerModal';
 import { getLocationAccess } from '../utils/locationPermission';
 import WorkerLocationPermissionModal from '../components/WorkerLocationPermissionModal';
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks';
@@ -50,6 +51,7 @@ export default function WorkerOnboardingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { pick: pickImage, modal: imageSourceModal } = useImagePicker();
+  const { show: viewImage, modal: imageViewerModal } = useImageViewer();
   const { setRole } = useStore();
   const { workerProfile, user, refreshMe } = useSession();
   const scrollRef = useRef<ScrollView>(null);
@@ -100,6 +102,27 @@ export default function WorkerOnboardingScreen() {
   const [photoBusy, setPhotoBusy] = useState(false);
   // Aadhaar images are chosen now and uploaded when the profile is saved (the server needs the profile to exist first)
   const [docs, setDocs] = useState<Partial<Record<DocumentType, PickedFile>>>({});
+  // Signed, short-lived links to the Aadhaar images already on the server, so a returning worker can see them
+  const [docUrls, setDocUrls] = useState<Partial<Record<DocumentType, string>>>({});
+
+  const onFileTypes = (['AADHAAR_FRONT', 'AADHAAR_BACK'] as const).filter((t) => existing?.documents[t]).join(',');
+  useEffect(() => {
+    if (!onFileTypes) return;
+    let live = true;
+    void (async () => {
+      for (const type of onFileTypes.split(',') as DocumentType[]) {
+        try {
+          const { url } = await getWorkerDocumentUrl(type);
+          if (live) setDocUrls((prev) => ({ ...prev, [type]: url }));
+        } catch {
+          // A missing preview is not worth an error on the form; the tile falls back to the icon
+        }
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [onFileTypes]);
 
   const baseLabel = useMemo(() => {
     for (const city of locations.data ?? []) {
@@ -568,11 +591,26 @@ export default function WorkerOnboardingScreen() {
               const chosen = docs[type];
               const onFile = !!existing?.documents[type];
               const label = type === 'AADHAAR_FRONT' ? 'Aadhaar Front' : 'Aadhaar Back';
+              // The picture itself, so the worker can check it is the right side and readable before saving
+              const preview = chosen?.uri ?? docUrls[type] ?? null;
               return (
                 <TouchableOpacity key={type} style={styles.idCardBox} onPress={() => void handlePickDoc(type)} accessibilityRole="button" accessibilityLabel={`Choose ${label} photo`}>
-                  <View style={chosen || onFile ? styles.idIconBg : styles.idIconBgGray}>
-                    {chosen || onFile ? <CreditCard color={HtmlColors.primary} size={20} /> : <Camera color={HtmlColors.onSurfaceVariant} size={20} />}
-                  </View>
+                  {preview ? (
+                    <TouchableOpacity
+                      style={styles.idThumbBox}
+                      onPress={() => viewImage(preview, label)}
+                      activeOpacity={0.85}
+                      accessibilityRole="imagebutton"
+                      accessibilityLabel={`View ${label} full screen`}
+                    >
+                      <Image source={{ uri: preview }} style={styles.idThumb} resizeMode="cover" accessibilityIgnoresInvertColors />
+                      <View style={styles.idThumbBadge}><CheckCircle2 color="#FFFFFF" size={14} /></View>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={onFile ? styles.idIconBg : styles.idIconBgGray}>
+                      {onFile ? <CreditCard color={HtmlColors.primary} size={20} /> : <Camera color={HtmlColors.onSurfaceVariant} size={20} />}
+                    </View>
+                  )}
                   <Text style={styles.idBoxTitle}>{label}</Text>
                   {chosen ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
@@ -705,6 +743,7 @@ export default function WorkerOnboardingScreen() {
         }}
       />
       {imageSourceModal}
+      {imageViewerModal}
       {categories.data && (
         <TradePickerModal
           visible={pickingTrades}
@@ -1423,6 +1462,29 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     alignItems: 'center'
+  },
+  idThumbBox: {
+    width: '100%',
+    height: 88,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: HtmlColors.surfaceContainer,
+    marginBottom: 8
+  },
+  idThumb: {
+    width: '100%',
+    height: '100%'
+  },
+  idThumbBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: HtmlColors.primary,
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   idIconBg: {
     width: 40,
