@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AT_THE_DOOR_KM, bearingDeg, distanceKm, navigationUrls, nextHeading, trackingPill, vehicleEmoji } from './trip';
+import { AT_THE_DOOR_KM, FALLBACK_SPEED_KMH, bearingDeg, distanceKm, navigationUrls, nextHeading, roadTrip, trackingPill, vehicleEmoji } from './trip';
 
 const sector22 = { lat: 30.7333, lng: 76.7794 };
 const north = { lat: 30.7433, lng: 76.7794 };
@@ -89,5 +89,34 @@ describe('trackingPill at the door', () => {
 
   it('does not claim a door when the last fix is old', () => {
     expect(trackingPill({ ...base, stale: true, etaMinutes: null, distanceKm: 0.02, lastSeen: '5 min ago' })).toContain('last seen');
+  });
+});
+
+describe('roadTrip', () => {
+  // Sector 17 -> Sector 43: 3.6 km as the crow flies, about 5 km of road. The straight line this replaced said
+  // 11 min at 20 km/h; the routing service's own 15 min for the real road is what the person now sees.
+  const wholeRoute = { distanceKm: 5, durationMinutes: 15 };
+
+  it('quotes the service’s own driving time while the whole route is still ahead', () => {
+    expect(roadTrip(wholeRoute, 5)).toEqual({ distanceKm: 5, etaMinutes: 15 });
+  });
+
+  it('scales the time down as the road is driven, without asking the service again', () => {
+    expect(roadTrip(wholeRoute, 2.5)).toEqual({ distanceKm: 2.5, etaMinutes: 8 }); // 7.5 min, rounded up
+    expect(roadTrip(wholeRoute, 1)).toEqual({ distanceKm: 1, etaMinutes: 3 });
+  });
+
+  it('falls back to the server’s own speed when the service gave no time', () => {
+    expect(roadTrip({ distanceKm: 5, durationMinutes: null }, 5)).toEqual({ distanceKm: 5, etaMinutes: 15 });
+    expect(FALLBACK_SPEED_KMH).toBe(20);
+  });
+
+  it('never promises less than a minute, and never a negative distance', () => {
+    expect(roadTrip(wholeRoute, 0)).toEqual({ distanceKm: 0, etaMinutes: 1 });
+    expect(roadTrip(wholeRoute, -3)).toEqual({ distanceKm: 0, etaMinutes: 1 });
+  });
+
+  it('survives a service that answered a zero-length route', () => {
+    expect(roadTrip({ distanceKm: 0, durationMinutes: 9 }, 2)).toEqual({ distanceKm: 2, etaMinutes: 6 });
   });
 });

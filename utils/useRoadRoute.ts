@@ -1,19 +1,24 @@
-// The road route from the worker to the job for the map, fetched sparingly (a routing request costs money and time):
+// The road route from the worker to the job, fetched sparingly (a routing request costs money and time):
 //  - once when both points are known (and again for a new destination);
 //  - again only if the worker is more than OFF_ROUTE_M from the line (took another road), at most every MIN_REFETCH_MS;
 //  - if a fetch failed, it is retried at the same pace.
-// Between fetches the line is simply cut to the part still ahead of the worker.
+// Between fetches the line is simply cut to the part still ahead of the worker, and the distance and arrival time are
+// read off that remaining part - so both keep moving with the worker without another request.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { fetchRoadRoute } from './directions';
-import { offRouteMeters, remainingPath } from './route';
-import type { LatLng } from './trip';
+import { fetchRoadRoute, type RoadRoute } from './directions';
+import { offRouteMeters, pathLengthKm, remainingPath } from './route';
+import { roadTrip, type LatLng, type RoadTrip } from './trip';
 
 export const OFF_ROUTE_M = 150;
 export const MIN_REFETCH_MS = 30_000;
 
-/** The road path still to drive, or null while there is none (the map then falls back to a straight line). */
-export function useRoadRoute(worker: LatLng | null, destination: LatLng | null): LatLng[] | null {
-  const [route, setRoute] = useState<LatLng[] | null>(null);
+/** The road still to drive: the line, its length and the arrival time. Null while there is no route. */
+export interface RemainingRoad extends RoadTrip {
+  path: LatLng[];
+}
+
+export function useRoadRoute(worker: LatLng | null, destination: LatLng | null): RemainingRoad | null {
+  const [route, setRoute] = useState<RoadRoute | null>(null);
   const alive = useRef(true);
   const forDestination = useRef<string | null>(null);
   const lastFetchAt = useRef(0);
@@ -39,7 +44,7 @@ export function useRoadRoute(worker: LatLng | null, destination: LatLng | null):
       return undefined;
     }
     const destinationChanged = forDestination.current !== destKey;
-    const due = destinationChanged || route === null || offRouteMeters(route, worker) > OFF_ROUTE_M;
+    const due = destinationChanged || route === null || offRouteMeters(route.path, worker) > OFF_ROUTE_M;
     if (!due || inFlight.current) return undefined;
     if (!destinationChanged && Date.now() - lastFetchAt.current < MIN_REFETCH_MS) return undefined;
 
@@ -49,11 +54,15 @@ export function useRoadRoute(worker: LatLng | null, destination: LatLng | null):
       inFlight.current = false;
       if (!alive.current || currentDest.current !== destKey) return; // closed, or the destination moved on meanwhile
       forDestination.current = destKey;
-      setRoute(found ? found.path : null);
+      setRoute(found);
     });
     return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workerLat, workerLng, destKey]);
 
-  return useMemo(() => (route && worker ? remainingPath(route, worker) : route), [route, workerLat, workerLng]); // eslint-disable-line react-hooks/exhaustive-deps
+  return useMemo(() => {
+    if (!route) return null;
+    const path = worker ? remainingPath(route.path, worker) : route.path;
+    return { path, ...roadTrip(route, pathLengthKm(path)) };
+  }, [route, workerLat, workerLng]); // eslint-disable-line react-hooks/exhaustive-deps
 }

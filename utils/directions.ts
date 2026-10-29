@@ -1,14 +1,14 @@
-// Road route between two points, so the map line follows streets instead of cutting through buildings.
+// Road route between two points: the line the map draws, and how far / how long that road really is (the arrival
+// time shown to both sides comes from this, not from the straight-line distance).
 //  1. Google Routes API (needs "Routes API" enabled on EXPO_PUBLIC_GOOGLE_MAPS_API_KEY; TRAFFIC_UNAWARE is the cheapest tier);
 //  2. OSRM's public demo server (free, no key, no uptime promise: fine for development, host your own for production);
 //  3. null: the map then draws the straight line.
 // Never throws.
 import { GOOGLE_MAPS_KEY, mapsConfigured } from './googlePlaces';
-import { parseGoogleRoute, parseOsrmRoute } from './route';
+import { parseGoogleRoute, parseOsrmRoute, type ParsedRoute } from './route';
 import type { LatLng } from './trip';
 
-export interface RoadRoute {
-  path: LatLng[];
+export interface RoadRoute extends ParsedRoute {
   source: 'google' | 'osrm';
 }
 
@@ -29,17 +29,17 @@ async function getJson(url: string, init?: RequestInit): Promise<unknown> {
   }
 }
 
-async function googleRoute(from: LatLng, to: LatLng): Promise<LatLng[] | null> {
+async function googleRoute(from: LatLng, to: LatLng): Promise<ParsedRoute | null> {
   const point = (p: LatLng) => ({ location: { latLng: { latitude: p.lat, longitude: p.lng } } });
   const json = await getJson('https://routes.googleapis.com/directions/v2:computeRoutes', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': GOOGLE_MAPS_KEY, 'X-Goog-FieldMask': 'routes.polyline.encodedPolyline' },
+    headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': GOOGLE_MAPS_KEY, 'X-Goog-FieldMask': 'routes.polyline.encodedPolyline,routes.distanceMeters,routes.duration' },
     body: JSON.stringify({ origin: point(from), destination: point(to), travelMode: 'DRIVE', routingPreference: 'TRAFFIC_UNAWARE' }),
   });
   return parseGoogleRoute(json);
 }
 
-async function osrmRoute(from: LatLng, to: LatLng): Promise<LatLng[] | null> {
+async function osrmRoute(from: LatLng, to: LatLng): Promise<ParsedRoute | null> {
   const json = await getJson(`https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`);
   return parseOsrmRoute(json);
 }
@@ -47,16 +47,16 @@ async function osrmRoute(from: LatLng, to: LatLng): Promise<LatLng[] | null> {
 export async function fetchRoadRoute(from: LatLng, to: LatLng): Promise<RoadRoute | null> {
   if (mapsConfigured && !googleRoutesDenied) {
     try {
-      const path = await googleRoute(from, to);
-      if (path) return { path, source: 'google' };
+      const route = await googleRoute(from, to);
+      if (route) return { ...route, source: 'google' };
     } catch (error) {
       if (error instanceof Error && error.message === 'HTTP_403') googleRoutesDenied = true;
       /* key not allowed for the Routes API, offline...: try the free service */
     }
   }
   try {
-    const path = await osrmRoute(from, to);
-    if (path) return { path, source: 'osrm' };
+    const route = await osrmRoute(from, to);
+    if (route) return { ...route, source: 'osrm' };
   } catch {
     /* offline: the straight line stays */
   }

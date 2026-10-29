@@ -4,11 +4,11 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Navigation } from 'lucide-react-native';
 import { Colors, Radius } from '../constants/theme';
-import { distanceKm, vehicleEmoji } from '../utils/trip';
+import { distanceKm as straightLineKm, vehicleEmoji } from '../utils/trip';
 import type { TripMapProps } from './TripMap';
 
-export default function TripMap({ worker, destination, vehicle, height = 220, fill = false }: TripMapProps) {
-  const between = worker && destination ? distanceKm(worker, destination) : null;
+export default function TripMap({ worker, destination, vehicle, distanceKm = null, etaMinutes = null, height = 220, fill = false }: TripMapProps) {
+  const between = distanceKm ?? (worker && destination ? straightLineKm(worker, destination) : null);
   return (
     <View style={[styles.wrap, fill ? StyleSheet.absoluteFill : { height: Math.min(height, 130) }]}>
       <Navigation color={Colors.primaryDark} size={26} />
@@ -17,6 +17,7 @@ export default function TripMap({ worker, destination, vehicle, height = 220, fi
         <Text style={styles.coords}>
           {vehicleEmoji(vehicle)} {worker.lat.toFixed(5)}, {worker.lng.toFixed(5)}
           {between !== null ? ` • about ${between.toFixed(1)} km to the job` : ''}
+          {etaMinutes !== null ? ` • ${etaMinutes} min` : ''}
         </Text>
       )}
     </View>

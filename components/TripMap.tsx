@@ -9,7 +9,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { LocateFixed, Navigation } from 'lucide-react-native';
 import { Colors, Radius } from '../constants/theme';
-import { nextHeading, vehicleEmoji, type LatLng } from '../utils/trip';
+import { nextHeading, vehicleEmoji, type LatLng, type RoadTrip } from '../utils/trip';
 import { mapsConfigured } from '../utils/googlePlaces';
 import { useRoadRoute } from '../utils/useRoadRoute';
 
@@ -17,9 +17,11 @@ export interface TripMapProps {
   worker: LatLng | null;
   destination: LatLng | null;
   vehicle?: string | null;
-  /** Road distance and arrival time from the server's tracking view; shown on a chip in the corner. */
+  /** The server's straight-line distance and arrival time. Used only until the road route answers, which is better. */
   distanceKm?: number | null;
   etaMinutes?: number | null;
+  /** Told the road numbers whenever they change, for a screen that shows them outside the map (the customer's pill). */
+  onTrip?: (trip: RoadTrip | null) => void;
   /** Space the fitted view keeps clear of the floating pill (top) and the bottom sheet (bottom). */
   padding?: { top: number; right: number; bottom: number; left: number };
   height?: number;
@@ -64,7 +66,7 @@ function useGlide(target: LatLng | null): LatLng | null {
   return shown;
 }
 
-export default function TripMap({ worker, destination, vehicle, distanceKm = null, etaMinutes = null, padding = DEFAULT_PADDING, height = 220, fill = false }: TripMapProps) {
+export default function TripMap({ worker, destination, vehicle, distanceKm = null, etaMinutes = null, onTrip, padding = DEFAULT_PADDING, height = 220, fill = false }: TripMapProps) {
   const mapRef = useRef<MapView>(null);
   const ready = useRef(false);
   const [detached, setDetached] = useState(false); // the person moved the map themselves: stop re-fitting under their finger
@@ -73,6 +75,15 @@ export default function TripMap({ worker, destination, vehicle, distanceKm = nul
   const [redraw, setRedraw] = useState(true); // custom marker views are redrawn only while something changed
   const glided = useGlide(worker);
   const road = useRoadRoute(worker, destination);
+  // Along the road beats the crow's flight; the server's straight-line numbers stand in until the route answers
+  const shownKm = road?.distanceKm ?? distanceKm;
+  const shownEta = road?.etaMinutes ?? etaMinutes;
+
+  const reportTrip = useRef(onTrip);
+  reportTrip.current = onTrip;
+  useEffect(() => {
+    reportTrip.current?.(road ? { distanceKm: road.distanceKm, etaMinutes: road.etaMinutes } : null);
+  }, [road?.distanceKm, road?.etaMinutes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!worker) return undefined;
@@ -138,7 +149,7 @@ export default function TripMap({ worker, destination, vehicle, distanceKm = nul
         )}
         {worker && destination && (
           <Polyline
-            coordinates={(road ?? [worker, destination]).map((p) => ({ latitude: p.lat, longitude: p.lng }))}
+            coordinates={(road?.path ?? [worker, destination]).map((p) => ({ latitude: p.lat, longitude: p.lng }))}
             strokeColor={Colors.primary}
             strokeWidth={5}
             // Solid along real roads; dotted when only the straight line between the two points is known
@@ -163,11 +174,11 @@ export default function TripMap({ worker, destination, vehicle, distanceKm = nul
           </Marker>
         )}
       </MapView>
-      {(distanceKm !== null || etaMinutes !== null) && (
+      {(shownKm !== null || shownEta !== null) && (
         <View style={styles.chip} accessibilityLiveRegion="polite">
           <Text style={styles.chipText}>
-            {etaMinutes !== null ? `${etaMinutes} min` : 'On the way'}
-            {distanceKm !== null ? ` • ${distanceKm} km` : ''}
+            {shownEta !== null ? `${shownEta} min` : 'On the way'}
+            {shownKm !== null ? ` • ${shownKm} km` : ''}
           </Text>
         </View>
       )}

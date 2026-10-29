@@ -47,6 +47,31 @@ export function vehicleEmoji(vehicle: string | null | undefined): string {
   return '🛵';
 }
 
+/** Used only when the routing service gave no driving time of its own. Same figure as the server's AVG_SPEED_KMH. */
+export const FALLBACK_SPEED_KMH = 20;
+
+/** What the map and the status line quote: how far along the road, and how long that takes. */
+export interface RoadTrip {
+  /** Road kilometres still to drive, to one decimal. */
+  distanceKm: number;
+  /** Whole minutes, never below 1 (the same floor the server uses). */
+  etaMinutes: number;
+}
+
+/**
+ * The numbers for the part of the route still ahead. The service's own driving time covers the WHOLE route, so it is
+ * scaled by how much of the road is left; without one, the fallback speed stands in. This is what replaced the
+ * straight-line estimate: in a grid like the Tricity the road is routinely a third longer than the crow's flight.
+ */
+export function roadTrip(total: { distanceKm: number | null; durationMinutes: number | null }, remainingKm: number): RoadTrip {
+  const left = Math.max(0, remainingKm);
+  const paced =
+    total.durationMinutes !== null && total.distanceKm !== null && total.distanceKm > 0
+      ? (total.durationMinutes * left) / total.distanceKm
+      : (left / FALLBACK_SPEED_KMH) * 60;
+  return { distanceKm: Math.round(left * 10) / 10, etaMinutes: Math.max(1, Math.ceil(paced)) };
+}
+
 export interface PillInput {
   status: string;
   hasLocation: boolean;

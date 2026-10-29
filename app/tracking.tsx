@@ -19,7 +19,7 @@ import { cancelledHeadline, cancelledMessage, cancelledReason, visitFeeNotice } 
 import { callPhone, confirmAction, notify } from '../utils/dialog';
 import { currentPosition } from '../utils/position';
 import { timeAgo } from '../utils/time';
-import { AT_THE_DOOR_KM, trackingPill } from '../utils/trip';
+import { AT_THE_DOOR_KM, trackingPill, type RoadTrip } from '../utils/trip';
 import { buzz } from '../utils/alerts';
 import { jobStep } from '../utils/jobStep';
 
@@ -48,6 +48,7 @@ export default function TrackingScreen() {
   const { activeJobId } = useStore();
   const [sosBusy, setSosBusy] = useState(false);
   const [live, setLive] = useState<JobLocationPayload | null>(null); // newest `job.location` event
+  const [road, setRoad] = useState<RoadTrip | null>(null); // what the map's road route says, which beats the straight line
   const [socketUp, setSocketUp] = useState(isSocketConnected());
   const [resetting, setResetting] = useState(false);
   const { cancel, busy: cancelling, modal: cancelModal } = useCancelJob('CUSTOMER');
@@ -105,8 +106,9 @@ export default function TrackingScreen() {
   const fix = liveIsNewer ? live : polled;
   const workerPoint = fix ? { lat: fix.lat, lng: fix.lng } : null;
   const destination = typeof job?.lat === 'number' && typeof job?.lng === 'number' ? { lat: job.lat, lng: job.lng } : null;
-  const eta = liveIsNewer ? live.etaMinutes : (tracking?.etaMinutes ?? null);
-  const away = liveIsNewer ? live.distanceKm : (tracking?.distanceKm ?? null);
+  // The server measures the crow's flight; the map has the real road. Prefer the road, keep the server as the fallback.
+  const eta = road?.etaMinutes ?? (liveIsNewer ? live.etaMinutes : (tracking?.etaMinutes ?? null));
+  const away = road?.distanceKm ?? (liveIsNewer ? live.distanceKm : (tracking?.distanceKm ?? null));
   const stale = fix ? Date.now() - Date.parse(fix.updatedAt) > STALE_MS : false;
   const status = tracking?.status ?? job?.status ?? 'OPEN';
   const pill =
@@ -211,6 +213,7 @@ export default function TrackingScreen() {
         worker={workerPoint}
         destination={destination}
         vehicle={tracking?.worker?.vehicle ?? worker?.vehicle}
+        onTrip={setRoad}
         padding={{ top: insets.top + 110, right: 50, bottom: 220, left: 50 }}
       />
 

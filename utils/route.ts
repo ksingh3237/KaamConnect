@@ -3,6 +3,15 @@
 // drives along them). No network and no React here, so it is unit tested (route.test.ts).
 import { distanceKm, type LatLng } from './trip';
 
+/** What a routing service answered: the road line, and how long that road is / takes. */
+export interface ParsedRoute {
+  path: LatLng[];
+  /** Road distance of the WHOLE route. Null when the service only gave a line. */
+  distanceKm: number | null;
+  /** The service's own driving time for the whole route, in minutes. Null when it gave none. */
+  durationMinutes: number | null;
+}
+
 /** Google's encoded polyline format (precision 5), as returned by the Routes and Directions APIs. */
 export function decodePolyline(encoded: string): LatLng[] {
   const points: LatLng[] = [];
@@ -28,21 +37,39 @@ export function decodePolyline(encoded: string): LatLng[] {
   return points;
 }
 
-/** Google Routes API (computeRoutes) answer -> path, or null when it holds no route. */
-export function parseGoogleRoute(json: unknown): LatLng[] | null {
-  const encoded = (json as { routes?: { polyline?: { encodedPolyline?: unknown } }[] } | null)?.routes?.[0]?.polyline?.encodedPolyline;
+/** Google Routes API (computeRoutes) answer -> route, or null when it holds no route. */
+export function parseGoogleRoute(json: unknown): ParsedRoute | null {
+  const route = (json as { routes?: { polyline?: { encodedPolyline?: unknown }; distanceMeters?: unknown; duration?: unknown }[] } | null)?.routes?.[0];
+  const encoded = route?.polyline?.encodedPolyline;
   if (typeof encoded !== 'string' || encoded === '') return null;
   const path = decodePolyline(encoded);
-  return path.length >= 2 ? path : null;
+  if (path.length < 2) return null;
+  return {
+    path,
+    distanceKm: typeof route?.distanceMeters === 'number' ? route.distanceMeters / 1000 : null,
+    // Google writes a duration as seconds with a trailing "s" ("843s")
+    durationMinutes: secondsToMinutes(typeof route?.duration === 'string' ? Number.parseFloat(route.duration) : null),
+  };
 }
 
-/** OSRM route answer (geometries=geojson, [lng, lat] pairs) -> path, or null. */
-export function parseOsrmRoute(json: unknown): LatLng[] | null {
-  const body = json as { code?: unknown; routes?: { geometry?: { coordinates?: unknown } }[] } | null;
-  const coordinates = body?.routes?.[0]?.geometry?.coordinates;
+/** OSRM route answer (geometries=geojson, [lng, lat] pairs) -> route, or null. */
+export function parseOsrmRoute(json: unknown): ParsedRoute | null {
+  const body = json as { code?: unknown; routes?: { geometry?: { coordinates?: unknown }; distance?: unknown; duration?: unknown }[] } | null;
+  const route = body?.routes?.[0];
+  const coordinates = route?.geometry?.coordinates;
   if (body?.code !== 'Ok' || !Array.isArray(coordinates)) return null;
   const path = coordinates.flatMap((c) => (Array.isArray(c) && typeof c[0] === 'number' && typeof c[1] === 'number' ? [{ lat: c[1], lng: c[0] }] : []));
-  return path.length >= 2 ? path : null;
+  if (path.length < 2) return null;
+  return {
+    path,
+    distanceKm: typeof route?.distance === 'number' ? route.distance / 1000 : null,
+    durationMinutes: secondsToMinutes(typeof route?.duration === 'number' ? route.duration : null),
+  };
+}
+
+/** Both services answer in seconds; a negative or unreadable value is "no time given". */
+function secondsToMinutes(seconds: number | null): number | null {
+  return seconds !== null && Number.isFinite(seconds) && seconds >= 0 ? seconds / 60 : null;
 }
 
 // Flat-earth maths is exact enough over a few kilometres
@@ -82,6 +109,13 @@ export function offRouteMeters(path: LatLng[], point: LatLng): number {
 export function remainingPath(path: LatLng[], point: LatLng): LatLng[] {
   if (path.length < 2) return path;
   return [point, ...path.slice(nearestSegment(path, point).segment + 1)];
+}
+
+/** How long a path is along its own segments, in kilometres. */
+export function pathLengthKm(path: LatLng[]): number {
+  let km = 0;
+  for (let i = 0; i < path.length - 1; i++) km += distanceKm(path[i], path[i + 1]);
+  return km;
 }
 
 /** Points along the path about `stepMeters` apart, ending exactly on its last point. */
