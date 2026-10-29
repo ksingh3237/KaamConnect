@@ -1,5 +1,5 @@
-// Renders nothing. While someone is signed in it keeps the bell's unread count current and handles taps on system
-// notifications. Mounted once in app/_layout.tsx.
+// Renders nothing. While someone is signed in it keeps the bell's unread count current, buzzes the phone for a push
+// that lands with the app open, and handles taps on system notifications. Mounted once in app/_layout.tsx.
 import { useEffect } from 'react';
 import { AppState, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
@@ -7,6 +7,7 @@ import { useSession } from '../store/useSession';
 import { useNotifications } from '../store/useNotifications';
 import { openNotification } from '../utils/openNotification';
 import { onFcmTokenRefresh, onPushTokenChanged } from '../utils/pushRegistration';
+import { buzz, levelForType } from '../utils/alerts';
 
 const UNREAD_POLL_MS = 30_000;
 const native = Platform.OS === 'android' || Platform.OS === 'ios';
@@ -47,8 +48,14 @@ export default function PushHost() {
 
   useEffect(() => {
     if (!signedIn || !native) return undefined;
-    // A push arrived while the app is open: the bell shows it straight away
-    const received = Notifications.addNotificationReceivedListener(() => void refreshUnread());
+    // A push arrived while the app is open: the bell shows it straight away, and the phone buzzes. Android only
+    // rings and vibrates for notifications it draws on the lock screen / in the tray; with the app in front the
+    // person was getting a silent banner, which is exactly the moment a waiting worker misses a lead.
+    const received = Notifications.addNotificationReceivedListener((notification) => {
+      void refreshUnread();
+      const data = notification.request.content.data as Record<string, unknown> | undefined;
+      buzz(levelForType(typeof data?.type === 'string' ? data.type : ''));
+    });
     // A tap while the app was running or in the background
     const tapped = Notifications.addNotificationResponseReceivedListener(openFromResponse);
     // FCM rotated the token: give the server the new one. Android reads it from this event; on iOS the event carries an

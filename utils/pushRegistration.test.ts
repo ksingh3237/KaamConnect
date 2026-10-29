@@ -6,6 +6,7 @@ const env = vi.hoisted(() => ({ os: 'android', isDevice: true }));
 const notifications = vi.hoisted(() => ({
   setNotificationHandler: vi.fn(),
   setNotificationChannelAsync: vi.fn(),
+  deleteNotificationChannelAsync: vi.fn(),
   getPermissionsAsync: vi.fn(),
   requestPermissionsAsync: vi.fn(),
   getDevicePushTokenAsync: vi.fn(),
@@ -59,6 +60,7 @@ beforeEach(() => {
   env.isDevice = true;
   vi.clearAllMocks();
   notifications.setNotificationChannelAsync.mockResolvedValue(undefined);
+  notifications.deleteNotificationChannelAsync.mockResolvedValue(undefined);
   notifications.getPermissionsAsync.mockResolvedValue(granted);
   notifications.requestPermissionsAsync.mockResolvedValue(granted);
   notifications.getDevicePushTokenAsync.mockResolvedValue({ type: 'android', data: TOKEN_A });
@@ -74,7 +76,7 @@ describe('registerForPush', () => {
     const { registerForPush } = await load();
     await registerForPush();
     expect(notifications.setNotificationChannelAsync).toHaveBeenCalledWith('default', expect.objectContaining({ importance: 4, enableVibrate: true }));
-    expect(notifications.setNotificationChannelAsync).toHaveBeenCalledWith('new_leads', expect.objectContaining({ importance: 5, sound: 'new_lead.wav', enableVibrate: true }));
+    expect(notifications.setNotificationChannelAsync).toHaveBeenCalledWith('new_leads_v2', expect.objectContaining({ importance: 5, sound: 'new_lead.wav', enableVibrate: true }));
     expect(endpoints.registerDeviceToken).toHaveBeenCalledWith(TOKEN_A, 'ANDROID');
     expect(notifications.requestPermissionsAsync).not.toHaveBeenCalled(); // already allowed: no dialog
   });
