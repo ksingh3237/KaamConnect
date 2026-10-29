@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodePolyline, offRouteMeters, parseGoogleRoute, parseOsrmRoute, remainingPath, resample } from './route';
+import { decodePolyline, offRouteMeters, parseGoogleRoute, parseOsrmRoute, pathLengthKm, remainingPath, resample } from './route';
 import { distanceKm } from './trip';
 
 // Straight road going east along one latitude, about 1.1 km long
@@ -25,16 +25,50 @@ describe('decodePolyline', () => {
 
 describe('route answers', () => {
   it('reads a Google Routes answer and rejects an empty one', () => {
-    expect(parseGoogleRoute({ routes: [{ polyline: { encodedPolyline: '_p~iF~ps|U_ulLnnqC' } }] })).toHaveLength(2);
+    const line = { polyline: { encodedPolyline: '_p~iF~ps|U_ulLnnqC' } };
+    expect(parseGoogleRoute({ routes: [line] })?.path).toHaveLength(2);
     expect(parseGoogleRoute({})).toBeNull();
     expect(parseGoogleRoute({ routes: [{ polyline: { encodedPolyline: '' } }] })).toBeNull();
     expect(parseGoogleRoute(null)).toBeNull();
   });
+  it('reads the road length and driving time Google sends beside the line ("843s")', () => {
+    const route = parseGoogleRoute({
+      routes: [{ polyline: { encodedPolyline: '_p~iF~ps|U_ulLnnqC' }, distanceMeters: 5200, duration: '843s' }],
+    });
+    expect(route).toMatchObject({ distanceKm: 5.2, durationMinutes: 14.05 });
+  });
+  it('still gives a line when the service sends no numbers with it', () => {
+    const route = parseGoogleRoute({ routes: [{ polyline: { encodedPolyline: '_p~iF~ps|U_ulLnnqC' } }] });
+    expect(route).toMatchObject({ distanceKm: null, durationMinutes: null });
+  });
   it('reads an OSRM answer (lng first) and rejects errors', () => {
     const ok = { code: 'Ok', routes: [{ geometry: { coordinates: [[76.77, 30.73], [76.78, 30.74]] } }] };
-    expect(parseOsrmRoute(ok)).toEqual([{ lat: 30.73, lng: 76.77 }, { lat: 30.74, lng: 76.78 }]);
+    expect(parseOsrmRoute(ok)?.path).toEqual([{ lat: 30.73, lng: 76.77 }, { lat: 30.74, lng: 76.78 }]);
     expect(parseOsrmRoute({ code: 'NoRoute', routes: [] })).toBeNull();
     expect(parseOsrmRoute({ code: 'Ok', routes: [{ geometry: { coordinates: 'x' } }] })).toBeNull();
+  });
+  it('reads OSRM metres and seconds', () => {
+    const ok = {
+      code: 'Ok',
+      routes: [{ geometry: { coordinates: [[76.77, 30.73], [76.78, 30.74]] }, distance: 4800, duration: 720 }],
+    };
+    expect(parseOsrmRoute(ok)).toMatchObject({ distanceKm: 4.8, durationMinutes: 12 });
+  });
+});
+
+describe('pathLengthKm', () => {
+  it('measures along the line, not from end to end', () => {
+    // a right-angle detour: 1 km north, then 1 km east. End to end is ~1.41 km, along the road 2 km.
+    const corner = { lat: 30.7372, lng: 76.7827 };
+    const north = { lat: corner.lat + 1 / 110.574, lng: corner.lng };
+    const northEast = { lat: north.lat, lng: north.lng + 1 / (111.32 * Math.cos((north.lat * Math.PI) / 180)) };
+    expect(pathLengthKm([corner, north, northEast])).toBeCloseTo(2, 1);
+    expect(distanceKm(corner, northEast)).toBeCloseTo(1.41, 1);
+  });
+
+  it('is zero for a path that goes nowhere', () => {
+    expect(pathLengthKm([])).toBe(0);
+    expect(pathLengthKm([{ lat: 30.7, lng: 76.7 }])).toBe(0);
   });
 });
 

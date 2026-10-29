@@ -47,6 +47,31 @@ export function vehicleEmoji(vehicle: string | null | undefined): string {
   return '🛵';
 }
 
+/** Used only when the routing service gave no driving time of its own. Same figure as the server's AVG_SPEED_KMH. */
+export const FALLBACK_SPEED_KMH = 20;
+
+/** What the map and the status line quote: how far along the road, and how long that takes. */
+export interface RoadTrip {
+  /** Road kilometres still to drive, to one decimal. */
+  distanceKm: number;
+  /** Whole minutes, never below 1 (the same floor the server uses). */
+  etaMinutes: number;
+}
+
+/**
+ * The numbers for the part of the route still ahead. The service's own driving time covers the WHOLE route, so it is
+ * scaled by how much of the road is left; without one, the fallback speed stands in. This is what replaced the
+ * straight-line estimate: in a grid like the Tricity the road is routinely a third longer than the crow's flight.
+ */
+export function roadTrip(total: { distanceKm: number | null; durationMinutes: number | null }, remainingKm: number): RoadTrip {
+  const left = Math.max(0, remainingKm);
+  const paced =
+    total.durationMinutes !== null && total.distanceKm !== null && total.distanceKm > 0
+      ? (total.durationMinutes * left) / total.distanceKm
+      : (left / FALLBACK_SPEED_KMH) * 60;
+  return { distanceKm: Math.round(left * 10) / 10, etaMinutes: Math.max(1, Math.ceil(paced)) };
+}
+
 export interface PillInput {
   status: string;
   hasLocation: boolean;
@@ -57,12 +82,17 @@ export interface PillInput {
   lastSeen?: string;
 }
 
+/** Within this, the worker is at the address rather than on the way to it (the fix's own accuracy is of that order). */
+export const AT_THE_DOOR_KM = 0.1;
+
 /** The floating line on the customer's tracking map. */
 export function trackingPill(input: PillInput): string {
   if (['ARRIVED', 'IN_PROGRESS', 'WORK_COMPLETED', 'COMPLETED'].includes(input.status)) return '📍 Worker has arrived at your location';
   if (input.status !== 'ASSIGNED') return '';
   if (!input.hasLocation) return '⏳ Worker on the way • Updating live location...';
   if (input.stale) return `⏳ Worker on the way • location last seen ${input.lastSeen ?? 'a while ago'}`;
+  // Close enough that "arriving in 1 min" is useless: what the customer needs is the arrival code in their hand
+  if (input.distanceKm !== null && input.distanceKm <= AT_THE_DOOR_KM) return '🚪 Your worker is at your door • have the arrival code ready';
   if (input.etaMinutes === null) return '⚡ Worker is on the way • live location on the map';
   const away = input.distanceKm !== null ? ` • ${input.distanceKm} km away` : '';
   return `⚡ Arriving in ${input.etaMinutes} min${away}`;

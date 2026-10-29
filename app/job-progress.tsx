@@ -1,15 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, ActivityIndicator, Linking, Platform } from 'react-native';
+import { AppState, View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, ActivityIndicator, Linking, Platform, type LayoutChangeEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, CheckCircle2, Phone, ShieldCheck, Zap } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../constants/theme';
 import { useStore } from '../store/useStore';
 import { useAsync } from '../api/useAsync';
-import { addWorkPhoto, approveBill, completeWork, getBill, getJob, getMyCancellations, payJob, putBillItems, verifyArrival } from '../api/endpoints';
+import { addWorkPhoto, approveBill, completeWork, getBill, getJob, getMyCancellations, getTracking, payJob, putBillItems, verifyArrival } from '../api/endpoints';
 import { isApiError, userMessage } from '../api/errors';
 import { uploadFile } from '../api/upload';
 import { useImagePicker } from '../components/ImageSourceModal';
+import { useImageViewer } from '../components/ImageViewerModal';
 import { useCancelJob } from '../components/CancelReasonSheet';
 import { backOutWarning, cancelledHeadline, cancelledMessage, cancelledReason, visitFeeNotice } from '../utils/cancelReasons';
 import { callPhone, confirmAction, notify } from '../utils/dialog';
@@ -17,15 +18,20 @@ import { getLocationAccess, requestWorkerLocationAccess } from '../utils/locatio
 import { workerTracking } from '../utils/workerTracking';
 import { useWorkerTracking } from '../utils/useWorkerTracking';
 import LateBanner from '../components/LateBanner';
-import { navigationUrls } from '../utils/trip';
+import { AT_THE_DOOR_KM, distanceKm, navigationUrls } from '../utils/trip';
+import { buzz, ringAlert } from '../utils/alerts';
+import { jobStep, type JobSection } from '../utils/jobStep';
+import { TRIP_RETURN_TYPE, clearReturnReminder, showReturnReminder } from '../utils/tripReturn';
 import { useSession } from '../store/useSession';
 import TripMap from '../components/TripMap';
 import WorkerLocationPermissionModal from '../components/WorkerLocationPermissionModal';
-import type { BillItemKind, BillView, JobView, PaymentMethod } from '../api/types';
+import type { BillItemKind, BillView, JobView, PaymentMethod, Tracking } from '../api/types';
 import Avatar from '../components/Avatar';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../components/StateBlocks';
 
 const POLL_MS = 6000;
+/** Once the worker is further than this again, a new approach can nudge them a second time. */
+const LEFT_THE_DOOR_KM = 0.3;
 const PHOTO_PLACEHOLDER = require('../assets/images/photo-placeholder.png');
 const KINDS: Exclude<BillItemKind, 'VISIT_FEE'>[] = ['PARTS', 'LABOUR', 'OTHER'];
 const STATUS_PILL: Record<string, string> = {
@@ -43,6 +49,8 @@ const timeOf = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString('
 interface Loaded {
   job: JobView;
   bill: BillView | null;
+  /** The server's own distance and arrival time, so both sides read the same numbers. Null when not applicable. */
+  tracking: Tracking | null;
 }
 interface DraftItem {
   kind: Exclude<BillItemKind, 'VISIT_FEE'>;
@@ -56,7 +64,19 @@ export default function JobProgressScreen() {
   const workerProfile = useSession((s) => s.workerProfile);
   const [askLocation, setAskLocation] = useState(false);
   const { pick: pickImage, modal: imageSourceModal } = useImagePicker();
+  const { show: viewImage, modal: imageViewerModal } = useImageViewer();
   const askedFor = useRef<string | null>(null);
+  // Where each block sits in the scroll view, so the one that just became the person's turn can be brought into view
+  const scrollRef = useRef<ScrollView>(null);
+  const sectionY = useRef<Partial<Record<JobSection, number>>>({});
+  const onSectionLayout = (section: JobSection) => (event: LayoutChangeEvent) => {
+    sectionY.current[section] = event.nativeEvent.layout.y;
+  };
+  // Never yank the page away while the worker is typing a bill line
+  const typing = useRef(false);
+  const lastStatus = useRef<string | null>(null);
+  // The "you have reached it" nudge fires once per approach, not once per GPS fix
+  const nudged = useRef(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [code, setCode] = useState('');
@@ -68,13 +88,16 @@ export default function JobProgressScreen() {
       const job = await getJob(activeJobId);
       // The bill exists once the worker has arrived; before that the call is simply not applicable
       const bill = ['ARRIVED', 'IN_PROGRESS', 'WORK_COMPLETED', 'COMPLETED'].includes(job.status) ? await getBill(activeJobId).catch(() => null) : null;
-      return { job, bill };
+      // Only meaningful while someone is on the way; the server answers 409 outside those statuses
+      const tracking = job.status === 'ASSIGNED' ? await getTracking(activeJobId).catch(() => null) : null;
+      return { job, bill, tracking };
     },
     [activeJobId],
     { pollMs: POLL_MS },
   );
   const job = state.data?.job ?? null;
   const bill = state.data?.bill ?? null;
+  const tracking = state.data?.tracking ?? null;
   const isWorker = job?.viewer === 'worker';
   const other = isWorker ? job?.customer : job?.worker;
   const { cancel, busy: cancelling, modal: cancelModal } = useCancelJob(isWorker ? 'WORKER' : 'CUSTOMER');
@@ -95,8 +118,69 @@ export default function JobProgressScreen() {
     });
   }, [enRoute, jobId]);
 
+  // A different job in the same screen starts over: no alert for a status it never had
+  useEffect(() => {
+    lastStatus.current = null;
+    nudged.current = false;
+  }, [activeJobId]);
+
+  // The status changed under the person (their own action, a poll or a socket event): buzz, and scroll the control
+  // that is now theirs into view. The first load only records where the job is, so opening the screen is silent.
+  useEffect(() => {
+    if (!job) return;
+    const status = job.status;
+    const previous = lastStatus.current;
+    lastStatus.current = status;
+    if (previous === null || previous === status) return;
+    const step = jobStep(status, job.viewer === 'worker' ? 'worker' : 'customer');
+    if (!step) return;
+    buzz(step.level);
+    const y = step.section ? sectionY.current[step.section] : undefined;
+    if (y === undefined || typing.current) return;
+    // Let the newly rendered block settle before scrolling to where it was measured
+    const timer = setTimeout(() => scrollRef.current?.scrollTo({ y: Math.max(y - Spacing.lg, 0), animated: true }), 300);
+    return () => clearTimeout(timer);
+  }, [job]);
+
   const workerPoint = currentLat !== null && currentLng !== null ? { lat: currentLat, lng: currentLng } : null;
   const destination = typeof job?.lat === 'number' && typeof job?.lng === 'number' ? { lat: job.lat, lng: job.lng } : null;
+
+  // Arrived in front of the address: buzz, say so, and put the code entry under their thumb. The worker is usually
+  // still holding the phone from the navigation, so this is the moment the next step has to be visible.
+  useEffect(() => {
+    if (!isWorker || job?.status !== 'ASSIGNED' || !workerPoint || !destination) return;
+    const km = distanceKm(workerPoint, destination);
+    if (km > LEFT_THE_DOOR_KM) {
+      nudged.current = false; // they drove off again (wrong turn, another street): the next approach may nudge
+      return;
+    }
+    if (km > AT_THE_DOOR_KM || nudged.current) return;
+    nudged.current = true;
+    void clearReturnReminder();
+    void ringAlert({
+      title: 'You have reached the job',
+      body: 'Ask the customer for the 4-digit arrival code',
+      level: 'loud',
+      data: { type: TRIP_RETURN_TYPE, jobId },
+    });
+    const y = sectionY.current.arrival;
+    if (y !== undefined) scrollRef.current?.scrollTo({ y: Math.max(y - Spacing.lg, 0), animated: true });
+  }, [isWorker, job?.status, jobId, workerPoint?.lat, workerPoint?.lng, destination?.lat, destination?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The reminder in the shade belongs to one trip only, and to the time the worker is actually away from the app
+  useEffect(() => {
+    if (!enRoute) {
+      void clearReturnReminder();
+      return undefined;
+    }
+    const appState = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void clearReturnReminder(); // they are back: nothing left to tap
+    });
+    return () => {
+      appState.remove();
+      void clearReturnReminder();
+    };
+  }, [enRoute]);
 
   const reenableGps = async () => {
     const access = await requestWorkerLocationAccess();
@@ -120,6 +204,7 @@ export default function JobProgressScreen() {
     for (const url of navigationUrls(destination, job?.addressLine, Platform.OS === 'android')) {
       try {
         await Linking.openURL(url);
+        if (jobId) void showReturnReminder(jobId);
         return;
       } catch {
         /* no app for this link: try the next one */
@@ -237,7 +322,7 @@ export default function JobProgressScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {!activeJobId && <EmptyBlock title="No job selected" hint="Open a job from Activity. / गतिविधि से जॉब खोलें" />}
         {activeJobId && state.loading && <LoadingBlock label="Loading job… / जॉब लोड हो रहा है…" />}
         {state.error && !state.data && <ErrorBlock message={state.error} onRetry={() => void state.reload()} />}
@@ -291,13 +376,21 @@ export default function JobProgressScreen() {
 
                 {(workerPoint || destination) && (
                   <View style={{ marginTop: Spacing.md }}>
-                    <TripMap worker={workerPoint} destination={destination} vehicle={workerProfile?.vehicle} height={200} />
+                    <TripMap
+                      worker={workerPoint}
+                      destination={destination}
+                      vehicle={workerProfile?.vehicle}
+                      distanceKm={tracking?.distanceKm ?? null}
+                      etaMinutes={tracking?.etaMinutes ?? null}
+                      height={200}
+                    />
                   </View>
                 )}
 
                 <TouchableOpacity style={styles.navBtn} onPress={() => void openNavigation()} activeOpacity={0.85} accessibilityRole="button">
                   <Text style={styles.navBtnText}>🗺️ Open in Google Maps Navigation</Text>
                 </TouchableOpacity>
+                <Text style={styles.hint}>Navigation opens Google Maps. To come back, tap the KaamConnect notification in the status bar. / वापस आने के लिए नोटिफिकेशन दबाएं</Text>
                 {__DEV__ && (
                   <TouchableOpacity style={styles.simBtn} onPress={() => void toggleSimulation()} activeOpacity={0.8} accessibilityRole="button">
                     <Text style={styles.simBtnText}>{simulating ? '⏹ Stop simulated drive' : '🧪 Simulate drive from Sector 17 (dev only)'}</Text>
@@ -309,7 +402,7 @@ export default function JobProgressScreen() {
 
             {/* Cancelled: who, why, and what (if anything) is owed. Replaces the milestones, which no longer apply. */}
             {job.status === 'CANCELLED' && (
-              <View style={[styles.card, styles.cancelledCard]} accessibilityRole="alert">
+              <View style={[styles.card, styles.cancelledCard]} onLayout={onSectionLayout('cancelled')} accessibilityRole="alert">
                 <Text style={styles.cancelledTitle}>{cancelledHeadline(job, isWorker ? 'worker' : 'customer')}</Text>
                 <Text style={styles.cancelledReason}>{cancelledReason(job, 'worker')}</Text>
                 {visitFeeNotice(job, isWorker ? 'worker' : 'customer') ? <Text style={styles.cancelledFee}>{visitFeeNotice(job, isWorker ? 'worker' : 'customer')}</Text> : null}
@@ -348,7 +441,7 @@ export default function JobProgressScreen() {
 
             {/* Worker: arrival code */}
             {isWorker && job.status === 'ASSIGNED' && (
-              <View style={styles.card}>
+              <View style={styles.card} onLayout={onSectionLayout('arrival')}>
                 <Text style={styles.sectionTitle}>Arrival Code (आगमन कोड)</Text>
                 {job.arrivalLocked ? (
                   <Text style={styles.lockedText} accessibilityRole="alert">
@@ -385,7 +478,7 @@ export default function JobProgressScreen() {
 
             {/* Work proof photos */}
             {['ARRIVED', 'IN_PROGRESS', 'WORK_COMPLETED', 'COMPLETED'].includes(job.status) && (
-              <View style={styles.card}>
+              <View style={styles.card} onLayout={onSectionLayout('photos')}>
                 <Text style={styles.sectionTitle}>Work Proof Photos (मरम्मत फ़ोटो)</Text>
                 <View style={styles.photosGrid}>
                   {(['before', 'after'] as const).map((side) => {
@@ -396,7 +489,15 @@ export default function JobProgressScreen() {
                         <View style={styles.photoThumbRow}>
                           {urls.length === 0 && <Image source={PHOTO_PLACEHOLDER} style={styles.proofImage} />}
                           {urls.map((u) => (
-                            <Image key={u} source={{ uri: u }} style={styles.proofImage} />
+                            <TouchableOpacity
+                              key={u}
+                              onPress={() => viewImage(u, side === 'before' ? 'Before the work' : 'After the work')}
+                              activeOpacity={0.85}
+                              accessibilityRole="imagebutton"
+                              accessibilityLabel={`View the ${side} photo full screen`}
+                            >
+                              <Image source={{ uri: u }} style={styles.proofImage} />
+                            </TouchableOpacity>
                           ))}
                         </View>
                         {isWorker && ['ARRIVED', 'IN_PROGRESS'].includes(job.status) && (
@@ -413,7 +514,7 @@ export default function JobProgressScreen() {
 
             {/* Bill */}
             {bill && (
-              <View style={[styles.card, styles.billCard]}>
+              <View style={[styles.card, styles.billCard]} onLayout={onSectionLayout('bill')}>
                 <View style={styles.billHeader}>
                   <Text style={[styles.sectionTitle, { flex: 1, marginBottom: 0 }]}>Transparent Bill (बिल विवरण)</Text>
                   <View style={styles.zeroCutBadge}>
@@ -439,8 +540,8 @@ export default function JobProgressScreen() {
                           ))}
                         </View>
                         <View style={styles.inputRow}>
-                          <TextInput style={[styles.input, { flex: 2 }]} value={it.description} onChangeText={(t) => updateItem(index, { description: t.slice(0, 120) })} placeholder="What was done / part used" placeholderTextColor={Colors.textSubtle} />
-                          <TextInput style={styles.input} value={it.amount} onChangeText={(t) => updateItem(index, { amount: t.replace(/[^0-9.]/g, '').slice(0, 8) })} placeholder="₹" placeholderTextColor={Colors.textSubtle} keyboardType="decimal-pad" />
+                          <TextInput style={[styles.input, { flex: 2 }]} value={it.description} onChangeText={(t) => updateItem(index, { description: t.slice(0, 120) })} onFocus={() => (typing.current = true)} onBlur={() => (typing.current = false)} placeholder="What was done / part used" placeholderTextColor={Colors.textSubtle} />
+                          <TextInput style={styles.input} value={it.amount} onChangeText={(t) => updateItem(index, { amount: t.replace(/[^0-9.]/g, '').slice(0, 8) })} onFocus={() => (typing.current = true)} onBlur={() => (typing.current = false)} placeholder="₹" placeholderTextColor={Colors.textSubtle} keyboardType="decimal-pad" />
                           <TouchableOpacity style={styles.ghostBtn} onPress={() => setDraft(items.filter((_, i) => i !== index))} accessibilityRole="button" accessibilityLabel="Remove this line">
                             <Text style={styles.ghostBtnText}>✕</Text>
                           </TouchableOpacity>
@@ -479,72 +580,75 @@ export default function JobProgressScreen() {
               </View>
             )}
 
-            {/* Worker: finish */}
-            {isWorker && job.status === 'ARRIVED' && (
-              <EmptyBlock title="Waiting for the customer to approve the cost" hint="Save the bill above. Start the work once they approve. This page refreshes by itself." />
-            )}
-            {isWorker && job.status === 'IN_PROGRESS' && (
-              <TouchableOpacity style={[styles.smallBtn, { paddingVertical: 14 }, busy !== null && { opacity: 0.6 }]} onPress={() => void finishWork()} disabled={busy !== null} accessibilityRole="button">
-                {busy === 'complete' ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.smallBtnText}>Work finished — send bill to customer</Text>}
-              </TouchableOpacity>
-            )}
-            {isWorker && job.status === 'WORK_COMPLETED' && <EmptyBlock title="Waiting for the payment" hint="The customer pays you directly and then marks it paid. This page refreshes by itself." />}
-            {isWorker && job.status === 'COMPLETED' && (
-              <TouchableOpacity style={[styles.smallBtn, { paddingVertical: 14 }]} onPress={() => router.replace('/(tabs)/leads')} accessibilityRole="button">
-                <Text style={styles.smallBtnText}>Paid — back to leads</Text>
-              </TouchableOpacity>
-            )}
+            {/* Everything that is a button for one side or the other: the block the status change scrolls to */}
+            <View style={{ gap: Spacing.lg }} onLayout={onSectionLayout('actions')}>
+              {/* Worker: finish */}
+              {isWorker && job.status === 'ARRIVED' && (
+                <EmptyBlock title="Waiting for the customer to approve the cost" hint="Save the bill above. Start the work once they approve. This page refreshes by itself." />
+              )}
+              {isWorker && job.status === 'IN_PROGRESS' && (
+                <TouchableOpacity style={[styles.smallBtn, { paddingVertical: 14 }, busy !== null && { opacity: 0.6 }]} onPress={() => void finishWork()} disabled={busy !== null} accessibilityRole="button">
+                  {busy === 'complete' ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.smallBtnText}>Work finished — send bill to customer</Text>}
+                </TouchableOpacity>
+              )}
+              {isWorker && job.status === 'WORK_COMPLETED' && <EmptyBlock title="Waiting for the payment" hint="The customer pays you directly and then marks it paid. This page refreshes by itself." />}
+              {isWorker && job.status === 'COMPLETED' && (
+                <TouchableOpacity style={[styles.smallBtn, { paddingVertical: 14 }]} onPress={() => router.replace('/(tabs)/leads')} accessibilityRole="button">
+                  <Text style={styles.smallBtnText}>Paid — back to leads</Text>
+                </TouchableOpacity>
+              )}
 
-            {/* Customer: approve, then pay */}
-            {!isWorker && bill && job.status === 'ARRIVED' && !bill.approved && (
-              <TouchableOpacity
-                style={[styles.smallBtn, { paddingVertical: 14 }, busy !== null && { opacity: 0.6 }]}
-                onPress={() => void run('approve', () => approveBill(activeJobId!, bill.total))}
-                disabled={busy !== null}
-                accessibilityRole="button"
-              >
-                {busy === 'approve' ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.smallBtnText}>Approve cost {money(bill.total)} and start the work</Text>}
-              </TouchableOpacity>
-            )}
-            {/* Not happy with the cost: leave without starting. Once the cost is approved this is no longer possible. */}
-            {!isWorker && job.status === 'ARRIVED' && (
-              <TouchableOpacity
-                style={[styles.dangerBtn, (cancelling || busy !== null) && { opacity: 0.6 }]}
-                onPress={declineCost}
-                disabled={cancelling || busy !== null}
-                activeOpacity={0.8}
-                accessibilityRole="button"
-              >
-                <Text style={styles.dangerBtnText}>{cancelling ? 'Cancelling…' : 'Decline the cost and cancel / दाम न मानें, रद्द करें'}</Text>
-              </TouchableOpacity>
-            )}
-            {!isWorker && bill && job.status === 'WORK_COMPLETED' && (
-              <View style={styles.qrCard}>
-                <Text style={styles.qrTitle}>Pay Directly to {bill.payTo.name}</Text>
-                <Text style={styles.qrSubtitle}>
-                  {bill.payTo.upiId ? (
-                    <>UPI ID: <Text style={{ fontWeight: '800' }}>{bill.payTo.upiId}</Text> (GPay / PhonePe / Paytm) or pay cash</>
-                  ) : (
-                    'Pay the worker in cash, or ask for their UPI ID'
-                  )}
-                </Text>
-                <Text style={styles.hint}>KaamConnect does not touch the money. Pay the worker first, then confirm below.</Text>
-                <View style={[styles.actionRow, { marginTop: 12 }]}>
-                  <TouchableOpacity style={[styles.payBtn, styles.payBtnPrimary, busy !== null && styles.payBtnDisabled]} onPress={() => void pay('UPI')} disabled={busy !== null} activeOpacity={0.8} accessibilityRole="button">
-                    <Zap color="#FFFFFF" size={16} />
-                    <Text style={styles.payBtnText}>{busy === 'pay' ? 'Saving…' : `Paid ${money(bill.total)} via UPI ✓`}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.payBtn, styles.payBtnCash, busy !== null && styles.payBtnDisabled]} onPress={() => void pay('CASH')} disabled={busy !== null} activeOpacity={0.8} accessibilityRole="button">
-                    <Text style={styles.payBtnCashText}>Paid Cash 💵</Text>
-                  </TouchableOpacity>
+              {/* Customer: approve, then pay */}
+              {!isWorker && bill && job.status === 'ARRIVED' && !bill.approved && (
+                <TouchableOpacity
+                  style={[styles.smallBtn, { paddingVertical: 14 }, busy !== null && { opacity: 0.6 }]}
+                  onPress={() => void run('approve', () => approveBill(activeJobId!, bill.total))}
+                  disabled={busy !== null}
+                  accessibilityRole="button"
+                >
+                  {busy === 'approve' ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.smallBtnText}>Approve cost {money(bill.total)} and start the work</Text>}
+                </TouchableOpacity>
+              )}
+              {/* Not happy with the cost: leave without starting. Once the cost is approved this is no longer possible. */}
+              {!isWorker && job.status === 'ARRIVED' && (
+                <TouchableOpacity
+                  style={[styles.dangerBtn, (cancelling || busy !== null) && { opacity: 0.6 }]}
+                  onPress={declineCost}
+                  disabled={cancelling || busy !== null}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.dangerBtnText}>{cancelling ? 'Cancelling…' : 'Decline the cost and cancel / दाम न मानें, रद्द करें'}</Text>
+                </TouchableOpacity>
+              )}
+              {!isWorker && bill && job.status === 'WORK_COMPLETED' && (
+                <View style={styles.qrCard}>
+                  <Text style={styles.qrTitle}>Pay Directly to {bill.payTo.name}</Text>
+                  <Text style={styles.qrSubtitle}>
+                    {bill.payTo.upiId ? (
+                      <>UPI ID: <Text style={{ fontWeight: '800' }}>{bill.payTo.upiId}</Text> (GPay / PhonePe / Paytm) or pay cash</>
+                    ) : (
+                      'Pay the worker in cash, or ask for their UPI ID'
+                    )}
+                  </Text>
+                  <Text style={styles.hint}>KaamConnect does not touch the money. Pay the worker first, then confirm below.</Text>
+                  <View style={[styles.actionRow, { marginTop: 12 }]}>
+                    <TouchableOpacity style={[styles.payBtn, styles.payBtnPrimary, busy !== null && styles.payBtnDisabled]} onPress={() => void pay('UPI')} disabled={busy !== null} activeOpacity={0.8} accessibilityRole="button">
+                      <Zap color="#FFFFFF" size={16} />
+                      <Text style={styles.payBtnText}>{busy === 'pay' ? 'Saving…' : `Paid ${money(bill.total)} via UPI ✓`}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.payBtn, styles.payBtnCash, busy !== null && styles.payBtnDisabled]} onPress={() => void pay('CASH')} disabled={busy !== null} activeOpacity={0.8} accessibilityRole="button">
+                      <Text style={styles.payBtnCashText}>Paid Cash 💵</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
-            )}
-            {!isWorker && job.status === 'COMPLETED' && (
-              <TouchableOpacity style={[styles.smallBtn, { paddingVertical: 14 }]} onPress={() => router.replace('/rating')} accessibilityRole="button">
-                <Text style={styles.smallBtnText}>{job.review ? 'Thanks for rating' : 'Rate this job'}</Text>
-              </TouchableOpacity>
-            )}
+              )}
+              {!isWorker && job.status === 'COMPLETED' && (
+                <TouchableOpacity style={[styles.smallBtn, { paddingVertical: 14 }]} onPress={() => router.replace('/rating')} accessibilityRole="button">
+                  <Text style={styles.smallBtnText}>{job.review ? 'Thanks for rating' : 'Rate this job'}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
             {/* The worker cannot continue: on the way (ASSIGNED) or on site before the cost is approved (ARRIVED) */}
             {isWorker && (job.status === 'ASSIGNED' || job.status === 'ARRIVED') && (
@@ -574,6 +678,7 @@ export default function JobProgressScreen() {
         }}
       />
       {imageSourceModal}
+      {imageViewerModal}
       {cancelModal}
     </SafeAreaView>
   );
