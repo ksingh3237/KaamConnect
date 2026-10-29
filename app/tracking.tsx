@@ -19,7 +19,9 @@ import { cancelledHeadline, cancelledMessage, cancelledReason, visitFeeNotice } 
 import { callPhone, confirmAction, notify } from '../utils/dialog';
 import { currentPosition } from '../utils/position';
 import { timeAgo } from '../utils/time';
-import { trackingPill } from '../utils/trip';
+import { AT_THE_DOOR_KM, trackingPill } from '../utils/trip';
+import { buzz } from '../utils/alerts';
+import { jobStep } from '../utils/jobStep';
 
 const POLL_MS = 6000; // REST polling while the socket is down: the customer still sees the worker move
 const POLL_SOCKET_UP_MS = 20000; // with a live socket, polling is only a safety net for status changes
@@ -49,6 +51,8 @@ export default function TrackingScreen() {
   const [socketUp, setSocketUp] = useState(isSocketConnected());
   const [resetting, setResetting] = useState(false);
   const { cancel, busy: cancelling, modal: cancelModal } = useCancelJob('CUSTOMER');
+  const lastStatus = useRef<string | null>(null);
+  const doorBuzzed = useRef(false);
 
   const state = useAsync<Loaded | null>(
     async () => {
@@ -108,6 +112,28 @@ export default function TrackingScreen() {
   const pill =
     trackingPill({ status, hasLocation: fix !== null, stale, etaMinutes: eta, distanceKm: away, lastSeen: fix ? timeAgo(fix.updatedAt) : undefined }) ||
     (STATUS_LABEL[status] ?? '');
+
+  // The job moved on while the customer was reading this screen (socket or poll): buzz, so it is not missed with the
+  // phone on the table. The screen itself already shows the change; this is only the nudge to look at it.
+  useEffect(() => {
+    if (!job) return;
+    const previous = lastStatus.current;
+    lastStatus.current = job.status;
+    if (previous === null || previous === job.status) return;
+    const step = jobStep(job.status, 'customer');
+    if (step) buzz(step.level);
+  }, [job]);
+
+  // The worker has reached the address but has not entered the code yet: the customer needs to open the door
+  useEffect(() => {
+    if (status !== 'ASSIGNED' || stale || away === null || away > AT_THE_DOOR_KM) {
+      if (away !== null && away > AT_THE_DOOR_KM) doorBuzzed.current = false;
+      return;
+    }
+    if (doorBuzzed.current) return;
+    doorBuzzed.current = true;
+    buzz('loud');
+  }, [status, stale, away]);
 
   const handleSos = async () => {
     if (!activeJobId || sosBusy) return;
