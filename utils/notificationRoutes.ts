@@ -3,7 +3,6 @@
 //
 // /tracking, /compare-offers and /job-progress take no route parameters: they follow `activeJobId` from the store.
 import type { Href } from 'expo-router';
-import type { NotificationType } from '../api/types';
 
 export type NotificationSide = 'customer' | 'worker';
 
@@ -15,7 +14,9 @@ export interface NotificationTarget {
   jobId: string | null;
 }
 
-const WORKER_TYPES: ReadonlySet<NotificationType> = new Set([
+// TRIP_RETURN is the app's own ongoing "come back from Google Maps" notification (utils/tripReturn.ts), not a server type.
+const WORKER_TYPES: ReadonlySet<string> = new Set<string>([
+  'TRIP_RETURN',
   'NEW_LEAD',
   'DIRECT_REQUEST',
   'BOOKING_CONFIRMED',
@@ -24,7 +25,7 @@ const WORKER_TYPES: ReadonlySet<NotificationType> = new Set([
   'JOB_NO_SHOW_RELEASED',
 ]);
 
-export function notificationSide(type: NotificationType): NotificationSide {
+export function notificationSide(type: string): NotificationSide {
   return WORKER_TYPES.has(type) ? 'worker' : 'customer';
 }
 
@@ -38,7 +39,7 @@ export function jobIdOf(data: Record<string, unknown> | null | undefined): strin
 export function notificationTarget(type: string, data: Record<string, unknown> | null | undefined): NotificationTarget | null {
   const jobId = jobIdOf(data);
   if (!jobId) return null;
-  const side = notificationSide(type as NotificationType);
+  const side = notificationSide(type);
   switch (type) {
     case 'NEW_LEAD':
     case 'DIRECT_REQUEST':
@@ -55,6 +56,7 @@ export function notificationTarget(type: string, data: Record<string, unknown> |
       // A re-opened job has left the worker's list (it is open to others again), so there is nothing to open: go Home.
       // A closed one (a direct booking) stays on their cancelled tab. The pushed flag is the text "true", the inbox keeps the boolean.
       return data?.reopened === true || data?.reopened === 'true' ? { side, href: '/(tabs)/home', jobId: null } : { side, href: '/job-progress', jobId };
+    case 'TRIP_RETURN': // the worker tapping their way back out of Google Maps
     case 'JOB_YOU_ARE_LATE':
     case 'JOB_CANCELLED_BY_CUSTOMER': // job progress shows the worker the cancelled summary: who, why, any visit fee
       return { side, href: '/job-progress', jobId };

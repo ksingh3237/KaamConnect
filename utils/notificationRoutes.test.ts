@@ -79,3 +79,9 @@ describe('notificationSide / jobIdOf', () => {
     expect(jobIdOf(undefined)).toBeNull();
   });
 });
+
+describe('the app’s own trip-return notification', () => {
+  it('takes the worker back to the job screen they left for Google Maps', () => {
+    expect(notificationTarget('TRIP_RETURN', { jobId: 'job-1' })).toEqual({ side: 'worker', href: '/job-progress', jobId: 'job-1' });
+  });
+});

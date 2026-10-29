@@ -57,12 +57,17 @@ export interface PillInput {
   lastSeen?: string;
 }
 
+/** Within this, the worker is at the address rather than on the way to it (the fix's own accuracy is of that order). */
+export const AT_THE_DOOR_KM = 0.1;
+
 /** The floating line on the customer's tracking map. */
 export function trackingPill(input: PillInput): string {
   if (['ARRIVED', 'IN_PROGRESS', 'WORK_COMPLETED', 'COMPLETED'].includes(input.status)) return '📍 Worker has arrived at your location';
   if (input.status !== 'ASSIGNED') return '';
   if (!input.hasLocation) return '⏳ Worker on the way • Updating live location...';
   if (input.stale) return `⏳ Worker on the way • location last seen ${input.lastSeen ?? 'a while ago'}`;
+  // Close enough that "arriving in 1 min" is useless: what the customer needs is the arrival code in their hand
+  if (input.distanceKm !== null && input.distanceKm <= AT_THE_DOOR_KM) return '🚪 Your worker is at your door • have the arrival code ready';
   if (input.etaMinutes === null) return '⚡ Worker is on the way • live location on the map';
   const away = input.distanceKm !== null ? ` • ${input.distanceKm} km away` : '';
   return `⚡ Arriving in ${input.etaMinutes} min${away}`;

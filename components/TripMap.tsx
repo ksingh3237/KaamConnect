@@ -1,12 +1,13 @@
 // The live trip map shared by the customer's tracking screen and the worker's job screen: the worker's vehicle (it glides
-// between fixes and its arrow turns the way they travel), the job's place, and a line between them.
+// between fixes and its arrow turns the way they travel), the job's place as a red pin, the viewer's own blue dot, and a
+// line between them. How far and how long is shown on a chip in the corner.
 // The line follows real roads (utils/directions.ts: Google Routes, else free OSRM); if neither answers it falls back to a
 // dotted straight line so the map still shows direction.
 // Native only. react-native-maps has no web build; TripMap.web.tsx is shown there instead.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
-import { Home, LocateFixed, Navigation } from 'lucide-react-native';
+import { LocateFixed, Navigation } from 'lucide-react-native';
 import { Colors, Radius } from '../constants/theme';
 import { nextHeading, vehicleEmoji, type LatLng } from '../utils/trip';
 import { mapsConfigured } from '../utils/googlePlaces';
@@ -16,6 +17,9 @@ export interface TripMapProps {
   worker: LatLng | null;
   destination: LatLng | null;
   vehicle?: string | null;
+  /** Road distance and arrival time from the server's tracking view; shown on a chip in the corner. */
+  distanceKm?: number | null;
+  etaMinutes?: number | null;
   /** Space the fitted view keeps clear of the floating pill (top) and the bottom sheet (bottom). */
   padding?: { top: number; right: number; bottom: number; left: number };
   height?: number;
@@ -26,6 +30,8 @@ export interface TripMapProps {
 const GLIDE_MS = 1000;
 const STEP_MS = 100;
 const DEFAULT_PADDING = { top: 60, right: 50, bottom: 60, left: 50 };
+/** The pin colour every ride app uses for "this is the place". */
+const PIN_RED = '#E53935';
 const CITY_CENTRE = { latitude: 30.7333, longitude: 76.7794, latitudeDelta: 0.12, longitudeDelta: 0.12 }; // Chandigarh, shown only until a first point exists
 
 /** The worker's dot moves from where it was to where it is over one second instead of jumping. */
@@ -58,7 +64,7 @@ function useGlide(target: LatLng | null): LatLng | null {
   return shown;
 }
 
-export default function TripMap({ worker, destination, vehicle, padding = DEFAULT_PADDING, height = 220, fill = false }: TripMapProps) {
+export default function TripMap({ worker, destination, vehicle, distanceKm = null, etaMinutes = null, padding = DEFAULT_PADDING, height = 220, fill = false }: TripMapProps) {
   const mapRef = useRef<MapView>(null);
   const ready = useRef(false);
   const [detached, setDetached] = useState(false); // the person moved the map themselves: stop re-fitting under their finger
@@ -116,13 +122,17 @@ export default function TripMap({ worker, destination, vehicle, padding = DEFAUL
         rotateEnabled={false}
         pitchEnabled={false}
         toolbarEnabled={false}
+        // Each side also sees where THEY are, the way every ride app does
+        showsUserLocation
         showsMyLocationButton={false}
         showsCompass={false}
       >
         {destination && (
-          <Marker coordinate={{ latitude: destination.lat, longitude: destination.lng }} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false} title="Job location">
-            <View style={styles.destination}>
-              <Home color="#FFFFFF" size={16} />
+          <Marker coordinate={{ latitude: destination.lat, longitude: destination.lng }} anchor={{ x: 0.5, y: 0.95 }} tracksViewChanges={false} title="Job location">
+            {/* A teardrop pin whose tip sits on the address: a rounded square with one sharp corner, turned 45 degrees */}
+            <View style={styles.pinWrap}>
+              <View style={styles.pinHead} />
+              <View style={styles.pinCore} />
             </View>
           </Marker>
         )}
@@ -153,6 +163,14 @@ export default function TripMap({ worker, destination, vehicle, padding = DEFAUL
           </Marker>
         )}
       </MapView>
+      {(distanceKm !== null || etaMinutes !== null) && (
+        <View style={styles.chip} accessibilityLiveRegion="polite">
+          <Text style={styles.chipText}>
+            {etaMinutes !== null ? `${etaMinutes} min` : 'On the way'}
+            {distanceKm !== null ? ` • ${distanceKm} km` : ''}
+          </Text>
+        </View>
+      )}
       {detached && (
         <TouchableOpacity style={styles.recentre} onPress={() => setDetached(false)} accessibilityRole="button" accessibilityLabel="Show worker and destination">
           <LocateFixed color={Colors.textMain} size={20} />
@@ -166,7 +184,30 @@ const styles = StyleSheet.create({
   box: { width: '100%', borderRadius: Radius.lg, overflow: 'hidden', backgroundColor: Colors.surfaceVariant },
   fallback: { backgroundColor: Colors.surfaceVariant, alignItems: 'center', justifyContent: 'center', gap: 6, padding: 16, borderRadius: Radius.lg },
   fallbackText: { fontSize: 13, fontWeight: '600', color: Colors.textMuted, textAlign: 'center' },
-  destination: { width: 34, height: 34, borderRadius: 17, backgroundColor: Colors.tertiary, borderWidth: 3, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  pinWrap: { width: 44, height: 44, alignItems: 'center' },
+  pinHead: {
+    position: 'absolute',
+    top: 6,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderBottomLeftRadius: 0, // the sharp corner; rotating it -45 degrees puts it at the bottom, on the address
+    backgroundColor: PIN_RED,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    transform: [{ rotate: '-45deg' }],
+  },
+  pinCore: { position: 'absolute', top: 15, width: 12, height: 12, borderRadius: 6, backgroundColor: '#FFFFFF' },
+  chip: {
+    position: 'absolute',
+    left: 12,
+    top: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: Radius.full,
+    backgroundColor: 'rgba(17,28,45,0.85)',
+  },
+  chipText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
   vehicleWrap: { width: 64, height: 64, alignItems: 'center', justifyContent: 'center' },
   arrow: { position: 'absolute', width: 64, height: 64, alignItems: 'center', justifyContent: 'flex-start' },
   vehicle: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#FFFFFF', borderWidth: 3, borderColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bearingDeg, distanceKm, navigationUrls, nextHeading, trackingPill, vehicleEmoji } from './trip';
+import { AT_THE_DOOR_KM, bearingDeg, distanceKm, navigationUrls, nextHeading, trackingPill, vehicleEmoji } from './trip';
 
 const sector22 = { lat: 30.7333, lng: 76.7794 };
 const north = { lat: 30.7433, lng: 76.7794 };
@@ -73,5 +73,21 @@ describe('navigationUrls', () => {
   it('falls back to the address text when the job has no coordinates, and to nothing without either', () => {
     expect(navigationUrls(null, 'House 12, Sector 22', false)[0]).toContain('House%2012%2C%20Sector%2022');
     expect(navigationUrls(null, '  ', true)).toEqual([]);
+  });
+});
+
+describe('trackingPill at the door', () => {
+  const base = { status: 'ASSIGNED', hasLocation: true, stale: false };
+  it('drops the countdown once the worker is at the address and asks for the code instead', () => {
+    expect(trackingPill({ ...base, etaMinutes: 1, distanceKm: 0.05 })).toContain('at your door');
+    expect(trackingPill({ ...base, etaMinutes: 1, distanceKm: AT_THE_DOOR_KM })).toContain('at your door');
+  });
+
+  it('still counts down from a street away', () => {
+    expect(trackingPill({ ...base, etaMinutes: 2, distanceKm: 0.4 })).toBe('⚡ Arriving in 2 min • 0.4 km away');
+  });
+
+  it('does not claim a door when the last fix is old', () => {
+    expect(trackingPill({ ...base, stale: true, etaMinutes: null, distanceKm: 0.02, lastSeen: '5 min ago' })).toContain('last seen');
   });
 });
