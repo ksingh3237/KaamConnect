@@ -8,6 +8,8 @@ import LanguageToggle, { FULL_LANG_LABELS } from '../components/LanguageToggle';
 import Marquee from '../components/Marquee';
 import { PREVIEW_SERVICES, SERVICE_PHOTOS, serviceIcon } from '../constants/services';
 import { Colors } from '../constants/theme';
+import { categoryTitle } from '../i18n/categories';
+import { useLang, useT } from '../i18n/useT';
 
 // Two rows of real work photos for the collage; both drift right-to-left at different speeds.
 const PHOTO_ROWS: string[][] = [
@@ -15,16 +17,17 @@ const PHOTO_ROWS: string[][] = [
   ['vehicle_repair', 'ro_service', 'civil_construction', 'gardening', 'appliance', 'cctv_security', 'catering_food'],
 ];
 
-const POINTS = [
-  { icon: BadgeIndianRupee, title: '0% commission', sub: 'पूरा पैसा कारीगर का', color: '#047857', bg: '#D1FAE5' },
-  { icon: Wallet, title: 'Pay directly by cash / UPI', sub: 'सीधा भुगतान, कोई बिचौलिया नहीं', color: '#1D4ED8', bg: '#DBEAFE' },
-  { icon: ShieldCheck, title: 'Aadhaar verified local pros', sub: 'चंडीगढ़ • मोहाली • पंचकूला', color: '#7E22CE', bg: '#F3E8FF' },
-];
-
 export default function WelcomeScreen() {
   const router = useRouter();
+  const t = useT();
+  const lang = useLang();
   const insets = useSafeAreaInsets();
   const start = () => router.push('/language');
+  const points = [
+    { icon: BadgeIndianRupee, title: t('0% commission'), sub: t('All the money goes to the worker'), color: '#047857', bg: '#D1FAE5' },
+    { icon: Wallet, title: t('Pay directly by cash / UPI'), sub: t('Direct payment, no middleman'), color: '#1D4ED8', bg: '#DBEAFE' },
+    { icon: ShieldCheck, title: t('Aadhaar verified local pros'), sub: t('Chandigarh • Mohali • Panchkula'), color: '#7E22CE', bg: '#F3E8FF' },
+  ];
 
   // Light status-bar icons on the green hero, back to dark for every other screen
   useFocusEffect(
@@ -42,18 +45,18 @@ export default function WelcomeScreen() {
           <View style={styles.topBar}>
             <View style={styles.livePill}>
               <View style={styles.liveDot} />
-              <Text style={styles.livePillText} numberOfLines={1}>Tricity Live</Text>
+              <Text style={styles.livePillText} numberOfLines={1}>{t('Tricity Live')}</Text>
             </View>
             <LanguageToggle variant="soft" labels={FULL_LANG_LABELS} />
           </View>
 
           <Text style={styles.brand}>KaamConnect</Text>
-          <Text style={styles.tagline}>Trusted home services{'\n'}in minutes</Text>
-          <Text style={styles.taglineHi}>भरोसेमंद कारीगर, मिनटों में • 0% कमीशन</Text>
+          <Text style={styles.tagline}>{t('Trusted home services\nin minutes')}</Text>
+          <Text style={styles.taglineHi}>{t('0% commission • Pay the worker directly')}</Text>
 
           <View style={styles.ratingRow}>
             <Star color="#FDE68A" fill="#FDE68A" size={16} />
-            <Text style={styles.ratingText}>Chandigarh • Mohali • Panchkula</Text>
+            <Text style={styles.ratingText}>{t('Chandigarh • Mohali • Panchkula')}</Text>
           </View>
         </View>
 
@@ -70,19 +73,19 @@ export default function WelcomeScreen() {
 
         {/* Services marquee: moves on its own, swipe to browse */}
         <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>20+ services near you</Text>
-          <Text style={styles.sectionSub}>Swipe • स्वाइप करें</Text>
+          <Text style={styles.sectionTitle}>{t('20+ services near you')}</Text>
+          <Text style={styles.sectionSub}>{t('Swipe')}</Text>
         </View>
         <Marquee speed={28} swipeable gap={10}>
           {PREVIEW_SERVICES.map((s) => {
             const Icon = serviceIcon(s.iconKey);
+            const name = categoryTitle(s.id, s.en, lang);
             return (
-              <TouchableOpacity key={s.id} style={styles.tile} onPress={start} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel={`${s.en}, ${s.hi}`}>
+              <TouchableOpacity key={s.id} style={styles.tile} onPress={start} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel={name}>
                 <View style={[styles.tileIcon, { backgroundColor: s.bg }]}>
                   <Icon color={s.color} size={24} strokeWidth={2.2} />
                 </View>
-                <Text style={styles.tileTitle} numberOfLines={1}>{s.en}</Text>
-                <Text style={styles.tileHi} numberOfLines={1}>{s.hi}</Text>
+                <Text style={styles.tileTitle} numberOfLines={2}>{name}</Text>
               </TouchableOpacity>
             );
           })}
@@ -90,8 +93,8 @@ export default function WelcomeScreen() {
 
         {/* Why KaamConnect */}
         <View style={styles.points}>
-          {POINTS.map((p) => (
-            <View key={p.title} style={styles.point}>
+          {points.map((p, i) => (
+            <View key={i} style={styles.point}>
               <View style={[styles.pointIcon, { backgroundColor: p.bg }]}>
                 <p.icon color={p.color} size={22} />
               </View>
@@ -108,10 +111,10 @@ export default function WelcomeScreen() {
       <View style={[styles.footerBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <TouchableOpacity style={styles.primaryBtn} onPress={start} activeOpacity={0.85} accessibilityRole="button">
           <Zap color="#FFFFFF" size={20} fill="#FFFFFF" />
-          <Text style={styles.primaryBtnText}>Get Started • शुरू करें</Text>
+          <Text style={styles.primaryBtnText}>{t('Get Started')}</Text>
           <ArrowRight color="#FFFFFF" size={22} strokeWidth={2.5} />
         </TouchableOpacity>
-        <Text style={styles.footnote}>Free for customers and workers • No hidden charges</Text>
+        <Text style={styles.footnote}>{t('Free for customers and workers • No hidden charges')}</Text>
       </View>
     </SafeAreaView>
   );

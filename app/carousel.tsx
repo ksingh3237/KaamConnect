@@ -4,32 +4,34 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowRight, Sparkles } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../constants/theme';
 import { resetTo } from '../utils/navigation';
+import { useT } from '../i18n/useT';
 
 export default function CarouselScreen() {
   const [currentSlide, setCurrentSlide] = useState(0);
+  const t = useT();
 
   const slides = [
     {
-      title: '0% Platform Fee • सीधा मुनाफ़ा',
+      title: t('0% Platform Fee'),
       subtitle:
-        "No middlemen cuts, no lead fees. 100% of the customer payment goes straight into the technician's hands.",
-      badge: 'Zero Middleman Guarantee',
+        t('No middlemen cuts, no lead fees. 100% of the customer payment goes straight into the technician’s hands.'),
+      badge: t('Zero Middleman Guarantee'),
       color: Colors.primary,
       icon: '💵'
     },
     {
-      title: 'Aadhaar Verified Local Pros',
+      title: t('Aadhaar Verified Local Pros'),
       subtitle:
-        'Background-checked electricians, plumbers, and carpenters from your local sector in Chandigarh, Mohali, and Panchkula.',
-      badge: 'Civic Trust & Safety',
+        t('Background-checked electricians, plumbers, and carpenters from your local sector in Chandigarh, Mohali, and Panchkula.'),
+      badge: t('Civic Trust & Safety'),
       color: Colors.tertiary,
       icon: '🛡️'
     },
     {
-      title: 'Direct Phone & Instant UPI',
+      title: t('Direct Phone & Instant UPI'),
       subtitle:
-        'Speak directly with mistris before arrival and settle bills via Cash, Google Pay, or PhonePe without app withholding.',
-      badge: 'Frictionless Experience',
+        t('Speak directly with mistris before arrival and settle bills via Cash, Google Pay, or PhonePe without app withholding.'),
+      badge: t('Frictionless Experience'),
       color: Colors.secondary,
       icon: '⚡'
     }
@@ -51,13 +53,13 @@ export default function CarouselScreen() {
       <View style={styles.topBar}>
         <View style={styles.topPill}>
           <Sparkles color={Colors.primary} size={14} />
-          <Text style={styles.topPillText}>KaamConnect Charter</Text>
+          <Text style={styles.topPillText}>{t('KaamConnect Charter')}</Text>
         </View>
         <TouchableOpacity
           onPress={() => resetTo('/(tabs)/home')}
           activeOpacity={0.7}
         >
-          <Text style={styles.skipBtnText}>Skip to App →</Text>
+          <Text style={styles.skipBtnText}>{t('Skip to App →')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -84,7 +86,7 @@ export default function CarouselScreen() {
               onPress={() => setCurrentSlide(idx)}
               hitSlop={12}
               accessibilityRole="button"
-              accessibilityLabel={`Go to slide ${idx + 1}`}
+              accessibilityLabel={t('Go to slide {number}', { number: idx + 1 })}
               style={[
                 styles.indicatorBar,
                 idx === currentSlide ? styles.indicatorActive : styles.indicatorInactive
@@ -102,8 +104,8 @@ export default function CarouselScreen() {
         >
           <Text style={styles.actionBtnText}>
             {isLastSlide
-              ? 'Get Started in Tricity • शुरू करें'
-              : 'Next Benefit →'}
+              ? t('Get Started in Tricity')
+              : t('Next Benefit →')}
           </Text>
           {isLastSlide && <ArrowRight color="#FFFFFF" size={18} />}
         </TouchableOpacity>

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Switch
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, User, Verified, Camera, CameraIcon, BadgeInfo, UserCircle, MapPin, Building, Mic, PhoneCall, ShieldCheck, ArrowRight, CheckCircle2 } from 'lucide-react-native';
-import LanguageToggle, { FULL_LANG_LABELS } from '../components/LanguageToggle';
+import LanguageToggle, { FULL_LANG_LABELS, LANGUAGE_NAMES } from '../components/LanguageToggle';
 import { useStore } from '../store/useStore';
 import { resetTo } from '../utils/navigation';
 import { useSession } from '../store/useSession';
@@ -12,15 +12,19 @@ import { getLocations, putCustomer } from '../api/endpoints';
 import { isApiError, userMessage } from '../api/errors';
 import { uploadFile } from '../api/upload';
 import { useImagePicker } from '../components/ImageSourceModal';
+import { useImageViewer } from '../components/ImageViewerModal';
 import type { Position } from '../utils/position';
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks';
 import SectorPicker from '../components/SectorPicker';
 import GoogleLocationPicker, { type PickedLocation } from '../components/GoogleLocationPicker';
+import { useT } from '../i18n/useT';
 
 export default function CustomerOnboardingScreen() {
   const router = useRouter();
+  const t = useT();
   const insets = useSafeAreaInsets();
   const { pick: pickImage, modal: imageSourceModal } = useImagePicker();
+  const { show: viewImage, modal: imageViewer } = useImageViewer();
   const { selectedAreaId, setSelectedSector, setRole } = useStore();
   const { customerProfile, user, refreshMe } = useSession();
   const locations = useAsync(() => getLocations(), [], { reloadOnFocus: false });
@@ -39,7 +43,8 @@ export default function CustomerOnboardingScreen() {
   );
   const [directCall, setDirectCall] = useState(existing?.allowDirectCalls ?? true);
   const [commLang, setCommLang] = useState<'en' | 'hi' | 'pa'>(existing?.commLanguage ?? 'hi');
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  // The photo already saved on the account, until a new one is picked: editing the profile should not look empty
+  const [photoUri, setPhotoUri] = useState<string | null>(existing?.photoUrl ?? null);
   const [photoKey, setPhotoKey] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [coords, setCoords] = useState<Position | null>(null);
@@ -107,11 +112,11 @@ export default function CustomerOnboardingScreen() {
       return;
     }
     if (areaId === null) {
-      setFormError('Choose your sector below. / नीचे अपना सेक्टर चुनें');
+      setFormError(t('Choose your sector below.'));
       return;
     }
     if (!address.trim()) {
-      setFormError('Enter your house / flat / landmark. / घर या फ़्लैट का पता लिखें');
+      setFormError(t('Enter your house / flat / landmark.'));
       return;
     }
     setSaving(true);
@@ -145,15 +150,15 @@ export default function CustomerOnboardingScreen() {
             onPress={() => router.canGoBack() ? router.back() : router.replace('/role')}
             activeOpacity={0.8}
             accessibilityRole="button"
-            accessibilityLabel="Go back"
+            accessibilityLabel={t('Go back')}
           >
             <ArrowLeft color="#111c2d" size={24} strokeWidth={2.5} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle} numberOfLines={1}>Your Profile</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>{t('Your Profile')}</Text>
         </View>
         <View style={styles.headerRight}>
           <View style={styles.tricityHeaderPill}>
-            <Text style={styles.tricityHeaderPillText}>Tricity</Text>
+            <Text style={styles.tricityHeaderPillText}>{t('Tricity')}</Text>
           </View>
           <View style={styles.headerAvatar}>
             <User color="#ffffff" size={18} strokeWidth={2.5} />
@@ -166,7 +171,7 @@ export default function CustomerOnboardingScreen() {
         <View style={styles.stepBannerRow}>
           <View style={styles.stepBadge}>
             <View style={styles.pingDot} />
-            <Text style={styles.stepBadgeText}>STEP 2 OF 2 • ग्राहक प्रोफ़ाइल (Customer Setup)</Text>
+            <Text style={styles.stepBadgeText}>{t('STEP 2 OF 2 • Customer Setup')}</Text>
           </View>
           <LanguageToggle variant="soft" labels={FULL_LANG_LABELS} style={styles.langToggle} />
         </View>
@@ -178,32 +183,47 @@ export default function CustomerOnboardingScreen() {
             <Verified color="#ffffff" size={22} strokeWidth={2.5} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.infoTitle}>100% Free • No Middleman Fees</Text>
-            <Text style={styles.infoSub}>Direct Cash/UPI to workers • 0% commission forever</Text>
+            <Text style={styles.infoTitle}>{t('100% Free • No Middleman Fees')}</Text>
+            <Text style={styles.infoSub}>{t('Direct Cash/UPI to workers • 0% commission forever')}</Text>
           </View>
         </View>
 
         {/* Avatar Upload */}
         <View style={styles.avatarCard}>
-          <TouchableOpacity style={styles.avatarCircleWrap} activeOpacity={0.8} onPress={() => void handlePickPhoto()} disabled={photoBusy} accessibilityRole="button" accessibilityLabel="Add profile photo">
+          {/* With a photo on it, the circle opens it full screen; the camera badge is how it is changed. */}
+          <TouchableOpacity
+            style={styles.avatarCircleWrap}
+            activeOpacity={0.8}
+            onPress={() => (photoUri ? viewImage(photoUri, t('Profile photo')) : void handlePickPhoto())}
+            disabled={photoBusy}
+            accessibilityRole={photoUri ? 'imagebutton' : 'button'}
+            accessibilityLabel={photoUri ? t('View your profile photo full screen') : t('Add profile photo')}
+          >
             <View style={[styles.avatarCircle, { overflow: 'hidden' }]}>
               {photoUri ? (
                 <Image source={{ uri: photoUri }} style={{ width: 96, height: 96, opacity: photoBusy ? 0.5 : 1 }} />
               ) : (
                 <>
                   <Camera color="#6c7a70" size={36} strokeWidth={1.5} />
-                  <Text style={styles.avatarUploadText}>Upload</Text>
+                  <Text style={styles.avatarUploadText}>{t('Upload')}</Text>
                 </>
               )}
               {photoBusy && <ActivityIndicator color="#00b074" style={{ position: 'absolute' }} />}
             </View>
-            <View style={styles.avatarBadge}>
+            <TouchableOpacity
+              style={styles.avatarBadge}
+              onPress={() => void handlePickPhoto()}
+              disabled={photoBusy}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={photoUri ? t('Change your profile photo') : t('Add profile photo')}
+            >
               <CameraIcon color="#ffffff" size={18} strokeWidth={2.5} />
-            </View>
+            </TouchableOpacity>
           </TouchableOpacity>
           <View style={{ alignItems: 'center', gap: 2 }}>
-            <Text style={styles.avatarTitle}>Add Profile Photo (फ़ोटो जोड़ें)</Text>
-            <Text style={styles.avatarSubtitle}>Optional — helps verified workers recognize your home safely</Text>
+            <Text style={styles.avatarTitle}>{t('Add Profile Photo')}</Text>
+            <Text style={styles.avatarSubtitle}>{t('Optional: helps verified workers recognise your home safely')}</Text>
           </View>
         </View>
 
@@ -216,13 +236,13 @@ export default function CustomerOnboardingScreen() {
         >
           <View style={styles.cardHeader}>
             <BadgeInfo color="#006c46" size={22} strokeWidth={2} />
-            <Text style={styles.cardTitle}>Personal Details (व्यक्तिगत विवरण)</Text>
+            <Text style={styles.cardTitle}>{t('Personal Details')}</Text>
           </View>
 
           <View style={styles.inputGroup}>
             <View style={styles.labelRow}>
-              <Text style={styles.labelText}>Full Name / पूरा नाम <Text style={{ color: '#ba1a1a' }}>*</Text></Text>
-              <Text style={styles.hintText}>e.g. Sunita Sharma</Text>
+              <Text style={styles.labelText}>{t('Full Name')} <Text style={{ color: '#ba1a1a' }}>*</Text></Text>
+              <Text style={styles.hintText}>{t('e.g. Sunita Sharma')}</Text>
             </View>
             <View style={styles.inputWrap}>
               <UserCircle color="#6c7a70" size={20} style={styles.inputIcon} />
@@ -233,21 +253,21 @@ export default function CustomerOnboardingScreen() {
                   setName(text);
                   setNameError(false);
                 }}
-                placeholder="Enter full name / ਨਾਮ ਦਰਜ ਕਰੋ"
+                placeholder={t('Enter full name')}
                 placeholderTextColor="#6c7a70"
               />
             </View>
             {nameError && (
-              <Text style={styles.errorText}>Please enter your full name / कृपया अपना नाम दर्ज करें</Text>
+              <Text style={styles.errorText}>{t('Please enter your full name.')}</Text>
             )}
           </View>
 
           <View style={styles.inputGroup}>
             <View style={styles.labelRow}>
-              <Text style={styles.labelText}>Mobile Number / फ़ोन नंबर</Text>
+              <Text style={styles.labelText}>{t('Mobile Number')}</Text>
               <View style={styles.verifiedOtp}>
                 <Verified color="#006c46" size={16} strokeWidth={2.5} />
-                <Text style={styles.verifiedOtpText}>Verified OTP ✓</Text>
+                <Text style={styles.verifiedOtpText}>{t('Verified OTP ✓')}</Text>
               </View>
             </View>
             <View style={[styles.inputWrap, { backgroundColor: '#f0f3ff', padding: 14 }]}>
@@ -255,11 +275,11 @@ export default function CustomerOnboardingScreen() {
                 <Text style={{ fontSize: 20 }}>🇮🇳</Text>
                 <Text style={styles.mobileText}>+91 {displayPhone}</Text>
                 <View style={styles.primaryBadge}>
-                  <Text style={styles.primaryBadgeText}>Primary</Text>
+                  <Text style={styles.primaryBadgeText}>{t('Primary')}</Text>
                 </View>
               </View>
             </View>
-            <Text style={styles.mobileHelper}>Linked to your instant direct call connect system</Text>
+            <Text style={styles.mobileHelper}>{t('Workers you book call you on this number')}</Text>
           </View>
         </View>
 
@@ -268,10 +288,10 @@ export default function CustomerOnboardingScreen() {
           <View style={[styles.cardHeader, { justifyContent: 'space-between' }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
               <MapPin color="#006c46" size={22} strokeWidth={2} />
-              <Text style={styles.cardTitle}>Primary Address (घर का पता)</Text>
+              <Text style={styles.cardTitle}>{t('Primary Address')}</Text>
             </View>
             <View style={styles.tricityBadge}>
-              <Text style={styles.tricityBadgeText}>Tricity</Text>
+              <Text style={styles.tricityBadgeText}>{t('Tricity')}</Text>
             </View>
           </View>
 
@@ -286,29 +306,28 @@ export default function CustomerOnboardingScreen() {
           )}
 
           <View style={styles.inputGroup}>
-            <Text style={styles.labelText}>House / Flat / Landmark</Text>
+            <Text style={styles.labelText}>{t('House / Flat / Landmark')}</Text>
             <View style={styles.inputWrap}>
               <Building color="#6c7a70" size={20} style={styles.inputIcon} />
               <TextInput
                 style={styles.textInput}
                 value={address}
                 onChangeText={setAddress}
-                placeholder="e.g. Flat 302, Royal Residency"
+                placeholder={t('e.g. Flat 302, Royal Residency')}
                 placeholderTextColor="#6c7a70"
               />
             </View>
             {address !== '' && address === autoLine && (
-              <Text style={styles.hintText}>Filled from the map. Add your house / flat number at the start. / घर या फ़्लैट नंबर आगे जोड़ें</Text>
+              <Text style={styles.hintText}>{t('Filled from the map. Add your house / flat number at the start.')}</Text>
             )}
           </View>
 
           <View style={styles.sectorSelectionWrap}>
             <View style={styles.labelRow}>
-              <Text style={styles.labelText}>Select Tricity Hub & Sector</Text>
-              <Text style={styles.hintText}>Search or tap</Text>
+              <Text style={styles.labelText}>{t('Select Tricity Hub & Sector')}</Text>
+              <Text style={styles.hintText}>{t('Search or tap')}</Text>
             </View>
-
-            {locations.loading && <LoadingBlock label="Loading sectors… / सेक्टर लोड हो रहे हैं…" />}
+            {locations.loading && <LoadingBlock label={t('Loading sectors…')} />}
             {locations.error && !locations.data && <ErrorBlock message={locations.error} onRetry={() => void locations.reload()} />}
             {locations.data && (
               <View style={{ marginTop: 10 }}>
@@ -322,23 +341,20 @@ export default function CustomerOnboardingScreen() {
         <View style={styles.formCard}>
           <View style={styles.cardHeader}>
             <Mic color="#006c46" size={22} strokeWidth={2} />
-            <Text style={styles.cardTitle}>Communication Preferences</Text>
+            <Text style={styles.cardTitle}>{t('Communication Preferences')}</Text>
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.labelText}>Preferred Language with Workers (बातचीत की भाषा)</Text>
+            <Text style={styles.labelText}>{t('Preferred Language with Workers')}</Text>
             <View style={styles.commGrid}>
               <TouchableOpacity style={[styles.commBtn, commLang === 'hi' && styles.commBtnActive]} onPress={() => setCommLang('hi')}>
-                <Text style={[styles.commBtnTitle, commLang === 'hi' && styles.commBtnTitleActive]}>Hindi</Text>
-                <Text style={[styles.commBtnSub, commLang === 'hi' && styles.commBtnSubActive]}>हिंदी</Text>
+                <Text style={[styles.commBtnTitle, commLang === 'hi' && styles.commBtnTitleActive]}>{LANGUAGE_NAMES.hi}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.commBtn, commLang === 'pa' && styles.commBtnActive]} onPress={() => setCommLang('pa')}>
-                <Text style={[styles.commBtnTitle, commLang === 'pa' && styles.commBtnTitleActive]}>Punjabi</Text>
-                <Text style={[styles.commBtnSub, commLang === 'pa' && styles.commBtnSubActive]}>ਪੰਜਾਬੀ</Text>
+                <Text style={[styles.commBtnTitle, commLang === 'pa' && styles.commBtnTitleActive]}>{LANGUAGE_NAMES.pa}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.commBtn, commLang === 'en' && styles.commBtnActive]} onPress={() => setCommLang('en')}>
-                <Text style={[styles.commBtnTitle, commLang === 'en' && styles.commBtnTitleActive]}>English</Text>
-                <Text style={[styles.commBtnSub, commLang === 'en' && styles.commBtnSubActive]}>अंग्रेज़ी</Text>
+                <Text style={[styles.commBtnTitle, commLang === 'en' && styles.commBtnTitleActive]}>{LANGUAGE_NAMES.en}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -349,8 +365,8 @@ export default function CustomerOnboardingScreen() {
                 <PhoneCall color="#006c46" size={18} strokeWidth={2} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.toggleTitle}>Direct Call Access</Text>
-                <Text style={styles.toggleSub}>Allow verified local artisans to call your phone directly</Text>
+                <Text style={styles.toggleTitle}>{t('Direct Call Access')}</Text>
+                <Text style={styles.toggleSub}>{t('Allow verified local artisans to call your phone directly')}</Text>
               </View>
             </View>
             <Switch
@@ -368,9 +384,9 @@ export default function CustomerOnboardingScreen() {
             <ShieldCheck color="#ffffff" size={20} strokeWidth={2.5} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.shieldTitle}>Tricity Trust & Privacy Shield</Text>
+            <Text style={styles.shieldTitle}>{t('Tricity Trust & Privacy Shield')}</Text>
             <Text style={styles.shieldSub}>
-              Your exact flat number is <Text style={{ fontWeight: '700', color: '#111c2d' }}>never broadcasted</Text> publicly. It is shared only after you confirm an artisan's visit. No spam marketing, ever.
+              {t('Your exact flat number is never shown publicly. It is shared only after you confirm a worker’s visit. No spam marketing, ever.')}
             </Text>
           </View>
         </View>
@@ -384,16 +400,17 @@ export default function CustomerOnboardingScreen() {
           </Text>
         )}
         <TouchableOpacity style={[styles.primaryBtn, (saving || photoBusy) && { opacity: 0.7 }]} onPress={() => void handleComplete()} activeOpacity={0.9} disabled={saving || photoBusy}>
-          <Text style={styles.primaryBtnText}>{saving ? 'Saving… / सहेज रहे हैं…' : 'Save & Go to Marketplace • प्रोफ़ाइल पूरा करें'}</Text>
+          <Text style={styles.primaryBtnText}>{saving ? t('Saving…') : t('Save & Go to Marketplace')}</Text>
           <ArrowRight color="#ffffff" size={22} strokeWidth={2.5} />
         </TouchableOpacity>
 
         <View style={styles.footerNote}>
           <CheckCircle2 color="#006c46" size={16} strokeWidth={2.5} />
-          <Text style={styles.footerNoteText}>Aadhaar-free instant signup for Chandigarh, Mohali & Panchkula</Text>
+          <Text style={styles.footerNoteText}>{t('Aadhaar-free instant signup for Chandigarh, Mohali & Panchkula')}</Text>
         </View>
       </View>
       {imageSourceModal}
+      {imageViewer}
     </SafeAreaView>
   );
 }

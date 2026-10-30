@@ -22,6 +22,7 @@ import { fetchRoadRoute } from './directions';
 import { getLocationAccess } from './locationPermission';
 import { resample } from './route';
 import type { LatLng } from './trip';
+import { t } from '../i18n';
 
 export const TRACKING_TASK = 'kaamconnect-trip-location';
 export const WATCH_OPTIONS = {
@@ -29,12 +30,13 @@ export const WATCH_OPTIONS = {
   timeInterval: 10_000,
   distanceInterval: 15,
 };
-export const SERVICE_NOTIFICATION = {
-  notificationTitle: 'KaamConnect Trip in Progress',
-  notificationBody: 'Sharing your live location with the customer',
+/** The phone's "sharing your location" notification, in the person's language at the moment the trip starts. */
+export const serviceNotification = () => ({
+  notificationTitle: t('KaamConnect Trip in Progress'),
+  notificationBody: t('Sharing your live location with the customer'),
   notificationColor: '#00B074',
   killServiceOnDestroy: true,
-};
+});
 /** Same as the backend's LOCATION_MIN_INTERVAL_MS: sending faster only gets the fix dropped. */
 export const MIN_SEND_MS = 3000;
 export const HEARTBEAT_MS = 45_000;
@@ -117,7 +119,7 @@ async function startService(s: Session): Promise<boolean> {
     if (!native || !(await TaskManager.isAvailableAsync()) || !(await backgroundGranted())) return false;
     await Location.startLocationUpdatesAsync(TRACKING_TASK, {
       ...WATCH_OPTIONS,
-      foregroundService: SERVICE_NOTIFICATION,
+      foregroundService: serviceNotification(),
       pausesUpdatesAutomatically: false,
       showsBackgroundLocationIndicator: true,
       activityType: Location.ActivityType.AutomotiveNavigation,

@@ -5,10 +5,12 @@
 // dotted straight line so the map still shows direction.
 // Native only. react-native-maps has no web build; TripMap.web.tsx is shown there instead.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
-import { LocateFixed, Navigation } from 'lucide-react-native';
-import { Colors, Radius } from '../constants/theme';
+import { LocateFixed, Maximize2, Navigation, X } from 'lucide-react-native';
+import { Colors, Radius, Spacing } from '../constants/theme';
+import { t } from '../i18n';
 import { nextHeading, vehicleEmoji, type LatLng, type RoadTrip } from '../utils/trip';
 import { mapsConfigured } from '../utils/googlePlaces';
 import { useRoadRoute } from '../utils/useRoadRoute';
@@ -27,6 +29,12 @@ export interface TripMapProps {
   height?: number;
   /** Fill the parent instead of using `height`. */
   fill?: boolean;
+  /** Adds a button that opens the same map full screen, inside the app. */
+  expandable?: boolean;
+  /** Shown in the full-screen map's bar. */
+  title?: string;
+  /** When given, the full-screen map offers turn-by-turn in Google Maps as a second step. */
+  onNavigate?: () => void;
 }
 
 const GLIDE_MS = 1000;
@@ -66,7 +74,22 @@ function useGlide(target: LatLng | null): LatLng | null {
   return shown;
 }
 
-export default function TripMap({ worker, destination, vehicle, distanceKm = null, etaMinutes = null, onTrip, padding = DEFAULT_PADDING, height = 220, fill = false }: TripMapProps) {
+export default function TripMap({
+  worker,
+  destination,
+  vehicle,
+  distanceKm = null,
+  etaMinutes = null,
+  onTrip,
+  padding = DEFAULT_PADDING,
+  height = 220,
+  fill = false,
+  expandable = false,
+  title,
+  onNavigate,
+}: TripMapProps) {
+  const insets = useSafeAreaInsets();
+  const [expanded, setExpanded] = useState(false);
   const mapRef = useRef<MapView>(null);
   const ready = useRef(false);
   const [detached, setDetached] = useState(false); // the person moved the map themselves: stop re-fitting under their finger
@@ -112,7 +135,7 @@ export default function TripMap({ worker, destination, vehicle, distanceKm = nul
     return (
       <View style={[styles.fallback, fill ? StyleSheet.absoluteFill : { height }]}>
         <Navigation color={Colors.primaryDark} size={26} />
-        <Text style={styles.fallbackText}>Live map needs the Google Maps key. Distance and arrival time below are still live.</Text>
+        <Text style={styles.fallbackText}>{t('Live map needs the Google Maps key. Distance and arrival time below are still live.')}</Text>
       </View>
     );
   }
@@ -139,7 +162,7 @@ export default function TripMap({ worker, destination, vehicle, distanceKm = nul
         showsCompass={false}
       >
         {destination && (
-          <Marker coordinate={{ latitude: destination.lat, longitude: destination.lng }} anchor={{ x: 0.5, y: 0.95 }} tracksViewChanges={false} title="Job location">
+          <Marker coordinate={{ latitude: destination.lat, longitude: destination.lng }} anchor={{ x: 0.5, y: 0.95 }} tracksViewChanges={false} title={t('Job location')}>
             {/* A teardrop pin whose tip sits on the address: a rounded square with one sharp corner, turned 45 degrees */}
             <View style={styles.pinWrap}>
               <View style={styles.pinHead} />
@@ -159,7 +182,7 @@ export default function TripMap({ worker, destination, vehicle, distanceKm = nul
           />
         )}
         {glided && (
-          <Marker coordinate={{ latitude: glided.lat, longitude: glided.lng }} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={redraw} zIndex={2} title="Worker">
+          <Marker coordinate={{ latitude: glided.lat, longitude: glided.lng }} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={redraw} zIndex={2} title={t('Worker')}>
             <View style={styles.vehicleWrap}>
               <View style={[styles.arrow, { transform: [{ rotate: `${heading}deg` }] }]}>
                 {/* the icon itself points up-right (45 degrees): turn it back so "up" means the travel direction */}
@@ -176,16 +199,61 @@ export default function TripMap({ worker, destination, vehicle, distanceKm = nul
       </MapView>
       {(shownKm !== null || shownEta !== null) && (
         <View style={styles.chip} accessibilityLiveRegion="polite">
+          {/* Without a road route these are straight-line numbers, so they are marked as approximate */}
           <Text style={styles.chipText}>
-            {shownEta !== null ? `${shownEta} min` : 'On the way'}
-            {shownKm !== null ? ` • ${shownKm} km` : ''}
+            {shownEta !== null ? `${road ? '' : '~'}${t('{min} min', { min: shownEta })}` : t('On the way')}
+            {shownKm !== null ? ` • ${road ? '' : '~'}${t('{km} km', { km: shownKm })}` : ''}
           </Text>
         </View>
       )}
       {detached && (
-        <TouchableOpacity style={styles.recentre} onPress={() => setDetached(false)} accessibilityRole="button" accessibilityLabel="Show worker and destination">
+        <TouchableOpacity style={styles.recentre} onPress={() => setDetached(false)} accessibilityRole="button" accessibilityLabel={t('Show worker and destination')}>
           <LocateFixed color={Colors.textMain} size={20} />
         </TouchableOpacity>
+      )}
+      {/* The whole map, full screen, without leaving KaamConnect. The copy inside the modal is the same component
+          with `expandable` off, so it draws the same markers and the same road line. */}
+      {expandable && (
+        <>
+          <TouchableOpacity
+            style={styles.expand}
+            onPress={() => setExpanded(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t('Open the map full screen')}
+          >
+            <Maximize2 color={Colors.textMain} size={18} />
+          </TouchableOpacity>
+          <Modal visible={expanded} animationType="slide" onRequestClose={() => setExpanded(false)} statusBarTranslucent>
+            <View style={styles.full}>
+              <TripMap
+                worker={worker}
+                destination={destination}
+                vehicle={vehicle}
+                distanceKm={distanceKm}
+                etaMinutes={etaMinutes}
+                fill
+                padding={{ top: insets.top + 80, right: 50, bottom: onNavigate ? 140 : 70, left: 50 }}
+              />
+              <View style={[styles.fullBar, { paddingTop: insets.top + Spacing.sm }]}>
+                <TouchableOpacity style={styles.fullClose} onPress={() => setExpanded(false)} accessibilityRole="button" accessibilityLabel={t('Close the map')}>
+                  <X color={Colors.textMain} size={22} />
+                </TouchableOpacity>
+                <Text style={styles.fullTitle} numberOfLines={1}>{title ?? t('Live map')}</Text>
+              </View>
+              {onNavigate && (
+                <TouchableOpacity
+                  style={[styles.fullNav, { bottom: Math.max(insets.bottom, Spacing.md) + Spacing.sm }]}
+                  onPress={onNavigate}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                >
+                  <Navigation color="#FFFFFF" size={18} />
+                  <Text style={styles.fullNavText}>{t('Turn-by-turn in Google Maps')}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </Modal>
+        </>
       )}
     </View>
   );
@@ -224,4 +292,44 @@ const styles = StyleSheet.create({
   vehicle: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#FFFFFF', borderWidth: 3, borderColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
   vehicleEmoji: { fontSize: 19 },
   recentre: { position: 'absolute', right: 12, top: 12, width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', elevation: 4 },
+  expand: { position: 'absolute', right: 12, bottom: 12, width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', elevation: 4 },
+  full: { flex: 1, backgroundColor: Colors.surfaceVariant },
+  fullBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.sm,
+  },
+  fullClose: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', elevation: 4 },
+  fullTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '800',
+    color: Colors.textMain,
+    backgroundColor: '#FFFFFF',
+    borderRadius: Radius.full,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    overflow: 'hidden',
+    elevation: 4,
+  },
+  fullNav: {
+    position: 'absolute',
+    left: Spacing.lg,
+    right: Spacing.lg,
+    minHeight: 52,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.tertiary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    elevation: 6,
+  },
+  fullNavText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
 });

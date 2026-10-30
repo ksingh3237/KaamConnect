@@ -14,6 +14,7 @@ import { useNotifications } from '../store/useNotifications';
 import { openNotification } from '../utils/openNotification';
 import { timeAgo } from '../utils/time';
 import { EmptyBlock, ErrorBlock } from './StateBlocks';
+import { t } from '../i18n';
 
 const ICONS: Record<NotificationType, { Icon: LucideIcon; color: string; bg: string }> = {
   NEW_LEAD: { Icon: Briefcase, color: '#047857', bg: '#D1FAE5' },
@@ -123,7 +124,7 @@ export default function NotificationInboxModal({ visible, onClose }: Props) {
   };
 
   const clearAll = async () => {
-    const ok = await confirmAction('Clear all notifications? / सभी सूचनाएं हटाएं?', 'Your notification list will be emptied. Your jobs and bookings are not affected.', 'Clear all', true);
+    const ok = await confirmAction(t('Clear all notifications?'), t('Your notification list will be emptied. Your jobs and bookings are not affected.'), t('Clear all'), true);
     if (!ok) return;
     const before = items;
     setItems([]);
@@ -161,9 +162,9 @@ export default function NotificationInboxModal({ visible, onClose }: Props) {
       <View style={[styles.screen, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.title}>Notifications / सूचनाएं</Text>
+            <Text style={styles.title}>{t('Notifications')}</Text>
           </View>
-          <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Close notifications">
+          <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('Close notifications')}>
             <X color={Colors.textMain} size={22} />
           </TouchableOpacity>
         </View>
@@ -173,13 +174,13 @@ export default function NotificationInboxModal({ visible, onClose }: Props) {
             {hasUnread && (
               <TouchableOpacity style={styles.markAll} onPress={() => void markAll()} activeOpacity={0.7} accessibilityRole="button">
                 <CheckCheck color={Colors.primaryDark} size={18} />
-                <Text style={styles.markAllText}>Mark all read / सब पढ़ा</Text>
+                <Text style={styles.markAllText}>{t('Mark all read')}</Text>
               </TouchableOpacity>
             )}
             {items.length > 0 && (
               <TouchableOpacity style={styles.clearAll} onPress={() => void clearAll()} activeOpacity={0.7} accessibilityRole="button">
                 <Trash2 color="#B91C1C" size={18} />
-                <Text style={styles.clearAllText}>Clear all / सब हटाएं</Text>
+                <Text style={styles.clearAllText}>{t('Clear all')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -202,7 +203,7 @@ export default function NotificationInboxModal({ visible, onClose }: Props) {
             onEndReached={() => void loadMore()}
             onEndReachedThreshold={0.4}
             ItemSeparatorComponent={() => <View style={{ height: Spacing.sm }} />}
-            ListEmptyComponent={<EmptyBlock title="No notifications yet / अभी कोई सूचना नहीं" hint="New quotes, bookings and job updates will show up here." />}
+            ListEmptyComponent={<EmptyBlock title={t('No notifications yet')} hint={t('New quotes, bookings and job updates will show up here.')} />}
             ListFooterComponent={loadingMore ? <ActivityIndicator style={{ marginTop: Spacing.md }} color={Colors.primary} /> : null}
             renderItem={({ item }) => <Row item={item} onPress={() => void onPressRow(item)} onRemove={() => void removeOne(item)} />}
           />
@@ -222,7 +223,7 @@ function Row({ item, onPress, onRemove }: { item: NotificationItem; onPress: () 
         onPress={onPress}
         activeOpacity={0.8}
         accessibilityRole="button"
-        accessibilityLabel={`${item.isRead ? '' : 'Unread. '}${item.title}. ${item.body}`}
+        accessibilityLabel={`${item.isRead ? '' : `${t('Unread.')} `}${item.title}. ${item.body}`}
       >
         <View style={[styles.iconBox, { backgroundColor: bg }]}>
           <Icon color={color} size={22} />
@@ -236,7 +237,7 @@ function Row({ item, onPress, onRemove }: { item: NotificationItem; onPress: () 
           </View>
         </View>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.removeBtn} onPress={onRemove} activeOpacity={0.6} accessibilityRole="button" accessibilityLabel="Delete this notification">
+      <TouchableOpacity style={styles.removeBtn} onPress={onRemove} activeOpacity={0.6} accessibilityRole="button" accessibilityLabel={t('Delete this notification')}>
         <Trash2 color={Colors.textSubtle} size={20} />
       </TouchableOpacity>
     </View>

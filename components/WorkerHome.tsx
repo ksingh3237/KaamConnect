@@ -18,25 +18,38 @@ import { timeAgo, whenLabel } from '../utils/time';
 import { ErrorBlock, LoadingBlock } from './StateBlocks';
 import AppMenu from './AppMenu';
 import NotificationBell from './NotificationBell';
+import { pick, t } from '../i18n';
+import { useLang, useT } from '../i18n/useT';
 
 const POLL_MS = 20000; // new leads appear while the dashboard is open
 const PREVIEW_LEADS = 3;
 
-const JOB_STATUS: Partial<Record<JobStatus, string>> = {
-  ASSIGNED: 'Go to customer • रास्ते में',
-  ARRIVED: 'Arrived • पहुंच गए',
-  IN_PROGRESS: 'Work in progress • काम जारी',
-  WORK_COMPLETED: 'Collect payment • भुगतान लें',
-};
+/** What the worker should do next on an active job. */
+function jobStatusText(status: JobStatus): string {
+  switch (status) {
+    case 'ASSIGNED':
+      return t('Go to customer');
+    case 'ARRIVED':
+      return t('Arrived');
+    case 'IN_PROGRESS':
+      return t('Work in progress');
+    case 'WORK_COMPLETED':
+      return t('Collect payment');
+    default:
+      return '';
+  }
+}
 
 function urgencyOf(lead: Pick<LeadItem, 'urgency' | 'scheduledFor'>): { label: string; urgent: boolean } {
-  const byTiming: Record<JobTiming, string> = { IMMEDIATE: 'URGENT', AFTERNOON: 'Afternoon', TOMORROW: 'Tomorrow', SCHEDULED: 'Scheduled' };
+  const byTiming: Record<JobTiming, string> = { IMMEDIATE: t('URGENT'), AFTERNOON: t('Afternoon'), TOMORROW: t('Tomorrow'), SCHEDULED: t('Scheduled') };
   if (lead.urgency === 'SCHEDULED' && lead.scheduledFor) return { label: whenLabel(lead.scheduledFor), urgent: false };
   return { label: byTiming[lead.urgency], urgent: lead.urgency === 'IMMEDIATE' };
 }
 
 export default function WorkerHome() {
   const router = useRouter();
+  const t = useT();
+  const lang = useLang();
   const setActiveJobId = useStore((s) => s.setActiveJobId);
   const { workerProfile, refreshMe } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -53,7 +66,7 @@ export default function WorkerHome() {
   const earnings = useAsync(() => getEarnings('today'), []);
 
   const openLeads = (leads.data?.items ?? []).filter((l) => l.leadState !== 'DECLINED');
-  const activeJobs = (jobs.data?.items ?? []).filter((j) => j.status in JOB_STATUS);
+  const activeJobs = (jobs.data?.items ?? []).filter((j) => jobStatusText(j.status) !== '');
   // The worker may leave the job screen while driving: sharing GPS follows the job's status, not the open screen
   useWorkerTracking(jobs.data ? (jobs.data.items.find((j) => j.status === 'ASSIGNED')?.id ?? null) : undefined);
 
@@ -66,7 +79,7 @@ export default function WorkerHome() {
       void refreshMe();
     } catch (error) {
       setAvailable(!next);
-      void notify('Could not change your status', userMessage(error));
+      void notify(t('Could not change your status'), userMessage(error));
     } finally {
       setSwitching(false);
     }
@@ -94,12 +107,12 @@ export default function WorkerHome() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setMenuOpen(true)} style={styles.iconBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Open menu">
+          <TouchableOpacity onPress={() => setMenuOpen(true)} style={styles.iconBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('Open menu')}>
             <Menu color={Colors.textMain} size={26} strokeWidth={2.5} />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
-            <Text style={styles.hello} numberOfLines={1}>Namaste{firstName ? `, ${firstName}` : ''} 🙏</Text>
-            <Text style={styles.helloSub}>Your work dashboard • काम डैशबोर्ड</Text>
+            <Text style={styles.hello} numberOfLines={1}>{firstName ? t('Namaste, {name}', { name: firstName }) : t('Namaste')} 🙏</Text>
+            <Text style={styles.helloSub}>{t('Your work dashboard')}</Text>
           </View>
           <NotificationBell />
         </View>
@@ -110,12 +123,12 @@ export default function WorkerHome() {
             <ShieldAlert color="#92400E" size={26} />
             <View style={{ flex: 1 }}>
               <Text style={styles.verifyTitle}>
-                {workerProfile.verificationStatus === 'REJECTED' ? 'Verification needs attention' : 'Verification in progress'}
+                {workerProfile.verificationStatus === 'REJECTED' ? t('Verification needs attention') : t('Verification in progress')}
               </Text>
               <Text style={styles.verifySub}>
                 {workerProfile.verificationStatus === 'REJECTED'
-                  ? workerProfile.rejectionReason ?? 'Update your profile and Aadhaar photos.'
-                  : 'Leads start reaching you once your Aadhaar is verified. / सत्यापन के बाद लीड मिलेंगी'}
+                  ? workerProfile.rejectionReason ?? t('Update your profile and Aadhaar photos.')
+                  : t('Leads start reaching you once your Aadhaar is verified.')}
               </Text>
             </View>
             <ArrowRight color="#92400E" size={20} />
@@ -127,10 +140,10 @@ export default function WorkerHome() {
           <View style={[styles.dutyDot, { backgroundColor: available ? '#22C55E' : '#94A3B8' }]} />
           <View style={{ flex: 1 }}>
             <Text style={[styles.dutyTitle, !available && { color: Colors.textMain }]}>
-              {available ? 'Available • Taking jobs' : 'Offline • Not taking jobs'}
+              {available ? t('Available • Taking jobs') : t('Offline • Not taking jobs')}
             </Text>
             <Text style={[styles.dutySub, !available && { color: Colors.textMuted }]}>
-              {available ? 'New nearby jobs alert you instantly. / नए काम की सूचना मिलेगी' : 'No new job alerts and customers will not see you. / आप ऑफ़लाइन हैं'}
+              {available ? t('New nearby jobs alert you instantly.') : t('No new job alerts and customers will not see you.')}
             </Text>
           </View>
           <Switch
@@ -139,26 +152,26 @@ export default function WorkerHome() {
             disabled={switching || !workerProfile}
             trackColor={{ false: '#CBD5E1', true: '#86EFAC' }}
             thumbColor={available ? Colors.primaryDark : '#F8FAFC'}
-            accessibilityLabel="Taking jobs"
+            accessibilityLabel={t('Taking jobs')}
           />
         </View>
 
         {/* Active jobs */}
         {activeJobs.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Your active jobs • चालू काम</Text>
+            <Text style={styles.sectionTitle}>{t('Your active jobs')}</Text>
             {activeJobs.map((job) => (
               <TouchableOpacity key={job.id} style={styles.jobCard} onPress={() => openJob(job.id)} activeOpacity={0.8} accessibilityRole="button">
                 <View style={styles.jobIcon}>
                   <Wrench color="#FFFFFF" size={20} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.jobStatus}>{JOB_STATUS[job.status]}</Text>
+                  <Text style={styles.jobStatus}>{jobStatusText(job.status)}</Text>
                   <Text style={styles.jobTitle} numberOfLines={1}>{job.title}</Text>
                   <Text style={styles.jobMeta} numberOfLines={1}>📍 {job.area}, {job.city.replace(/\s*\(.*\)/, '')} • {job.customerName}</Text>
                 </View>
                 <View style={styles.openPill}>
-                  <Text style={styles.openPillText}>Open</Text>
+                  <Text style={styles.openPillText}>{t('Open')}</Text>
                 </View>
               </TouchableOpacity>
             ))}
@@ -169,30 +182,30 @@ export default function WorkerHome() {
         <View style={styles.earnCard}>
           <BadgeIndianRupee color="#FFFFFF" size={30} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.earnLabel}>Today • आज की कमाई</Text>
+            <Text style={styles.earnLabel}>{t('Today’s earnings')}</Text>
             <Text style={styles.earnAmount}>
               {earnings.data ? `₹${earnings.data.amount.toLocaleString('en-IN')}` : '—'}
-              {earnings.data ? <Text style={styles.earnJobs}>  • {earnings.data.jobsDone} job{earnings.data.jobsDone === 1 ? '' : 's'}</Text> : null}
+              {earnings.data ? <Text style={styles.earnJobs}>  • {earnings.data.jobsDone === 1 ? t('1 job') : t('{count} jobs', { count: earnings.data.jobsDone })}</Text> : null}
             </Text>
-            <Text style={styles.earnSub}>Customers pay you directly by UPI or cash. 0% platform deduction, ever.</Text>
+            <Text style={styles.earnSub}>{t('Customers pay you directly by UPI or cash. 0% platform deduction, ever.')}</Text>
           </View>
         </View>
 
         {/* Lead radar preview */}
         <View style={styles.sectionRow}>
-          <Text style={[styles.sectionTitle, { marginBottom: 0, flex: 1 }]}>New job requests • नई लीड</Text>
+          <Text style={[styles.sectionTitle, { marginBottom: 0, flex: 1 }]}>{t('New job requests')}</Text>
           <TouchableOpacity onPress={() => router.navigate('/(tabs)/leads')} activeOpacity={0.7} hitSlop={10} accessibilityRole="button">
-            <Text style={styles.link}>All leads →</Text>
+            <Text style={styles.link}>{t('All leads →')}</Text>
           </TouchableOpacity>
         </View>
-        {leads.loading && <LoadingBlock label="Finding jobs near you… / आस-पास काम खोज रहे हैं…" />}
+        {leads.loading && <LoadingBlock label={t('Finding jobs near you…')} />}
         {leads.error && !leads.data && <ErrorBlock message={leads.error} onRetry={() => void leads.reload()} />}
         {leads.data && openLeads.length === 0 && (
           <View style={styles.emptyCard}>
             <Radar color={Colors.primary} size={32} />
-            <Text style={styles.emptyTitle}>No new requests right now</Text>
+            <Text style={styles.emptyTitle}>{t('No new requests right now')}</Text>
             <Text style={styles.emptySub}>
-              {available ? 'Stay available: new jobs in your trade and area appear here.' : 'You are offline. Switch on to get new job alerts.'}
+              {available ? t('Stay available: new jobs in your trade and area appear here.') : t('You are offline. Switch on to get new job alerts.')}
             </Text>
           </View>
         )}
@@ -207,14 +220,14 @@ export default function WorkerHome() {
                 </View>
                 <Text style={styles.leadAgo}>{timeAgo(lead.postedAt)}</Text>
               </View>
-              <Text style={styles.leadCat}>{lead.category.title.en} • {lead.category.title.hi}</Text>
+              <Text style={styles.leadCat}>{pick(lead.category.title, lang)}</Text>
               <Text style={styles.leadTitle} numberOfLines={2}>{lead.title}</Text>
               <View style={styles.leadMetaRow}>
                 <MapPin color={Colors.textMuted} size={14} />
                 <Text style={styles.leadMeta} numberOfLines={1}>
                   {lead.areaName}, {lead.cityName.replace(/\s*\(.*\)/, '')}
-                  {lead.distanceKm !== null ? ` • ${lead.distanceKm} km` : ''}
-                  {lead.offersCount > 0 ? ` • ${lead.offersCount} quote${lead.offersCount === 1 ? '' : 's'}` : ''}
+                  {lead.distanceKm !== null ? ` • ${t('{km} km', { km: lead.distanceKm })}` : ''}
+                  {lead.offersCount > 0 ? ` • ${lead.offersCount === 1 ? t('1 quote') : t('{count} quotes', { count: lead.offersCount })}` : ''}
                 </Text>
               </View>
               <TouchableOpacity
@@ -223,7 +236,7 @@ export default function WorkerHome() {
                 activeOpacity={0.8}
                 accessibilityRole="button"
               >
-                <Text style={styles.quoteBtnText}>{lead.myOffer ? 'View / update my quote' : 'Send Quote • कोट भेजें'}</Text>
+                <Text style={styles.quoteBtnText}>{lead.myOffer ? t('View or update my quote') : t('Send Quote')}</Text>
                 <ArrowRight color="#FFFFFF" size={18} />
               </TouchableOpacity>
             </View>
@@ -232,7 +245,7 @@ export default function WorkerHome() {
 
         <View style={styles.trustRow}>
           <ShieldCheck color={Colors.primaryDark} size={18} />
-          <Text style={styles.trustText}>Direct customer calls • No middleman • सीधा संपर्क</Text>
+          <Text style={styles.trustText}>{t('Direct customer calls • No middleman')}</Text>
         </View>
       </ScrollView>
       <AppMenu visible={menuOpen} onClose={() => setMenuOpen(false)} />

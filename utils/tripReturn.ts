@@ -6,6 +6,7 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { DEFAULT_CHANNEL_ID } from './pushChannels';
+import { t } from '../i18n';
 
 /** The type carried in the notification's data, routed by utils/notificationRoutes.ts. */
 export const TRIP_RETURN_TYPE = 'TRIP_RETURN';
@@ -19,8 +20,8 @@ export async function showReturnReminder(jobId: string): Promise<void> {
   try {
     shownId = await Notifications.scheduleNotificationAsync({
       content: {
-        title: 'KaamConnect • trip in progress',
-        body: 'Tap to come back to the job and enter the arrival code',
+        title: t('KaamConnect • trip in progress'),
+        body: t('Tap to come back to the job and enter the arrival code'),
         data: { type: TRIP_RETURN_TYPE, jobId },
         sticky: true, // Android: the person cannot swipe it away by accident while they drive
         autoDismiss: false,

@@ -1,6 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import type { CancelActor, CancelStage } from '../api/types';
-import { backOutWarning, cancelCopy, cancelledHeadline, cancelledMessage, cancelledReason, consequence, labelOfCode, needsNote, reasonsFor, visitFeeNotice } from './cancelReasons';
+import { setCurrentLanguage } from '../i18n';
+import { STRINGS } from '../i18n/strings';
+import { backOutWarning, cancelCopy, cancelledHeadline, cancelledMessage, cancelledReason, consequence, labelOfCode, needsNote, reasonText, reasonsFor, visitFeeNotice } from './cancelReasons';
+
+describe('reasonText (a reason as the server stored it, in the reader’s language)', () => {
+  it('translates a reason picked from the list and keeps what the person typed', () => {
+    setCurrentLanguage('hi');
+    try {
+      expect(reasonText('Vehicle problem')).toBe(STRINGS['Vehicle problem']!.hi);
+      expect(reasonText('No reason given')).toBe(STRINGS['No reason was given.']!.hi);
+      expect(reasonText('tyre puncture near Sector 17')).toBe('tyre puncture near Sector 17');
+    } finally {
+      setCurrentLanguage('en');
+    }
+    expect(reasonText('Vehicle problem')).toBe('Vehicle problem');
+  });
+});
 
 const ACTORS: CancelActor[] = ['CUSTOMER', 'WORKER'];
 const STAGES: CancelStage[] = ['OPEN', 'ASSIGNED', 'ARRIVED'];
@@ -37,11 +53,12 @@ describe('reasonsFor', () => {
     expect(reasonsFor('CUSTOMER', 'OPEN').map((r) => r.code)).not.toContain('PRICE_TOO_HIGH');
   });
 
-  it('gives every reason a readable label, in English and Hindi', () => {
+  it('gives every reason a readable label in one language, never two side by side', () => {
     for (const actor of ACTORS)
       for (const stage of STAGES)
         for (const r of reasonsFor(actor, stage)) {
-          expect(r.label).toContain(' / ');
+          expect(r.label.length).toBeGreaterThan(3);
+          expect(r.label).not.toContain(' / ');
           expect(labelOfCode(r.code)).toBe(r.label);
         }
     expect(labelOfCode('FROM_A_NEWER_SERVER')).toBe('FROM_A_NEWER_SERVER');

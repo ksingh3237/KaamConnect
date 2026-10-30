@@ -12,18 +12,22 @@ import { isApiError, userMessage } from '../api/errors';
 import type { ReviewTag } from '../api/types';
 import Avatar from '../components/Avatar';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../components/StateBlocks';
+import { categoryTitle } from '../i18n/categories';
+import { useLang, useT } from '../i18n/useT';
 
-const TAGS: { id: ReviewTag; label: string }[] = [
-  { id: 'PUNCTUAL', label: '⚡ Punctual / समय पर' },
-  { id: 'FAIR_PRICE', label: '💵 Fair Price / वाजिब दाम' },
-  { id: 'CLEAN_WORK', label: '🧼 Clean Work / साफ़ काम' },
-  { id: 'POLITE', label: '🤝 Polite / विनम्र व्यवहार' },
-  { id: 'EXPERT_SKILL', label: '🛠️ Expert Skill / हुनरमंद' },
-];
 const TIP_OPTIONS = [0, 20, 50, 100] as const;
 
 export default function RatingReviewScreen() {
   const router = useRouter();
+  const t = useT();
+  const lang = useLang();
+  const tags: { id: ReviewTag; label: string }[] = [
+    { id: 'PUNCTUAL', label: `⚡ ${t('Punctual')}` },
+    { id: 'FAIR_PRICE', label: `💵 ${t('Fair Price')}` },
+    { id: 'CLEAN_WORK', label: `🧼 ${t('Clean Work')}` },
+    { id: 'POLITE', label: `🤝 ${t('Polite')}` },
+    { id: 'EXPERT_SKILL', label: `🛠️ ${t('Expert Skill')}` },
+  ];
   const { activeJobId } = useStore();
   const jobState = useAsync(() => (activeJobId ? getJob(activeJobId) : Promise.resolve(null)), [activeJobId], { reloadOnFocus: false });
   const job = jobState.data;
@@ -69,14 +73,14 @@ export default function RatingReviewScreen() {
             onPress={() => router.canGoBack() ? router.back() : router.replace('/job-progress')}
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel="Go back"
+            accessibilityLabel={t('Go back')}
           >
             <ArrowLeft color="#1E293B" size={20} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle} numberOfLines={1}>Rate & Review / रेटिंग दें</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>{t('Rate & Review')}</Text>
         </View>
         <View style={styles.jobPill}>
-          <Text style={styles.jobPillText}>{job ? job.reference : 'JOB'}</Text>
+          <Text style={styles.jobPillText}>{job ? job.reference : t('JOB')}</Text>
         </View>
       </View>
 
@@ -87,7 +91,7 @@ export default function RatingReviewScreen() {
             <Avatar uri={worker?.photoUrl} size={80} style={styles.workerAvatar} />
             <View style={styles.statusDot} />
           </View>
-          {!activeJobId && <EmptyBlock title="No job selected" hint="Open a completed job from Activity. / गतिविधि से जॉब खोलें" />}
+          {!activeJobId && <EmptyBlock title={t('No job selected')} hint={t('Open a completed job from Activity.')} />}
           {activeJobId && jobState.loading && <LoadingBlock />}
           {jobState.error && !jobState.data && <ErrorBlock message={jobState.error} onRetry={() => void jobState.reload()} />}
           {job && worker && (
@@ -96,7 +100,7 @@ export default function RatingReviewScreen() {
                 <Text style={styles.workerName}>{worker.name}</Text>
                 <ShieldCheck color={Colors.primary} size={18} />
               </View>
-              <Text style={styles.workerTrade}>{worker.trade} • {job.city.name.replace(/\s*\(.*\)/, '')}</Text>
+              <Text style={styles.workerTrade}>{categoryTitle(worker.tradeId, worker.trade, lang)} • {job.city.name.replace(/\s*\(.*\)/, '')}</Text>
               <Text style={styles.jobSummaryText}>{job.title} • {job.locality ?? job.area.name}</Text>
             </>
           )}
@@ -104,7 +108,7 @@ export default function RatingReviewScreen() {
 
         {/* Interactive 5-Star Selector */}
         <View style={styles.card}>
-          <Text style={styles.ratingPrompt}>HOW WAS YOUR SERVICE EXPERIENCE?</Text>
+          <Text style={styles.ratingPrompt}>{t('HOW WAS YOUR SERVICE EXPERIENCE?')}</Text>
           <View style={styles.starsRow}>
             {[1, 2, 3, 4, 5].map((starVal) => (
               <TouchableOpacity
@@ -122,20 +126,20 @@ export default function RatingReviewScreen() {
           </View>
           <Text style={styles.ratingFeedback}>
             {rating === 5
-              ? 'Excellent Work! (उत्कृष्ट कार्य)'
+              ? t('Excellent Work!')
               : rating === 4
-              ? 'Very Good Service (बहुत अच्छा)'
+              ? t('Very Good Service')
               : rating === 3
-              ? 'Average Service (सामान्य)'
-              : 'Needs Improvement (सुधार आवश्यक)'}
+              ? t('Average Service')
+              : t('Needs Improvement')}
           </Text>
         </View>
 
         {/* Quick Appreciation Tags */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>What did you like the most?</Text>
+          <Text style={styles.sectionTitle}>{t('What did you like the most?')}</Text>
           <View style={styles.tagsContainer}>
-            {TAGS.map(({ id, label }) => {
+            {tags.map(({ id, label }) => {
               const isActive = selectedTags.includes(id);
               return (
                 <TouchableOpacity
@@ -159,10 +163,10 @@ export default function RatingReviewScreen() {
         <View style={[styles.card, styles.tipCard]}>
           <View style={styles.tipHeader}>
             <Text style={styles.tipTitle}>
-              Add a Direct Tip for {worker?.name ?? 'the worker'}? (कारीगर को टिप)
+              {t('Add a Direct Tip for {name}?', { name: worker?.name ?? t('the worker') })}
             </Text>
             <View style={styles.tipBadge}>
-              <Text style={styles.tipBadgeText}>100% to Worker</Text>
+              <Text style={styles.tipBadgeText}>{t('100% to Worker')}</Text>
             </View>
           </View>
           <View style={styles.tipsGrid}>
@@ -178,7 +182,7 @@ export default function RatingReviewScreen() {
                   accessibilityState={{ selected: isSelected }}
                 >
                   <Text style={[styles.tipBtnText, isSelected && styles.tipBtnTextActive]}>
-                    {amount === 0 ? 'No tip' : `₹${amount}`} {isSelected ? '✓' : ''}
+                    {amount === 0 ? t('No tip') : `₹${amount}`} {isSelected ? '✓' : ''}
                   </Text>
                 </TouchableOpacity>
               );
@@ -190,25 +194,25 @@ export default function RatingReviewScreen() {
               accessibilityRole="button"
               accessibilityState={{ selected: customOpen }}
             >
-              <Text style={[styles.tipBtnText, customOpen && styles.tipBtnTextActive]}>Custom {customOpen ? '✓' : ''}</Text>
+              <Text style={[styles.tipBtnText, customOpen && styles.tipBtnTextActive]}>{t('Custom')} {customOpen ? '✓' : ''}</Text>
             </TouchableOpacity>
           </View>
           {customOpen && (
             <TextInput
               style={{ marginTop: 8, borderWidth: 1.5, borderColor: Colors.borderDark, borderRadius: Radius.md, paddingHorizontal: 12, paddingVertical: 8, fontSize: 13, color: Colors.textMain, backgroundColor: '#FFFFFF' }}
               value={customTip}
-              onChangeText={(t) => {
-                const digits = t.replace(/\D/g, '').slice(0, 4);
+              onChangeText={(text) => {
+                const digits = text.replace(/\D/g, '').slice(0, 4);
                 setCustomTip(digits);
                 setTip(parseInt(digits || '0', 10) || 0);
               }}
-              placeholder="Amount in ₹"
+              placeholder={t('Amount in ₹')}
               placeholderTextColor={Colors.textSubtle}
               keyboardType="number-pad"
-              accessibilityLabel="Custom tip amount"
+              accessibilityLabel={t('Custom tip amount')}
             />
           )}
-          <Text style={{ fontSize: 12, color: Colors.textMuted, marginTop: 6 }}>The tip is a note for the worker; you hand it over yourself, like the bill.</Text>
+          <Text style={{ fontSize: 12, color: Colors.textMuted, marginTop: 6 }}>{t('The tip is a note for the worker; you hand it over yourself, like the bill.')}</Text>
         </View>
 
         {/* Submit Review Button */}
@@ -221,7 +225,7 @@ export default function RatingReviewScreen() {
           accessibilityRole="button"
         >
           <Text style={styles.submitBtnText}>
-            {saving ? 'Submitting… / भेज रहे हैं…' : 'Submit Review & Complete • सबमिट करें'}
+            {saving ? t('Submitting…') : t('Submit Review & Complete')}
           </Text>
           {saving ? <ActivityIndicator color="#FFFFFF" /> : <ArrowRight color="#FFFFFF" size={18} />}
         </TouchableOpacity>

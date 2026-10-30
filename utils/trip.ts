@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 // Small pure helpers behind live tracking: how far the worker moved, which way they face, which icon fits their
 // vehicle, what the customer's status pill says and which URL opens turn-by-turn navigation. No React, no native
 // modules, so they are unit tested (trip.test.ts).
@@ -87,15 +88,16 @@ export const AT_THE_DOOR_KM = 0.1;
 
 /** The floating line on the customer's tracking map. */
 export function trackingPill(input: PillInput): string {
-  if (['ARRIVED', 'IN_PROGRESS', 'WORK_COMPLETED', 'COMPLETED'].includes(input.status)) return '📍 Worker has arrived at your location';
+  if (['ARRIVED', 'IN_PROGRESS', 'WORK_COMPLETED', 'COMPLETED'].includes(input.status)) return `📍 ${t('Worker has arrived at your location')}`;
   if (input.status !== 'ASSIGNED') return '';
-  if (!input.hasLocation) return '⏳ Worker on the way • Updating live location...';
-  if (input.stale) return `⏳ Worker on the way • location last seen ${input.lastSeen ?? 'a while ago'}`;
+  if (!input.hasLocation) return `⏳ ${t('Worker on the way • Updating live location...')}`;
+  if (input.stale) return `⏳ ${t('Worker on the way • location last seen {ago}', { ago: input.lastSeen ?? t('a while ago') })}`;
   // Close enough that "arriving in 1 min" is useless: what the customer needs is the arrival code in their hand
-  if (input.distanceKm !== null && input.distanceKm <= AT_THE_DOOR_KM) return '🚪 Your worker is at your door • have the arrival code ready';
-  if (input.etaMinutes === null) return '⚡ Worker is on the way • live location on the map';
-  const away = input.distanceKm !== null ? ` • ${input.distanceKm} km away` : '';
-  return `⚡ Arriving in ${input.etaMinutes} min${away}`;
+  if (input.distanceKm !== null && input.distanceKm <= AT_THE_DOOR_KM) return `🚪 ${t('Your worker is at your door • have the arrival code ready')}`;
+  if (input.etaMinutes === null) return `⚡ ${t('Worker is on the way • live location on the map')}`;
+  return input.distanceKm !== null
+    ? `⚡ ${t('Arriving in {min} min • {km} km away', { min: input.etaMinutes, km: input.distanceKm })}`
+    : `⚡ ${t('Arriving in {min} min', { min: input.etaMinutes })}`;
 }
 
 /** Turn-by-turn navigation. Android opens the Google Maps navigation screen; everything else gets the universal link. */

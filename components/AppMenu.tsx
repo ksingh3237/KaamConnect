@@ -6,11 +6,13 @@ import { useRouter } from 'expo-router';
 import { ChevronRight, FileText, Globe, HelpCircle, Lock, Settings, User as UserIcon, X } from 'lucide-react-native';
 import { Colors } from '../constants/theme';
 import { notify } from '../utils/dialog';
+import { useT } from '../i18n/useT';
 
 const NATIVE = Platform.OS !== 'web';
 
 export default function AppMenu({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const router = useRouter();
+  const t = useT();
   const insets = useSafeAreaInsets();
   const slide = useRef(new Animated.Value(-Dimensions.get('window').width)).current;
   // Stays mounted while the closing slide runs
@@ -31,13 +33,17 @@ export default function AppMenu({ visible, onClose }: { visible: boolean; onClos
     setTimeout(action, 220);
   };
 
-  const items: { icon: typeof UserIcon; title: string; sub: string; onPress: () => void }[] = [
-    { icon: UserIcon, title: 'Profile', sub: 'प्रोफ़ाइल / ਪ੍ਰੋਫਾਈਲ', onPress: () => router.navigate('/(tabs)/profile') },
-    { icon: HelpCircle, title: 'Help & Support', sub: 'सहायता / ਮਦਦ', onPress: () => void notify('Help & Support / सहायता', 'For help with a job, open it from Activity. During a job, use the SOS button if you feel unsafe.') },
-    { icon: Globe, title: 'Language', sub: 'भाषा / ਭਾਸ਼ਾ', onPress: () => router.push({ pathname: '/language', params: { from: 'app' } }) },
-    { icon: FileText, title: 'Terms & Conditions', sub: 'नियम और शर्तें', onPress: () => router.push({ pathname: '/legal', params: { doc: 'terms' } }) },
-    { icon: Lock, title: 'Privacy Policy', sub: 'गोपनीयता नीति', onPress: () => router.push({ pathname: '/legal', params: { doc: 'privacy' } }) },
-    { icon: Settings, title: 'Settings', sub: 'सेटिंग्स / ਸੈਟਿੰਗਜ਼', onPress: () => router.navigate('/(tabs)/profile') },
+  const items: { icon: typeof UserIcon; title: string; onPress: () => void }[] = [
+    { icon: UserIcon, title: t('Profile'), onPress: () => router.navigate('/(tabs)/profile') },
+    {
+      icon: HelpCircle,
+      title: t('Help & Support'),
+      onPress: () => void notify(t('Help & Support'), t('For help with a job, open it from Activity. During a job, use the SOS button if you feel unsafe.')),
+    },
+    { icon: Globe, title: t('Language'), onPress: () => router.push({ pathname: '/language', params: { from: 'app' } }) },
+    { icon: FileText, title: t('Terms & Conditions'), onPress: () => router.push({ pathname: '/legal', params: { doc: 'terms' } }) },
+    { icon: Lock, title: t('Privacy Policy'), onPress: () => router.push({ pathname: '/legal', params: { doc: 'privacy' } }) },
+    { icon: Settings, title: t('Settings'), onPress: () => router.navigate('/(tabs)/profile') },
   ];
 
   return (
@@ -49,20 +55,19 @@ export default function AppMenu({ visible, onClose }: { visible: boolean; onClos
         <Animated.View style={[styles.panel, { transform: [{ translateX: slide }] }]}>
           <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
             <View>
-              <Text style={styles.title}>Menu</Text>
+              <Text style={styles.title}>{t('Menu')}</Text>
               <Text style={styles.sub}>KaamConnect Tricity</Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.close} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Close menu">
+            <TouchableOpacity onPress={onClose} style={styles.close} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('Close menu')}>
               <X color={Colors.textMain} size={24} />
             </TouchableOpacity>
           </View>
           <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}>
-            {items.map((item) => (
-              <TouchableOpacity key={item.title} style={styles.item} onPress={() => go(item.onPress)} activeOpacity={0.7} accessibilityRole="button">
+            {items.map((item, index) => (
+              <TouchableOpacity key={index} style={styles.item} onPress={() => go(item.onPress)} activeOpacity={0.7} accessibilityRole="button">
                 <item.icon color={Colors.primary} size={24} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.itemTitle}>{item.title}</Text>
-                  <Text style={styles.itemSub}>{item.sub}</Text>
                 </View>
                 <ChevronRight color={Colors.textSubtle} size={18} />
               </TouchableOpacity>
@@ -110,5 +115,4 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   itemTitle: { fontSize: 16, fontWeight: '700', color: Colors.textMain },
-  itemSub: { fontSize: 13, color: Colors.textMuted, marginTop: 2 },
 });

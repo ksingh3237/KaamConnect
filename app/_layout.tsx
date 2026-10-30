@@ -9,12 +9,14 @@ import { OPEN_TO_ALL_SEGMENTS, PUBLIC_SEGMENTS, destinationFor } from '../utils/
 import { resetTo } from '../utils/navigation';
 import DialogHost from '../components/DialogHost';
 import PushHost from '../components/PushHost';
+import { useT } from '../i18n/useT';
 
 // Restores the stored login once, then keeps the person on the right side of the sign-in wall:
 //  - signed out on a screen that needs a login -> the welcome screen;
 //  - signed in on a welcome/login screen -> straight to their marketplace (or role selection if they have no profile).
 function SessionGate({ children }: { children: React.ReactNode }) {
   const { status, user, bootstrap } = useSession();
+  const t = useT();
   const segments = useSegments();
   const top = (segments[0] as string | undefined) ?? '';
   // The redirect last asked for, so a re-render before the navigation lands cannot fire it twice
@@ -47,7 +49,7 @@ function SessionGate({ children }: { children: React.ReactNode }) {
 
   if (status === 'booting') {
     return (
-      <View style={styles.center} accessibilityRole="progressbar" accessibilityLabel="Starting KaamConnect">
+      <View style={styles.center} accessibilityRole="progressbar" accessibilityLabel={t('Starting KaamConnect')}>
         <ActivityIndicator color="#00B074" size="large" />
         <Text style={styles.centerText}>KaamConnect</Text>
       </View>
@@ -56,10 +58,10 @@ function SessionGate({ children }: { children: React.ReactNode }) {
   if (status === 'unreachable') {
     return (
       <View style={styles.center} accessibilityRole="alert">
-        <Text style={styles.centerTitle}>Cannot reach the server</Text>
-        <Text style={styles.centerText}>Your login is saved. Check that the backend is running and your connection, then try again.</Text>
+        <Text style={styles.centerTitle}>{t('Cannot reach the server')}</Text>
+        <Text style={styles.centerText}>{t('Your login is saved. Check your internet connection, then try again.')}</Text>
         <TouchableOpacity style={styles.retry} onPress={() => void bootstrap()} accessibilityRole="button">
-          <Text style={styles.retryText}>Try again / दोबारा कोशिश करें</Text>
+          <Text style={styles.retryText}>{t('Try again')}</Text>
         </TouchableOpacity>
       </View>
     );

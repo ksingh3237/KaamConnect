@@ -29,6 +29,8 @@ import { Check, ChevronDown, ChevronRight, LocateFixed, MapPin, PlusCircle, Sear
 import { Colors, Radius, noFocusRing } from '../constants/theme';
 import type { LocationCity } from '../api/types';
 import { resolveDetected, withTimeout } from '../utils/currentSector';
+import { t } from '../i18n';
+import { useT } from '../i18n/useT';
 import { reverseGeocodePlace } from '../utils/reverseGeocode';
 import {
   buildRows,
@@ -59,13 +61,14 @@ interface Props {
 }
 
 const ALL = 'All';
+// Read when shown, so they follow the language the person chose
 const NOTES = {
-  denied: 'Location permission is off. Allow it in Settings, or search above. / लोकेशन की अनुमति बंद है',
-  servicesOff: 'Location is switched off on this phone. Turn it on, or search above. / फ़ोन की लोकेशन बंद है',
-  timeout: 'Finding your location is taking too long. Try again or search above. / लोकेशन मिलने में देर हो रही है',
-  failed: 'Could not find your location. Search above instead. / लोकेशन नहीं मिली',
-  none: "We don't cover your current spot yet. Search or add a custom locality. / आपकी जगह अभी उपलब्ध नहीं",
-} as const;
+  denied: () => t('Location permission is off. Allow it in Settings, or search above.'),
+  servicesOff: () => t('Location is switched off on this phone. Turn it on, or search above.'),
+  timeout: () => t('Finding your location is taking too long. Try again or search above.'),
+  failed: () => t('Could not find your location. Search above instead.'),
+  none: () => t('We do not cover your current spot yet. Search or add a custom locality.'),
+};
 
 // Every GPS step has a limit, so the card can never spin forever
 const FIX_TIMEOUT_MS = 15_000;
@@ -89,9 +92,11 @@ export default function SectorPicker({
   value,
   locality = null,
   onChange,
-  placeholder = 'Select Sector / Area • इलाका चुनें',
+  placeholder,
   autoFocusSearch = false,
 }: Props) {
+  const t = useT();
+  placeholder = placeholder ?? t('Select Sector / Area');
   const items = useMemo(() => flattenSectors(locations), [locations]);
   const cities = useMemo(() => cityNames(items), [items]);
   const customCities = useMemo(() => citiesWithOtherArea(locations), [locations]);
@@ -206,12 +211,12 @@ export default function SectorPicker({
     try {
       const perm = await Location.requestForegroundPermissionsAsync();
       if (perm.status !== 'granted') {
-        if (mine === detectSeq.current) setNote(NOTES.denied);
+        if (mine === detectSeq.current) setNote(NOTES.denied());
         return;
       }
       // Location switched off in the phone's quick settings: say so instead of waiting for a fix that never comes
       if (!(await Location.hasServicesEnabledAsync().catch(() => true))) {
-        if (mine === detectSeq.current) setNote(NOTES.servicesOff);
+        if (mine === detectSeq.current) setNote(NOTES.servicesOff());
         return;
       }
       const pos = await currentPosition();
@@ -222,9 +227,9 @@ export default function SectorPicker({
       else if (found.kind === 'custom') {
         live.current.onChange(found.areaId, `${found.locality}, ${found.city}`, found.locality);
         dismissRef.current();
-      } else setNote(NOTES.none);
+      } else setNote(NOTES.none());
     } catch (error) {
-      if (mine === detectSeq.current) setNote(error instanceof Error && error.message === 'TIMEOUT' ? NOTES.timeout : NOTES.failed);
+      if (mine === detectSeq.current) setNote(error instanceof Error && error.message === 'TIMEOUT' ? NOTES.timeout() : NOTES.failed());
     } finally {
       if (mine === detectSeq.current) setDetecting(false);
     }
@@ -264,7 +269,7 @@ export default function SectorPicker({
         onPress={show}
         activeOpacity={0.7}
         accessibilityRole="button"
-        accessibilityLabel={shownLabel ? `Sector: ${shownLabel}. Change` : placeholder}
+        accessibilityLabel={shownLabel ? t('Sector: {name}. Change', { name: shownLabel }) : placeholder}
       >
         <View style={styles.fieldIcon}>
           <MapPin color={Colors.primary} size={20} />
@@ -274,7 +279,11 @@ export default function SectorPicker({
             {shownLabel ?? placeholder}
           </Text>
           <Text style={styles.fieldSub} numberOfLines={1}>
-            {shownLabel ? 'Tap to change • बदलने के लिए टैप करें' : `${items.length}+ sectors & areas in ${cities.length} ${cities.length === 1 ? 'city' : 'cities'}`}
+            {shownLabel
+              ? t('Tap to change')
+              : cities.length === 1
+                ? t('{count}+ sectors & areas in 1 city', { count: items.length })
+                : t('{count}+ sectors & areas in {cities} cities', { count: items.length, cities: cities.length })}
           </Text>
         </View>
         <ChevronDown color={Colors.textMuted} size={22} />
@@ -282,7 +291,7 @@ export default function SectorPicker({
 
       {quick.length > 0 && (
         <>
-          <Text style={styles.quickLabel}>Quick picks • जल्दी चुनें</Text>
+          <Text style={styles.quickLabel}>{t('Quick picks')}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={styles.noGrow} contentContainerStyle={styles.pills}>
             {quick.map((item) => {
               const on = item.id === value;
@@ -303,7 +312,7 @@ export default function SectorPicker({
       {/* Android back: out of the custom form first, then close the sheet */}
       <Modal visible={open} transparent animationType="fade" onRequestClose={custom ? () => setCustom(false) : dismiss} statusBarTranslucent>
         <View style={styles.overlay}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} accessibilityRole="button" accessibilityLabel="Close" />
+          <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} accessibilityRole="button" accessibilityLabel={t('Close')} />
           {/* "padding" on both platforms: it lifts the sheet by however far the keyboard actually covers it, so it stays
               right whether or not Android also resizes the window. maxHeight (screen minus the status bar) lets the list
               shrink instead of the top of the sheet running under the status bar. */}
@@ -312,8 +321,8 @@ export default function SectorPicker({
               <View {...pan.panHandlers}>
                 <View style={styles.grabber} />
                 <View style={styles.sheetHeader}>
-                  <Text style={styles.sheetTitle}>Select Sector / Area • क्षेत्र चुनें</Text>
-                  <TouchableOpacity onPress={dismiss} style={styles.closeBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Close">
+                <Text style={styles.sheetTitle}>{t('Select Sector / Area')}</Text>
+                  <TouchableOpacity onPress={dismiss} style={styles.closeBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('Close')}>
                     <X color={Colors.textMain} size={24} />
                   </TouchableOpacity>
                 </View>
@@ -321,20 +330,20 @@ export default function SectorPicker({
 
               {custom ? (
                 <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.customForm}>
-                  <Text style={styles.customLabel}>Your area / locality • आपका इलाका</Text>
+                  <Text style={styles.customLabel}>{t('Your area / locality')}</Text>
                   <TextInput
                     style={[styles.customInput, noFocusRing]}
                     value={customName}
                     onChangeText={setCustomName}
-                    placeholder='e.g. "Sector 82 JLPL", "Peer Muchalla", "Dhanas"'
+                    placeholder={t('e.g. "Sector 82 JLPL", "Peer Muchalla", "Dhanas"')}
                     placeholderTextColor={Colors.textSubtle}
                     maxLength={80}
                     autoFocus
                     returnKeyType="done"
                     onSubmitEditing={saveCustom}
-                    accessibilityLabel="Your area or locality"
+                    accessibilityLabel={t('Your area or locality')}
                   />
-                  <Text style={styles.customLabel}>City • शहर</Text>
+                  <Text style={styles.customLabel}>{t('City')}</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={styles.formChips} contentContainerStyle={styles.chips}>
                     {customCities.map((c) => {
                       const on = c === customCityChoice;
@@ -345,12 +354,12 @@ export default function SectorPicker({
                       );
                     })}
                   </ScrollView>
-                  <Text style={styles.customHint}>Workers across your city will see this name. Your full address stays private. / आपका पूरा पता गोपनीय रहेगा</Text>
+                  <Text style={styles.customHint}>{t('Workers across your city will see this name. Your full address stays private.')}</Text>
                   <TouchableOpacity style={[styles.saveBtn, !customReady && { opacity: 0.5 }]} onPress={saveCustom} disabled={!customReady} activeOpacity={0.8} accessibilityRole="button">
-                    <Text style={styles.saveBtnText}>Use this area • यह क्षेत्र चुनें</Text>
+                    <Text style={styles.saveBtnText}>{t('Use this area')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.backToList} onPress={() => setCustom(false)} activeOpacity={0.7} accessibilityRole="button">
-                    <Text style={styles.backToListText}>← Back to the list</Text>
+                    <Text style={styles.backToListText}>{t('← Back to the list')}</Text>
                   </TouchableOpacity>
                 </ScrollView>
               ) : (
@@ -361,28 +370,28 @@ export default function SectorPicker({
                       style={[styles.searchInput, noFocusRing]}
                       value={query}
                       onChangeText={setQuery}
-                      placeholder="Search sector / area • खोजें"
+                      placeholder={t('Search sector / area')}
                       numberOfLines={1}
                       placeholderTextColor={Colors.textSubtle}
                       autoFocus={autoFocusSearch}
                       autoCorrect={false}
                       autoCapitalize="none"
                       returnKeyType="search"
-                      accessibilityLabel="Search sectors and areas"
+                      accessibilityLabel={t('Search sectors and areas')}
                     />
                     {query.length > 0 && (
-                      <TouchableOpacity onPress={() => setQuery('')} style={styles.clearBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Clear search">
+                      <TouchableOpacity onPress={() => setQuery('')} style={styles.clearBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('Clear search')}>
                         <X color={Colors.textMuted} size={18} />
                       </TouchableOpacity>
                     )}
                   </View>
 
                   {!searching && (
-                    <TouchableOpacity style={styles.gpsCard} onPress={() => void detect()} disabled={detecting} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Use my current location">
+                    <TouchableOpacity style={styles.gpsCard} onPress={() => void detect()} disabled={detecting} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('Use my current location')}>
                       <View style={styles.gpsIcon}>{detecting ? <ActivityIndicator color="#FFFFFF" size="small" /> : <LocateFixed color="#FFFFFF" size={20} />}</View>
                       <View style={styles.fieldBody}>
-                        <Text style={styles.gpsTitle}>{detecting ? 'Finding your sector…' : 'Use current location'}</Text>
-                        <Text style={styles.gpsSub}>मेरी लोकेशन से सेक्टर चुनें</Text>
+                        <Text style={styles.gpsTitle}>{detecting ? t('Finding your sector…') : t('Use current location')}</Text>
+                        <Text style={styles.gpsSub}>{t('Pick your sector from where you are')}</Text>
                       </View>
                       <ChevronRight color={Colors.primaryDark} size={18} />
                     </TouchableOpacity>
@@ -400,7 +409,7 @@ export default function SectorPicker({
                         return (
                           <Pressable key={c} onPress={() => setTab(c)} style={[styles.chip, on && styles.chipOn]} accessibilityRole="tab" accessibilityState={{ selected: on }}>
                             <Text style={[styles.chipText, on && styles.chipTextOn]} numberOfLines={1}>
-                              {c === ALL ? 'All • सभी' : c}
+                              {c === ALL ? t('All') : c}
                             </Text>
                           </Pressable>
                         );
@@ -422,8 +431,8 @@ export default function SectorPicker({
                     contentContainerStyle={styles.listContent}
                     ListEmptyComponent={
                       <View style={styles.empty}>
-                        <Text style={styles.emptyTitle}>No area matches “{query.trim()}”</Text>
-                        <Text style={styles.emptyHint}>Try only the number (e.g. 35), another spelling, or add it as a custom locality below.</Text>
+                        <Text style={styles.emptyTitle}>{t('No area matches “{query}”', { query: query.trim() })}</Text>
+                        <Text style={styles.emptyHint}>{t('Try only the number (e.g. 35), another spelling, or add it as a custom locality below.')}</Text>
                       </View>
                     }
                   />
@@ -433,8 +442,7 @@ export default function SectorPicker({
                       <TouchableOpacity style={styles.customBtn} onPress={startCustom} activeOpacity={0.7} accessibilityRole="button">
                         <PlusCircle color={Colors.primaryDark} size={22} />
                         <View style={styles.fieldBody}>
-                          <Text style={styles.customBtnTitle}>Can't find your sector? Add custom locality</Text>
-                          <Text style={styles.customBtnSub}>अपना इलाका खुद लिखें</Text>
+                          <Text style={styles.customBtnTitle}>{t('Cannot find your sector? Add your own locality')}</Text>
                         </View>
                         <ChevronRight color={Colors.primaryDark} size={18} />
                       </TouchableOpacity>

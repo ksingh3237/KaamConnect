@@ -3,8 +3,11 @@ import React from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { AlertCircle } from 'lucide-react-native';
 import { Colors, Radius, Spacing } from '../constants/theme';
+import { useT } from '../i18n/useT';
 
-export function LoadingBlock({ label = 'Loading… / लोड हो रहा है…' }: { label?: string }) {
+export function LoadingBlock({ label }: { label?: string }) {
+  const t = useT();
+  label = label ?? t('Loading…');
   return (
     <View style={styles.box} accessibilityRole="progressbar" accessibilityLabel={label}>
       <ActivityIndicator color={Colors.primary} />
@@ -14,13 +17,14 @@ export function LoadingBlock({ label = 'Loading… / लोड हो रहा 
 }
 
 export function ErrorBlock({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const t = useT();
   return (
     <View style={[styles.box, styles.errorBox]} accessibilityRole="alert">
       <AlertCircle color={Colors.error} size={22} />
       <Text style={[styles.text, { color: '#991B1B' }]}>{message}</Text>
       {onRetry && (
-        <TouchableOpacity style={styles.retry} onPress={onRetry} accessibilityRole="button" accessibilityLabel="Try again">
-          <Text style={styles.retryText}>Try again / दोबारा कोशिश करें</Text>
+        <TouchableOpacity style={styles.retry} onPress={onRetry} accessibilityRole="button" accessibilityLabel={t('Try again')}>
+          <Text style={styles.retryText}>{t('Try again')}</Text>
         </TouchableOpacity>
       )}
     </View>

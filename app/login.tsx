@@ -8,6 +8,7 @@ import { noFocusRing } from '../constants/theme';
 import { useStore } from '../store/useStore';
 import { useSession } from '../store/useSession';
 import { isApiError, userMessage } from '../api/errors';
+import { useT } from '../i18n/useT';
 
 // Format exactly as "98765 43210"
 const formatPhone = (text: string) => {
@@ -17,6 +18,7 @@ const formatPhone = (text: string) => {
 
 export default function LoginScreen() {
   const router = useRouter();
+  const t = useT();
   const insets = useSafeAreaInsets();
   // Below 360dp the header can't hold brand + badge + language switcher
   const isCompact = useWindowDimensions().width < 360;
@@ -76,7 +78,7 @@ export default function LoginScreen() {
       return (
         <View style={styles.safeNotice}>
           <AlertCircle color="#ef4444" size={14} />
-          <Text style={[styles.safeNoticeText, styles.errorText]}>Enter a valid 10-digit mobile number / सही नंबर डालें</Text>
+          <Text style={[styles.safeNoticeText, styles.errorText]}>{t('Enter a valid 10-digit mobile number.')}</Text>
         </View>
       );
     }
@@ -84,14 +86,14 @@ export default function LoginScreen() {
       return (
         <View style={styles.safeNotice}>
           <CheckCircle2 color="#00b074" size={14} />
-          <Text style={[styles.safeNoticeText, { color: '#00875a', fontWeight: '600' }]}>Valid 10-digit mobile number ready</Text>
+          <Text style={[styles.safeNoticeText, { color: '#00875a', fontWeight: '600' }]}>{t('Valid 10-digit mobile number ready')}</Text>
         </View>
       );
     }
     return (
       <View style={styles.safeNotice}>
         <Lock color="#00b074" size={14} />
-        <Text style={styles.safeNoticeText}>🔒 Encrypted & Safe • No password needed</Text>
+        <Text style={styles.safeNoticeText}>🔒 {t('Encrypted & Safe • No password needed')}</Text>
       </View>
     );
   };
@@ -106,13 +108,13 @@ export default function LoginScreen() {
             onPress={() => router.canGoBack() ? router.back() : router.replace('/language')}
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel="Go back"
+            accessibilityLabel={t('Go back')}
           >
             <ArrowLeft color="#475569" size={22} strokeWidth={2.5} />
           </TouchableOpacity>
           <View style={{ flexDirection: 'column' }}>
             <Text style={styles.headerBrand}>KaamConnect</Text>
-            <Text style={styles.headerSub}>Chandigarh Tricity</Text>
+            <Text style={styles.headerSub}>{t('Chandigarh Tricity')}</Text>
           </View>
         </View>
 
@@ -120,7 +122,7 @@ export default function LoginScreen() {
           {!isCompact && (
             <View style={styles.commBadge}>
               <ShieldCheck color="#00875a" size={13} strokeWidth={2.5} style={{ flexShrink: 0 }} />
-              <Text style={styles.commBadgeText}>0% Commission</Text>
+              <Text style={styles.commBadgeText}>{t('0% Commission')}</Text>
             </View>
           )}
           <LanguageToggle style={styles.langToggle} />
@@ -132,10 +134,10 @@ export default function LoginScreen() {
         <View style={styles.verifiedBanner}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
             <Text style={{ fontSize: 16 }}>🇮🇳</Text>
-            <Text style={styles.verifiedBannerText}>Direct Local Connect • Verified Workers</Text>
+            <Text style={styles.verifiedBannerText}>{t('Direct Local Connect • Verified Workers')}</Text>
           </View>
           <View style={styles.activeChdBadge}>
-            <Text style={styles.activeChdText}>Active CHD</Text>
+            <Text style={styles.activeChdText}>{t('Active CHD')}</Text>
           </View>
         </View>
 
@@ -143,24 +145,19 @@ export default function LoginScreen() {
         <View style={styles.titleSection}>
           <View style={styles.fastOtpPill}>
             <Smartphone color="#006398" size={14} strokeWidth={2.5} />
-            <Text style={styles.fastOtpText}>Fast OTP Login</Text>
+            <Text style={styles.fastOtpText}>{t('Fast OTP Login')}</Text>
           </View>
-          <Text style={styles.mainTitle}>
-            Enter Mobile Number
-          </Text>
-          <Text style={styles.mainTitleHindi}>
-            / मोबाइल नंबर
-          </Text>
+          <Text style={styles.mainTitle}>{t('Enter Mobile Number')}</Text>
           <Text style={styles.titleSub}>
-            We will send an OTP verification code. Zero spam, 100% verified Tricity network.
+            {t('We will send an OTP verification code. Zero spam, 100% verified Tricity network.')}
           </Text>
         </View>
 
         {/* Phone Number Input Section */}
         <View style={styles.inputSection}>
           <View style={styles.inputLabelRow}>
-            <Text style={styles.inputLabel}>Phone Number / फ़ोन नंबर</Text>
-            <Text style={styles.inputHint}>10-Digit Indian Mobile</Text>
+            <Text style={styles.inputLabel}>{t('Phone Number')}</Text>
+            <Text style={styles.inputHint}>{t('10-Digit Indian Mobile')}</Text>
           </View>
 
           <View style={[styles.inputShell, isFocused && styles.inputShellFocused, showError && styles.inputShellError]}>
@@ -186,7 +183,7 @@ export default function LoginScreen() {
                 style={{ padding: 4 }}
                 hitSlop={8}
                 accessibilityRole="button"
-                accessibilityLabel="Clear phone number"
+                accessibilityLabel={t('Clear phone number')}
               >
                 <XCircle color="#94a3b8" size={18} />
               </TouchableOpacity>
@@ -201,10 +198,10 @@ export default function LoginScreen() {
           <View style={styles.whyHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 }}>
               <ShieldCheck color="#006398" size={16} strokeWidth={2.5} />
-              <Text style={styles.whyTitle}>Why Mobile Login? / क्यों ज़रूरी है?</Text>
+              <Text style={styles.whyTitle}>{t('Why Mobile Login?')}</Text>
             </View>
             <View style={styles.trustedTag}>
-              <Text style={styles.trustedTagText}>Trusted</Text>
+              <Text style={styles.trustedTagText}>{t('Trusted')}</Text>
             </View>
           </View>
 
@@ -214,8 +211,8 @@ export default function LoginScreen() {
                 <Phone color="#00b074" size={14} strokeWidth={2.5} />
               </View>
               <Text style={styles.benefitText}>
-                <Text style={{ fontWeight: '700' }}>Direct Calling: </Text>
-                Talk directly to skilled mistris & workers without agents.
+                <Text style={{ fontWeight: '700' }}>{t('Direct Calling:')} </Text>
+                {t('Talk directly to skilled mistris & workers without agents.')}
               </Text>
             </View>
 
@@ -224,8 +221,8 @@ export default function LoginScreen() {
                 <Shield color="#00b074" size={14} strokeWidth={2.5} />
               </View>
               <Text style={styles.benefitText}>
-                <Text style={{ fontWeight: '700' }}>Instant OTP Booking: </Text>
-                Safe 1-tap verification protects both consumer and worker.
+                <Text style={{ fontWeight: '700' }}>{t('Instant OTP Booking:')} </Text>
+                {t('Safe 1-tap verification protects both consumer and worker.')}
               </Text>
             </View>
 
@@ -234,8 +231,8 @@ export default function LoginScreen() {
                 <ShieldCheck color="#00b074" size={14} strokeWidth={2.5} />
               </View>
               <Text style={styles.benefitText}>
-                <Text style={{ fontWeight: '700' }}>0% Middleman Charges: </Text>
-                Pay worker directly via cash or UPI. KaamConnect charges ₹0 fee.
+                <Text style={{ fontWeight: '700' }}>{t('0% Middleman Charges:')} </Text>
+                {t('Pay worker directly via cash or UPI. KaamConnect charges ₹0 fee.')}
               </Text>
             </View>
           </View>
@@ -244,16 +241,16 @@ export default function LoginScreen() {
           <View style={styles.coverageRow}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 }}>
               <MapPin color="#00b074" size={14} strokeWidth={2} />
-              <Text style={styles.coverageText}>Coverage: CHD • Mohali • Panchkula</Text>
+              <Text style={styles.coverageText}>{t('Coverage: CHD • Mohali • Panchkula')}</Text>
             </View>
-            <Text style={styles.tricityWideText}>Tricity Wide</Text>
+            <Text style={styles.tricityWideText}>{t('Tricity Wide')}</Text>
           </View>
         </View>
 
         {/* Geographic Coverage Footer Ribbon */}
         <View style={styles.footerRibbon}>
           <MapPin color="#00b074" size={14} strokeWidth={2.5} />
-          <Text style={styles.footerRibbonText}>Active across Chandigarh, Mohali & Panchkula</Text>
+          <Text style={styles.footerRibbonText}>{t('Active across Chandigarh, Mohali & Panchkula')}</Text>
         </View>
       </ScrollView>
 
@@ -266,21 +263,21 @@ export default function LoginScreen() {
           activeOpacity={0.9}
         >
           {isLoading ? (
-            <Text style={styles.primaryBtnText}>Sending OTP… / भेज रहे हैं…</Text>
+            <Text style={styles.primaryBtnText}>{t('Sending OTP…')}</Text>
           ) : (
             <>
-              <Text style={styles.primaryBtnText}>Get OTP / ओटीपी प्राप्त करें</Text>
+              <Text style={styles.primaryBtnText}>{t('Get OTP')}</Text>
               <ArrowRight color="#FFFFFF" size={20} strokeWidth={2.5} />
             </>
           )}
         </TouchableOpacity>
 
         <Text style={styles.termsText}>
-          By proceeding, you agree to KaamConnect's{' '}
-          <Text style={styles.termsLink} onPress={() => router.push({ pathname: '/legal', params: { doc: 'terms' } })} accessibilityRole="link">Terms of Service</Text>
-          {' & '}
-          <Text style={styles.termsLink} onPress={() => router.push({ pathname: '/legal', params: { doc: 'privacy' } })} accessibilityRole="link">Privacy Policy</Text>
-          . No hidden commission, ever.
+          {t('By proceeding, you agree to KaamConnect’s')}{' '}
+          <Text style={styles.termsLink} onPress={() => router.push({ pathname: '/legal', params: { doc: 'terms' } })} accessibilityRole="link">{t('Terms of Service')}</Text>
+          {` ${t('and')} `}
+          <Text style={styles.termsLink} onPress={() => router.push({ pathname: '/legal', params: { doc: 'privacy' } })} accessibilityRole="link">{t('Privacy Policy')}</Text>
+          {t('. No hidden commission, ever.')}
         </Text>
       </View>
     </SafeAreaView>

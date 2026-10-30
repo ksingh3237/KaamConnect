@@ -54,6 +54,27 @@ export async function clearTokens(): Promise<void> {
   }
 }
 
+const LANGUAGE_KEY = 'kaamconnect.language.v1';
+
+/** The language the person chose ('en' | 'hi' | 'pa'), so a restart keeps it. Not secret. */
+export async function loadLanguage(): Promise<'en' | 'hi' | 'pa' | null> {
+  try {
+    const raw = Platform.OS === 'web' ? globalThis.localStorage?.getItem(LANGUAGE_KEY) ?? null : await SecureStore.getItemAsync(LANGUAGE_KEY);
+    return raw === 'en' || raw === 'hi' || raw === 'pa' ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveLanguage(lang: 'en' | 'hi' | 'pa'): Promise<void> {
+  try {
+    if (Platform.OS === 'web') globalThis.localStorage?.setItem(LANGUAGE_KEY, lang);
+    else await SecureStore.setItemAsync(LANGUAGE_KEY, lang);
+  } catch {
+    /* not remembered; the language still applies for this run */
+  }
+}
+
 const ROLE_KEY = 'kaamconnect.role.v1';
 
 /** The app mode the person last used ('customer' | 'worker'), so a restart reopens the same side. Not secret. */

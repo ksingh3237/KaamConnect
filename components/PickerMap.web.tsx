@@ -4,6 +4,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { MapPin } from 'lucide-react-native';
 import { Colors, Radius } from '../constants/theme';
+import { t } from '../i18n';
 import type { MapFocus } from './PickerMap';
 
 interface Props {
@@ -17,7 +18,7 @@ export default function PickerMap({ focus, height = 220 }: Props) {
   return (
     <View style={[styles.wrap, { height: Math.min(height, 110) }]}>
       <MapPin color={Colors.primaryDark} size={26} />
-      <Text style={styles.text}>Pin on map is available in the mobile app. Search above or use your location.</Text>
+      <Text style={styles.text}>{t('Pin on map is available in the mobile app. Search above or use your location.')}</Text>
       {focus && (
         <Text style={styles.coords}>
           {focus.lat.toFixed(5)}, {focus.lng.toFixed(5)}

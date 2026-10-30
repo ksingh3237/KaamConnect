@@ -2,7 +2,8 @@
 // jobs, workers, leads, money figures) is NOT here: it is fetched through api/endpoints.ts and held by the screens, and
 // who is signed in lives in store/useSession.ts. No mock data.
 import { create } from 'zustand';
-import { saveRole } from '../api/storage';
+import { saveLanguage, saveRole } from '../api/storage';
+import { setCurrentLanguage } from '../i18n';
 
 export type Language = 'en' | 'hi' | 'pa';
 export type UserRole = 'customer' | 'worker';
@@ -27,7 +28,8 @@ interface AppState {
   /** Why sharing is paused: the person turned the permission or the phone's location off (null when nothing is wrong). */
   trackingIssue: TrackingIssue | null;
 
-  setLanguage: (lang: Language) => void;
+  /** Switches every screen to `lang`. Remembered on the phone unless `remember` is false (restoring the saved one). */
+  setLanguage: (lang: Language, remember?: boolean) => void;
   setRole: (role: UserRole) => void;
   toggleRole: () => void;
   setMobile: (num: string) => void;
@@ -51,7 +53,11 @@ export const useStore = create<AppState>((set) => ({
   isTrackingActive: false,
   trackingIssue: null,
 
-  setLanguage: (lang) => set({ language: lang }),
+  setLanguage: (lang, remember = true) => {
+    setCurrentLanguage(lang); // first, so plain t() calls made during the re-render already use it
+    set({ language: lang });
+    if (remember) void saveLanguage(lang);
+  },
   // Remembered on the device so a restart (or a web reload) reopens the same side
   setRole: (role) => {
     set({ role });

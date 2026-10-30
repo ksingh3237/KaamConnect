@@ -14,7 +14,7 @@ import {
   Trash2
 } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../../constants/theme';
-import LanguageToggle from '../../components/LanguageToggle';
+import LanguageToggle, { LANGUAGE_NAMES } from '../../components/LanguageToggle';
 import { useStore } from '../../store/useStore';
 import { resetTo } from '../../utils/navigation';
 import { useSession } from '../../store/useSession';
@@ -24,10 +24,13 @@ import Avatar from '../../components/Avatar';
 import DeleteAccountModal from '../../components/DeleteAccountModal';
 import { ErrorBlock } from '../../components/StateBlocks';
 import { ProfileSavingsSkeleton } from '../../components/skeletons/ProfileSavingsSkeleton';
+import { useT } from '../../i18n/useT';
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const t = useT();
   const { role, setRole, language } = useStore();
+  const languageName = LANGUAGE_NAMES[language];
   const { me, user, signOut, customerProfile, workerProfile } = useSession();
   const isWorker = role === 'worker';
   const [signingOut, setSigningOut] = useState(false);
@@ -35,7 +38,7 @@ export default function ProfileScreen() {
   const savings = useAsync(() => getSavings(isWorker ? 'worker' : 'customer'), [isWorker]);
 
   const profile = isWorker ? workerProfile : customerProfile;
-  const displayName = profile?.fullName ?? (isWorker ? me?.worker?.fullName : me?.customer?.fullName) ?? 'Your name';
+  const displayName = profile?.fullName ?? (isWorker ? me?.worker?.fullName : me?.customer?.fullName) ?? t('Your name');
   const phone = (user?.phone ?? me?.phone ?? '').replace(/^\+91/, '+91 ');
   const primaryAddress = customerProfile?.addresses.find((a) => a.isPrimary) ?? customerProfile?.addresses[0];
   // A typed locality ("Sector 82 JLPL") wins over the area it is anchored to ("Other area")
@@ -65,8 +68,8 @@ export default function ProfileScreen() {
       {/* Header Bar */}
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Profile & Settings</Text>
-          <Text style={styles.headerSubtitle}>KaamConnect Direct Account</Text>
+          <Text style={styles.headerTitle}>{t('Profile & Settings')}</Text>
+          <Text style={styles.headerSubtitle}>{t('KaamConnect Direct Account')}</Text>
         </View>
         {/* Vernacular Mini Selector */}
         <LanguageToggle style={styles.langSelector} />
@@ -80,7 +83,7 @@ export default function ProfileScreen() {
             <View style={{ flex: 1 }}>
               <View style={styles.nameRow}>
                 <Text style={styles.userName}>
-                  {displayName} ({isWorker ? 'Worker' : 'Customer'})
+                  {displayName} ({isWorker ? t('Worker') : t('Customer')})
                 </Text>
                 {verified && <ShieldCheck color={Colors.primary} size={16} />}
               </View>
@@ -90,7 +93,7 @@ export default function ProfileScreen() {
               {isWorker && me?.worker && (
                 <View style={styles.aadhaarPill}>
                   <Text style={styles.aadhaarPillText}>
-                    {me.worker.verificationStatus === 'VERIFIED' ? 'Aadhaar Verified' : me.worker.verificationStatus === 'REJECTED' ? 'Verification rejected' : 'Verification pending'}
+                    {me.worker.verificationStatus === 'VERIFIED' ? t('Aadhaar Verified') : me.worker.verificationStatus === 'REJECTED' ? t('Verification rejected') : t('Verification pending')}
                   </Text>
                 </View>
               )}
@@ -102,9 +105,9 @@ export default function ProfileScreen() {
         {savings.loading ? <ProfileSavingsSkeleton /> : (
         <View style={styles.savingsBanner}>
           <View style={styles.savingsHeader}>
-            <Text style={styles.savingsTitle}>0% Commission Charter Savings</Text>
+            <Text style={styles.savingsTitle}>{t('0% Commission Charter Savings')}</Text>
             <View style={styles.savedPill}>
-              <Text style={styles.savedPillText}>TOTAL SAVED</Text>
+              <Text style={styles.savedPillText}>{t('TOTAL SAVED')}</Text>
             </View>
           </View>
           {savings.error && !savings.data ? (
@@ -114,8 +117,13 @@ export default function ProfileScreen() {
           )}
           <Text style={styles.savingsNote}>
             {savings.data
-              ? `Across ${savings.data.jobsCount} completed ${savings.data.jobsCount === 1 ? 'job' : 'jobs'}, compared with a typical ${Math.round(savings.data.benchmarkRate * 100)}% marketplace commission.`
-              : 'Money saved by connecting directly with local artisans without middleman commission!'}
+              ? savings.data.jobsCount === 1
+                ? t('Across 1 completed job, compared with a typical {rate}% marketplace commission.', { rate: Math.round(savings.data.benchmarkRate * 100) })
+                : t('Across {count} completed jobs, compared with a typical {rate}% marketplace commission.', {
+                    count: savings.data.jobsCount,
+                    rate: Math.round(savings.data.benchmarkRate * 100),
+                  })
+              : t('Money saved by connecting directly with local artisans without middleman commission!')}
           </Text>
         </View>
         )}
@@ -125,13 +133,13 @@ export default function ProfileScreen() {
           <View style={styles.toggleRow}>
             <View style={{ flex: 1, paddingRight: Spacing.sm }}>
               <Text style={styles.modeTitle}>
-                Active App Mode:{' '}
+                {t('Active App Mode:')}{' '}
                 <Text style={{ color: Colors.primary }}>
-                  {isWorker ? 'Worker Pro (कारीगर)' : 'Customer (ग्राहक)'}
+                  {isWorker ? t('Worker Pro') : t('Customer')}
                 </Text>
               </Text>
               <Text style={styles.modeSubtitle}>
-                Switch anytime between providing and ordering services
+                {t('Switch anytime between providing and ordering services')}
               </Text>
             </View>
             <TouchableOpacity
@@ -140,7 +148,7 @@ export default function ProfileScreen() {
               activeOpacity={0.8}
             >
               <RefreshCw color="#FFFFFF" size={13} />
-              <Text style={styles.switchBtnText}>Switch</Text>
+              <Text style={styles.switchBtnText}>{t('Switch')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -160,11 +168,11 @@ export default function ProfileScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.menuText}>
-                  {isWorker ? 'Shop / Workshop Address (दुकान का पता)' : 'Saved Tricity Addresses (पता प्रबंधन)'}
+                  {isWorker ? t('Shop / Workshop Address') : t('Saved Tricity Addresses')}
                 </Text>
                 {isWorker && (
                   <Text style={styles.menuSub} numberOfLines={2}>
-                    {workerProfile?.addressLine ?? 'Add your shop or home address / पता जोड़ें'}
+                    {workerProfile?.addressLine ?? t('Add your shop or home address')}
                   </Text>
                 )}
               </View>
@@ -183,7 +191,7 @@ export default function ProfileScreen() {
                 <Globe color={Colors.secondary} size={18} />
               </View>
               <Text style={styles.menuText}>
-                Language: <Text style={{ fontWeight: '800' }}>{language.toUpperCase()}</Text> (भाषा बदलें)
+                {t('Language:')} <Text style={{ fontWeight: '800' }}>{languageName}</Text>
               </Text>
             </View>
             <ChevronRight color="#94A3B8" size={18} />
@@ -199,7 +207,7 @@ export default function ProfileScreen() {
               <View style={[styles.menuIconBg, { backgroundColor: '#EDE9FE' }]}>
                 <Sparkles color="#8B5CF6" size={18} />
               </View>
-              <Text style={styles.menuText}>Welcome Highlights & Tutorial</Text>
+              <Text style={styles.menuText}>{t('Welcome Highlights & Tutorial')}</Text>
             </View>
             <ChevronRight color="#94A3B8" size={18} />
           </TouchableOpacity>
@@ -214,7 +222,7 @@ export default function ProfileScreen() {
               <View style={[styles.menuIconBg, { backgroundColor: '#FEE2E2' }]}>
                 <PhoneCall color={Colors.error} size={18} />
               </View>
-              <Text style={styles.menuText}>Emergency helpline (112)</Text>
+              <Text style={styles.menuText}>{t('Emergency helpline (112)')}</Text>
             </View>
             <ChevronRight color="#94A3B8" size={18} />
           </TouchableOpacity>
@@ -229,7 +237,7 @@ export default function ProfileScreen() {
           accessibilityRole="button"
         >
           <LogOut color={Colors.error} size={16} />
-          <Text style={styles.logoutBtnText}>{signingOut ? 'Logging out…' : 'Log Out of KaamConnect'}</Text>
+          <Text style={styles.logoutBtnText}>{signingOut ? t('Logging out…') : t('Log Out of KaamConnect')}</Text>
         </TouchableOpacity>
 
         {/* Delete account: a quieter, separate action (docs/08 section 1) */}
@@ -238,10 +246,10 @@ export default function ProfileScreen() {
           onPress={() => setDeleting(true)}
           activeOpacity={0.7}
           accessibilityRole="button"
-          accessibilityLabel="Delete my account"
+          accessibilityLabel={t('Delete my account')}
         >
           <Trash2 color={Colors.textMuted} size={14} />
-          <Text style={styles.deleteLinkText}>Delete my account / खाता हटाएं</Text>
+          <Text style={styles.deleteLinkText}>{t('Delete my account')}</Text>
         </TouchableOpacity>
 
         <DeleteAccountModal visible={deleting} onClose={() => setDeleting(false)} onDeleted={() => { setDeleting(false); resetTo('/'); }} />

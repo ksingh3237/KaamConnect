@@ -98,6 +98,8 @@ export const getJob = (id: string) => get<JobView>(`/jobs/${id}`);
 export const listOffers = (jobId: string, sort: 'fee' | 'eta' = 'fee') =>
   get<OfferForCustomer[]>(`/jobs/${jobId}/offers`, { query: { sort } });
 export const acceptOffer = (jobId: string, offerId: string) => post<JobView>(`/jobs/${jobId}/offers/${offerId}/accept`);
+/** Turns one waiting quote down; the worker is told and may quote again. */
+export const declineOffer = (jobId: string, offerId: string) => post<{ offerId: string; status: string }>(`/jobs/${jobId}/offers/${offerId}/decline`);
 /** One route for both people: the customer cancels, or the assigned worker backs out (the server decides by who owns the job). */
 export const cancelJob = (jobId: string, body: CancelBody = {}) => post<JobView>(`/jobs/${jobId}/cancel`, body);
 export const getTracking = (jobId: string) => get<Tracking>(`/jobs/${jobId}/tracking`);

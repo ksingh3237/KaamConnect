@@ -3,6 +3,7 @@
 import { Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import type { PickedFile } from '../api/upload';
+import { t } from '../i18n';
 
 const TYPE_BY_EXTENSION: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
 
@@ -23,14 +24,13 @@ function toPickedFile(result: ImagePicker.ImagePickerResult): PickedFile | null 
 // activities"), the launchers stop working until the app process restarts, and Expo reports a raw native exception.
 // Show a sentence the person can act on instead of that stack trace.
 const LAUNCHER_LOST = /unregistered ActivityResultLauncher/i;
-const RESTART_HINT =
-  'The camera could not open. Close KaamConnect completely (swipe it away in recent apps), open it again and retry. / ऐप को पूरी तरह बंद करके दोबारा खोलें';
 
 async function launching<T>(open: () => Promise<T>): Promise<T> {
   try {
     return await open();
   } catch (error) {
-    if (error instanceof Error && LAUNCHER_LOST.test(error.message)) throw new Error(RESTART_HINT);
+    if (error instanceof Error && LAUNCHER_LOST.test(error.message))
+      throw new Error(t('The camera could not open. Close KaamConnect completely (swipe it away in recent apps), open it again and retry.'));
     throw error;
   }
 }
@@ -40,7 +40,7 @@ export async function pickFromGallery(): Promise<PickedFile | null> {
   // chance for Android to recreate the Activity, see above). iOS keeps its permission step.
   if (Platform.OS !== 'android') {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) throw new Error('Allow access to your photos to choose a picture. / फ़ोटो तक पहुंच की अनुमति दें');
+    if (!permission.granted) throw new Error(t('Allow access to your photos to choose a picture.'));
   }
   return toPickedFile(
     await launching(() =>
@@ -55,7 +55,7 @@ export async function pickFromGallery(): Promise<PickedFile | null> {
 
 export async function captureFromCamera(): Promise<PickedFile | null> {
   const permission = await ImagePicker.requestCameraPermissionsAsync();
-  if (!permission.granted) throw new Error('Allow camera access to take a photo. / फ़ोटो खींचने के लिए कैमरे की अनुमति दें');
+  if (!permission.granted) throw new Error(t('Allow camera access to take a photo.'));
   return toPickedFile(await launching(() => ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: false, quality: 0.7 })));
 }
 

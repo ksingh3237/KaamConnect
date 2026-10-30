@@ -11,6 +11,7 @@
 // sound existed keep the old silent settings forever, so the loud channel is re-created under a new id and the old
 // one deleted. Changing the sound or the vibration again means another id (and the server's must match).
 import * as Notifications from 'expo-notifications';
+import { t } from '../i18n';
 
 export const DEFAULT_CHANNEL_ID = 'default';
 export const LEAD_CHANNEL_ID = 'new_leads_v2';
@@ -35,8 +36,8 @@ export async function ensureAndroidChannels(): Promise<void> {
     vibrationPattern: DEFAULT_VIBRATION,
   });
   await Notifications.setNotificationChannelAsync(LEAD_CHANNEL_ID, {
-    name: 'New job alerts',
-    description: 'Rings a bell and vibrates when a new job, a direct request or a confirmed booking arrives.',
+    name: t('New job alerts'),
+    description: t('Rings a bell and vibrates when a new job, a direct request or a confirmed booking arrives.'),
     importance: Notifications.AndroidImportance.MAX,
     sound: LEAD_SOUND_FILE,
     enableVibrate: true,

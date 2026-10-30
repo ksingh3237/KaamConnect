@@ -22,6 +22,7 @@ import { createJob, getCategories, getLocations } from "../../api/endpoints";
 import { isApiError, userMessage } from "../../api/errors";
 import { uploadFile, type PickedFile } from "../../api/upload";
 import { useImagePicker } from "../../components/ImageSourceModal";
+import { useImageViewer } from "../../components/ImageViewerModal";
 import type { CreateJobBody, JobTiming } from "../../api/types";
 import { ErrorBlock, LoadingBlock } from "../../components/StateBlocks";
 import GoogleLocationPicker, {
@@ -29,19 +30,25 @@ import GoogleLocationPicker, {
 } from "../../components/GoogleLocationPicker";
 import SectorPicker from "../../components/SectorPicker";
 import { isOtherArea } from "../../utils/sectors";
+import { pick } from "../../i18n";
+import { categoryExamples } from "../../i18n/categories";
+import { useLang, useT } from "../../i18n/useT";
 
 const MAX_PHOTOS = 4;
 /** Approximate width of one service pill plus the gap, used to scroll the chosen one into view. */
 const CAT_PILL_STEP = 190;
-const TIMINGS: { id: JobTiming; label: string }[] = [
-  { id: "IMMEDIATE", label: "Immediate (30m)" },
-  { id: "AFTERNOON", label: "Afternoon" },
-  { id: "TOMORROW", label: "Tomorrow" },
-];
 
 export default function PostJobScreen() {
   const router = useRouter();
+  const t = useT();
+  const lang = useLang();
+  const timings: { id: JobTiming; label: string }[] = [
+    { id: "IMMEDIATE", label: t("Immediate (30m)") },
+    { id: "AFTERNOON", label: t("Afternoon") },
+    { id: "TOMORROW", label: t("Tomorrow") },
+  ];
   const { pick: pickImage, modal: imageSourceModal } = useImagePicker();
+  const { show: viewImage, modal: imageViewer } = useImageViewer();
   const { selectedCategory, setSelectedCategory, setActiveJobId } = useStore();
   const { customerProfile } = useSession();
   const categories = useAsync(() => getCategories(), [], {
@@ -165,7 +172,7 @@ export default function PostJobScreen() {
       return;
     }
     if (!category) {
-      setFormError("Choose a service first. / पहले सेवा चुनें");
+      setFormError(t("Choose a service first."));
       return;
     }
     let jobAddress: Pick<CreateJobBody, "addressId" | "address">;
@@ -193,7 +200,7 @@ export default function PostJobScreen() {
       };
     } else {
       if (!address) {
-        setFormError("Add your address first. / पहले अपना पता जोड़ें");
+        setFormError(t("Add your address first."));
         router.push("/customer-onboarding");
         return;
       }
@@ -241,19 +248,17 @@ export default function PostJobScreen() {
         keyboardDismissMode="on-drag"
       >
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>
-            Post Job & Details / काम का विवरण
-          </Text>
+          <Text style={styles.headerTitle}>{t("Post Job & Details")}</Text>
           <Text style={styles.headerSub}>
-            Broadcast Direct to Tricity Workers • 0% Fee
+            {t("Broadcast Direct to Tricity Workers • 0% Fee")}
           </Text>
         </View>
 
         {/* Category Picker */}
         <View style={styles.card}>
-          <Text style={styles.label}>Service Type / सेवा का प्रकार *</Text>
+          <Text style={styles.label}>{t("Service Type")} *</Text>
           {categories.loading && (
-            <LoadingBlock label="Loading services… / सेवाएँ लोड हो रही हैं…" />
+            <LoadingBlock label={t("Loading services…")} />
           )}
           {categories.error && !categories.data && (
             <ErrorBlock
@@ -279,7 +284,7 @@ export default function PostJobScreen() {
                   activeOpacity={0.7}
                   accessibilityRole="button"
                   accessibilityState={{ selected: on }}
-                  accessibilityLabel={`${c.title.en}, ${c.title.hi}`}
+                  accessibilityLabel={pick(c.title, lang)}
                 >
                   <View
                     style={[styles.catPillIcon, { backgroundColor: c.bgColor }]}
@@ -293,9 +298,8 @@ export default function PostJobScreen() {
                         on && styles.catPillTextActive,
                       ]}
                     >
-                      {c.title.en}
+                      {pick(c.title, lang)}
                     </Text>
-                    <Text style={styles.catPillHi}>{c.title.hi}</Text>
                   </View>
                   {on && (
                     <View style={styles.catCheck}>
@@ -308,14 +312,15 @@ export default function PostJobScreen() {
           </ScrollView>
           {category && (
             <Text style={styles.catHint} numberOfLines={2}>
-              ₹{category.baseVisitFee} visit • {category.examples}
+              {t("Visit Fee Applicable")} •{" "}
+              {categoryExamples(category.id, category.examples, lang)}
             </Text>
           )}
         </View>
 
         {/* Problem Title */}
         <View style={styles.card}>
-          <Text style={styles.label}>Problem Heading / मुख्य समस्या *</Text>
+          <Text style={styles.label}>{t("Problem Heading")} *</Text>
           <TextInput
             style={[styles.textInput, titleError && styles.textInputError]}
             value={title}
@@ -323,28 +328,27 @@ export default function PostJobScreen() {
               setTitle(text);
               setTitleError(false);
             }}
-            placeholder="e.g. Geyser not turning on, Water pipe burst"
+            placeholder={t("e.g. Geyser not turning on, Water pipe burst")}
             placeholderTextColor={Colors.textSubtle}
           />
           {titleError && (
             <Text style={styles.errorText}>
-              Please describe the main problem / कृपया समस्या लिखें
+              {t("Please describe the main problem.")}
             </Text>
           )}
         </View>
 
         {/* Voice notes need a recorder that is not part of this build yet; the server supports them (JOB_VOICE). */}
         <View style={styles.voiceCard}>
-          <Text style={styles.voiceTitle}>🎙️ Voice Note (बोलकर बताएं)</Text>
+          <Text style={styles.voiceTitle}>🎙️ {t("Voice Note")}</Text>
           <Text style={styles.voiceSub}>
-            Voice notes are coming soon. For now, write the problem below or add
-            photos.
+            {t("Voice notes are coming soon. For now, write the problem below or add photos.")}
           </Text>
         </View>
 
         {/* Description */}
         <View style={styles.card}>
-          <Text style={styles.label}>Additional Details / अधिक जानकारी</Text>
+          <Text style={styles.label}>{t("Additional Details")}</Text>
           <TextInput
             style={[styles.textInput, { height: 96, textAlignVertical: "top" }]}
             multiline
@@ -355,7 +359,7 @@ export default function PostJobScreen() {
 
         {/* Attach Photos */}
         <View style={styles.card}>
-          <Text style={styles.label}>Attach Photos (फ़ोटो जोड़ें)</Text>
+          <Text style={styles.label}>{t("Attach Photos")}</Text>
           <View
             style={{
               flexDirection: "row",
@@ -370,7 +374,7 @@ export default function PostJobScreen() {
                 onPress={() => void handleAddPhoto()}
                 disabled={uploading}
                 accessibilityRole="button"
-                accessibilityLabel="Add a photo of the problem"
+                accessibilityLabel={t("Add a photo of the problem")}
               >
                 {uploading ? (
                   <ActivityIndicator color={Colors.primary} />
@@ -378,56 +382,69 @@ export default function PostJobScreen() {
                   <Camera color={Colors.primaryDark} size={24} />
                 )}
                 <Text style={styles.addPhotoText}>
-                  {uploading ? "Uploading…" : "Add photo"}
+                  {uploading ? t("Uploading…") : t("Add photo")}
                 </Text>
               </TouchableOpacity>
             )}
             {photos.map((p, i) => (
-              <TouchableOpacity
-                key={p.key ?? i}
-                onPress={() =>
-                  setPhotos((prev) => prev.filter((_, j) => j !== i))
-                }
-                activeOpacity={0.7}
-                accessibilityRole="button"
-                accessibilityLabel="Remove this photo"
-              >
-                <Image source={{ uri: p.file.uri }} style={styles.photoThumb} />
-                <View style={styles.removeBadge}>
+              // Tapping the picture opens it full screen; the small cross removes it
+              <View key={p.key ?? i}>
+                <TouchableOpacity
+                  onPress={() => viewImage(p.file.uri, t("Photo {number}", { number: i + 1 }))}
+                  activeOpacity={0.85}
+                  accessibilityRole="imagebutton"
+                  accessibilityLabel={t("View photo {number} full screen", { number: i + 1 })}
+                >
+                  <Image
+                    source={{ uri: p.file.uri }}
+                    style={styles.photoThumb}
+                    resizeMode="cover"
+                    accessibilityIgnoresInvertColors
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.removeBadge}
+                  onPress={() =>
+                    setPhotos((prev) => prev.filter((_, j) => j !== i))
+                  }
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("Remove photo {number}", { number: i + 1 })}
+                >
                   <X color="#FFFFFF" size={12} strokeWidth={3} />
-                </View>
-              </TouchableOpacity>
+                </TouchableOpacity>
+              </View>
             ))}
           </View>
           {photos.length > 0 && (
             <Text style={styles.helpText}>
-              Tap a photo to remove it. / फ़ोटो हटाने के लिए टैप करें
+              {t("Tap a photo to see it full screen; the cross removes it.")}
             </Text>
           )}
         </View>
 
         {/* Timing Selector */}
         <View style={styles.card}>
-          <Text style={styles.label}>Preferred Timing / कब चाहिए? *</Text>
+          <Text style={styles.label}>{t("Preferred Timing")} *</Text>
           <View style={styles.timingRow}>
-            {TIMINGS.map((t) => (
+            {timings.map((option) => (
               <TouchableOpacity
-                key={t.id}
+                key={option.id}
                 style={[
                   styles.timingBtn,
-                  timing === t.id && styles.timingBtnActive,
+                  timing === option.id && styles.timingBtnActive,
                 ]}
-                onPress={() => setTiming(t.id)}
+                onPress={() => setTiming(option.id)}
                 accessibilityRole="button"
-                accessibilityState={{ selected: timing === t.id }}
+                accessibilityState={{ selected: timing === option.id }}
               >
                 <Text
                   style={[
                     styles.timingText,
-                    timing === t.id && styles.timingTextActive,
+                    timing === option.id && styles.timingTextActive,
                   ]}
                 >
-                  {t.label}
+                  {option.label}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -436,7 +453,7 @@ export default function PostJobScreen() {
 
         {/* Job Location */}
         <View style={styles.card}>
-          <Text style={styles.label}>Job Location / काम का पता *</Text>
+          <Text style={styles.label}>{t("Job Location")} *</Text>
           <TouchableOpacity
             style={styles.radioRow}
             onPress={() => setAddressMode("PRIMARY")}
@@ -453,8 +470,8 @@ export default function PostJobScreen() {
             </View>
             <Text style={styles.radioText}>
               {address
-                ? `Use Primary Saved Address (${address.line}, ${address.area.name})`
-                : "Use Primary Saved Address (none saved yet — you will be asked to add one)"}
+                ? t("Use Primary Saved Address ({address})", { address: `${address.line}, ${address.area.name}` })
+                : t("Use Primary Saved Address (none saved yet; you will be asked to add one)")}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -472,8 +489,7 @@ export default function PostJobScreen() {
               {addressMode === "CUSTOM" && <View style={styles.radioDot} />}
             </View>
             <Text style={styles.radioText}>
-              Enter Different Job Location Address (e.g. at home while ordering
-              from office)
+              {t("Enter Different Job Location Address (e.g. at home while ordering from office)")}
             </Text>
           </TouchableOpacity>
 
@@ -488,7 +504,7 @@ export default function PostJobScreen() {
                 </View>
               )}
               <Text style={styles.subLabel}>
-                House / Flat / Street / मकान नंबर, गली *
+                {t("House / Flat / Street")} *
               </Text>
               <TextInput
                 style={[styles.textInput, lineError && styles.textInputError]}
@@ -497,22 +513,21 @@ export default function PostJobScreen() {
                   setCustomLine(text);
                   setLineError(false);
                 }}
-                placeholder="e.g. House 214, Street 5"
+                placeholder={t("e.g. House 214, Street 5")}
                 placeholderTextColor={Colors.textSubtle}
                 maxLength={200}
               />
               {lineError && (
                 <Text style={styles.errorText}>
-                  Enter the house / street address (at least 3 characters) /
-                  पूरा पता लिखें
+                  {t("Enter the house / street address (at least 3 characters).")}
                 </Text>
               )}
 
               <Text style={[styles.subLabel, { marginTop: 12 }]}>
-                Sector / Area • इलाका *
+                {t("Sector / Area")} *
               </Text>
               {locations.loading && (
-                <LoadingBlock label="Loading sectors… / सेक्टर लोड हो रहे हैं…" />
+                <LoadingBlock label={t("Loading sectors…")} />
               )}
               {locations.error && !locations.data && (
                 <ErrorBlock
@@ -530,12 +545,12 @@ export default function PostJobScreen() {
               )}
               {areaError && (
                 <Text style={styles.errorText}>
-                  Choose the sector / area / सेक्टर चुनें
+                  {t("Choose the sector / area.")}
                 </Text>
               )}
 
               <Text style={[styles.subLabel, { marginTop: 12 }]}>
-                Locality / Landmark (optional) / इलाका, लैंडमार्क
+                {t("Locality / Landmark (optional)")}
               </Text>
               <TextInput
                 style={[
@@ -547,13 +562,13 @@ export default function PostJobScreen() {
                   setCustomLocality(text);
                   setLocalityError(false);
                 }}
-                placeholder="e.g. Near Peer Muchalla temple"
+                placeholder={t("e.g. Near Peer Muchalla temple")}
                 placeholderTextColor={Colors.textSubtle}
                 maxLength={80}
               />
               {localityError && (
                 <Text style={styles.errorText}>
-                  Locality needs at least 2 characters, or leave it empty
+                  {t("Locality needs at least 2 characters, or leave it empty.")}
                 </Text>
               )}
             </View>
@@ -583,11 +598,12 @@ export default function PostJobScreen() {
             <Send color="#FFFFFF" size={18} />
           )}
           <Text style={styles.broadcastBtnText}>
-            {posting ? "Posting…" : "Broadcast Request to Nearby Pros (Free)"}
+            {posting ? t("Posting…") : t("Broadcast Request to Nearby Pros (Free)")}
           </Text>
         </TouchableOpacity>
       </ScrollView>
       {imageSourceModal}
+      {imageViewer}
     </SafeAreaView>
   );
 }

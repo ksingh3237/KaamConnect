@@ -6,7 +6,7 @@ import { getRefreshToken, hasTokens, onSessionEnded, restoreTokens, setTokens } 
 import { isApiError } from '../api/errors';
 import { getWidgetClient, isMsg91WidgetConfigured } from '../api/msg91';
 import type { CustomerView, MeView, OtpRequestResult, SessionUser, VerifyResult, WorkerView } from '../api/types';
-import { loadRole } from '../api/storage';
+import { loadLanguage, loadRole } from '../api/storage';
 import { resolveRole } from '../utils/session-routing';
 import { disconnectSocket } from '../api/socket';
 import { releaseOrphanedTask, stopTracking } from '../utils/workerTracking';
@@ -59,6 +59,24 @@ function endRealtime(): void {
 }
 
 export const useSession = create<SessionState>((set, get) => {
+  /**
+   * The server keeps the language too (users.language): it writes push notifications in it. The choice made on the
+   * phone is the newest one, so the account follows the phone, never the other way round (except on a phone that has
+   * never chosen: see bootstrap).
+   */
+  const saveLanguageOnAccount = (me: MeView | null) => {
+    const language = useStore.getState().language;
+    if (!me || me.language === language) return;
+    endpoints
+      .patchMe({ language })
+      .then((updated) => set((st) => (st.me ? { me: { ...st.me, language: updated.language } } : {})))
+      .catch(() => undefined); // best effort: tried again at the next sign-in or start
+  };
+  // Switching language anywhere in the app while signed in (Settings, the menu, the login switch)
+  useStore.subscribe((state, previous) => {
+    if (state.language !== previous.language && get().status === 'signedIn') saveLanguageOnAccount(get().me);
+  });
+
   /** Stores the tokens and signs in. Shared by every sign-in door so the steps (and their order) never differ. */
   const finishSignIn = async (result: VerifyResult) => {
     await setTokens({ accessToken: result.accessToken, refreshToken: result.refreshToken });
@@ -67,6 +85,7 @@ export const useSession = create<SessionState>((set, get) => {
     try {
       const me = await endpoints.getMe();
       set({ me, ...(await loadProfiles(me)) });
+      saveLanguageOnAccount(me); // the language picked before signing in
     } catch {
       /* the screens refetch; the login itself succeeded */
     }
@@ -108,6 +127,8 @@ export const useSession = create<SessionState>((set, get) => {
       set({ status: 'signedOut', user: null, me: null, customerProfile: null, workerProfile: null });
     });
     releaseOrphanedTask(); // a trip service from an earlier run must not keep sharing
+    const savedLanguage = await loadLanguage();
+    if (savedLanguage) useStore.getState().setLanguage(savedLanguage, false);
     const found = await restoreTokens();
     if (!found) {
       set({ status: 'signedOut' });
@@ -119,6 +140,8 @@ export const useSession = create<SessionState>((set, get) => {
       // Reopen the side used last time, but never one this person has no profile for (a worker-only account
       // must not land on the customer home after a restart, and the other way round)
       useStore.getState().setRole(resolveRole(await loadRole(), me.customer !== null, me.worker !== null));
+      // A phone that never chose (installed before the choice was remembered) takes the account's language
+      if (!savedLanguage && (me.language === 'en' || me.language === 'hi' || me.language === 'pa')) useStore.getState().setLanguage(me.language);
       set({
         status: 'signedIn',
         me,
@@ -126,6 +149,7 @@ export const useSession = create<SessionState>((set, get) => {
         user: { id: me.id, phone: me.phone, language: me.language, hasCustomerProfile: me.customer !== null, hasWorkerProfile: me.worker !== null },
       });
       void registerForPush(); // a restored login re-registers, so a rotated or lost token heals itself
+      saveLanguageOnAccount(me);
     } catch (error) {
       if (isApiError(error) && (error.code === 'NETWORK' || error.code === 'TIMEOUT')) {
         set({ status: 'unreachable' });

@@ -2,6 +2,7 @@
 // bottom sheet. The same look on Android, iOS and web: no browser window.alert/confirm popups, no platform Alert.
 import { Linking } from 'react-native';
 import { create } from 'zustand';
+import { t } from '../i18n';
 
 export interface DialogRequest {
   id: number;
@@ -39,18 +40,18 @@ export function notify(title: string, message: string): Promise<void> {
 }
 
 /** Resolves true only when the person confirms. */
-export function confirmAction(title: string, message: string, confirmLabel = 'OK', destructive = false): Promise<boolean> {
-  return new Promise((resolve) => useDialogs.getState().push({ title, message, confirmLabel, cancelLabel: 'Cancel', destructive, resolve }));
+export function confirmAction(title: string, message: string, confirmLabel = t('OK'), destructive = false): Promise<boolean> {
+  return new Promise((resolve) => useDialogs.getState().push({ title, message, confirmLabel, cancelLabel: t('Cancel'), destructive, resolve }));
 }
 
 /** Asks first, then opens the phone dialler. Calls go straight to the person: no commission, no middleman. */
 export async function callPhone(phone: string, name: string): Promise<void> {
   const number = phone.replace(/\s+/g, '');
-  const ok = await confirmAction('Direct phone call / सीधा कॉल', `Call ${name} at ${phone}?\n0% commission: you talk and pay directly.`, 'Call now');
+  const ok = await confirmAction(t('Direct phone call'), t('Call {name} at {phone}?\n0% commission: you talk and pay directly.', { name, phone }), t('Call now'));
   if (!ok) return;
   try {
     await Linking.openURL(`tel:${number}`);
   } catch {
-    await notify('Could not start the call', `Please dial ${phone} from your phone.`);
+    await notify(t('Could not start the call'), t('Please dial {phone} from your phone.', { phone }));
   }
 }

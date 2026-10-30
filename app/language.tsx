@@ -4,37 +4,29 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Wrench, Volume2, ChevronRight, Check, ArrowRight, ShieldCheck, Info } from 'lucide-react-native';
 import { useStore } from '../store/useStore';
-import { useSession } from '../store/useSession';
-import { patchMe } from '../api/endpoints';
 import { notify } from '../utils/dialog';
+import { useT } from '../i18n/useT';
 
 export default function LanguageScreen() {
   const router = useRouter();
   const { language, setLanguage } = useStore();
-  const signedIn = useSession((st) => st.status === 'signedIn');
+  const t = useT();
   const insets = useSafeAreaInsets();
   // 'app' when opened from Profile or the Home menu by a signed-in user
   const { from } = useLocalSearchParams<{ from?: string }>();
 
   const handleContinue = () => {
     if (from === 'app' && router.canGoBack()) {
-      // Remember the choice on the account too (best effort: the app already switched)
-      if (signedIn) patchMe({ language }).catch(() => undefined);
-      router.back();
+      router.back(); // the account follows the new language by itself (store/useSession.ts)
     } else {
       router.push('/login');
     }
   };
 
   const handleSpeaker = () => {
-    void notify('Audio help / आवाज़ सहायता', 'Spoken instructions are coming soon. / बोलकर निर्देश जल्द आ रहे हैं।');
+    void notify(t('Audio help'), t('Spoken instructions are coming soon.'));
   };
 
-  const ctaLabels = {
-    en: "Continue in English • Continue",
-    hi: "Continue in Selected Language • आगे बढ़ें",
-    pa: "ਪੰਜਾਬੀ ਵਿੱਚ ਅੱਗੇ ਵਧੋ • ਅੱਗੇ ਵਧੋ"
-  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -50,7 +42,7 @@ export default function LanguageScreen() {
                 <Text style={styles.brandTitle}>
                   Kaam<Text style={{ color: '#00b074' }}>Connect</Text>
                 </Text>
-                <Text style={styles.brandSubtitle}>DIRECT MARKETPLACE</Text>
+                <Text style={styles.brandSubtitle}>{t('DIRECT MARKETPLACE')}</Text>
               </View>
             </View>
 
@@ -69,10 +61,9 @@ export default function LanguageScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <Text style={styles.audioTitle}>Tap speaker to hear instructions</Text>
+                  <Text style={styles.audioTitle}>{t('Tap speaker to hear instructions')}</Text>
                   <Text style={{ fontSize: 14 }}>🔊</Text>
                 </View>
-                <Text style={styles.audioSub}>बोलकर सुनने के लिए टैप करें • ਸੁਣਨ ਲਈ ਦਬਾਓ</Text>
               </View>
             </View>
             <ChevronRight color="#059669" size={20} strokeWidth={2.5} />
@@ -80,12 +71,11 @@ export default function LanguageScreen() {
 
           {/* Main Title & Subtitle Section */}
           <View style={styles.titleSection}>
-            <Text style={styles.titleMain}>Choose Your Language</Text>
-            <Text style={styles.titleVernacular}>अपनी भाषा चुनें • ਆਪਣੀ ਬੋਲੀ ਚੁਣੋ</Text>
+            <Text style={styles.titleMain}>{t('Choose Your Language')}</Text>
             <View style={styles.infoRow}>
               <Info color="#6c7a70" size={15} strokeWidth={2} />
               <Text style={styles.infoText}>
-                You can change this anytime from Settings (सेटिंग्स से कभी भी बदल सकते हैं)
+                {t('You can change this anytime from Settings.')}
               </Text>
             </View>
           </View>
@@ -200,7 +190,7 @@ export default function LanguageScreen() {
           <View style={styles.assuranceWrap}>
             <ShieldCheck color="#00b074" size={16} />
             <Text style={styles.assuranceText}>
-              100% Free Direct Connect • ਕੋਈ ਕਮਿਸ਼ਨ ਨਹੀਂ • शून्य कमीशन
+              {t('100% Free Direct Connect • 0% commission')}
             </Text>
           </View>
 
@@ -209,7 +199,7 @@ export default function LanguageScreen() {
             onPress={handleContinue}
             activeOpacity={0.9}
           >
-            <Text style={styles.primaryBtnText}>{ctaLabels[language]}</Text>
+            <Text style={styles.primaryBtnText}>{t('Continue')}</Text>
             <ArrowRight color="#FFFFFF" size={22} strokeWidth={2.5} />
           </TouchableOpacity>
         </View>

@@ -22,20 +22,13 @@ import { timeAgo } from '../utils/time';
 import { AT_THE_DOOR_KM, trackingPill, type RoadTrip } from '../utils/trip';
 import { buzz } from '../utils/alerts';
 import { jobStep } from '../utils/jobStep';
+import { categoryTitle } from '../i18n/categories';
+import { useLang, useT } from '../i18n/useT';
 
 const POLL_MS = 6000; // REST polling while the socket is down: the customer still sees the worker move
 const POLL_SOCKET_UP_MS = 20000; // with a live socket, polling is only a safety net for status changes
 const STALE_MS = 2 * 60 * 1000; // same as the server: an older fix is shown as "last seen"
 
-const STATUS_LABEL: Record<string, string> = {
-  OPEN: 'WAITING FOR THE WORKER',
-  ASSIGNED: 'WORKER ON THE WAY',
-  ARRIVED: 'WORKER HAS ARRIVED',
-  IN_PROGRESS: 'WORK IN PROGRESS',
-  WORK_COMPLETED: 'WORK DONE • BILL READY',
-  COMPLETED: 'JOB COMPLETED',
-  CANCELLED: 'JOB CANCELLED',
-};
 
 interface Loaded {
   job: JobView;
@@ -44,6 +37,17 @@ interface Loaded {
 
 export default function TrackingScreen() {
   const router = useRouter();
+  const t = useT();
+  const lang = useLang();
+  const statusLabel: Record<string, string> = {
+    OPEN: t('WAITING FOR THE WORKER'),
+    ASSIGNED: t('WORKER ON THE WAY'),
+    ARRIVED: t('WORKER HAS ARRIVED'),
+    IN_PROGRESS: t('WORK IN PROGRESS'),
+    WORK_COMPLETED: t('WORK DONE • BILL READY'),
+    COMPLETED: t('JOB COMPLETED'),
+    CANCELLED: t('JOB CANCELLED'),
+  };
   const insets = useSafeAreaInsets();
   const { activeJobId } = useStore();
   const [sosBusy, setSosBusy] = useState(false);
@@ -51,6 +55,7 @@ export default function TrackingScreen() {
   const [road, setRoad] = useState<RoadTrip | null>(null); // what the map's road route says, which beats the straight line
   const [socketUp, setSocketUp] = useState(isSocketConnected());
   const [resetting, setResetting] = useState(false);
+  const [collapsed, setCollapsed] = useState(false); // the person pulled the card down to see the whole map
   const { cancel, busy: cancelling, modal: cancelModal } = useCancelJob('CUSTOMER');
   const lastStatus = useRef<string | null>(null);
   const doorBuzzed = useRef(false);
@@ -113,7 +118,7 @@ export default function TrackingScreen() {
   const status = tracking?.status ?? job?.status ?? 'OPEN';
   const pill =
     trackingPill({ status, hasLocation: fix !== null, stale, etaMinutes: eta, distanceKm: away, lastSeen: fix ? timeAgo(fix.updatedAt) : undefined }) ||
-    (STATUS_LABEL[status] ?? '');
+    (statusLabel[status] ?? '');
 
   // The job moved on while the customer was reading this screen (socket or poll): buzz, so it is not missed with the
   // phone on the table. The screen itself already shows the change; this is only the nudge to look at it.
@@ -140,9 +145,9 @@ export default function TrackingScreen() {
   const handleSos = async () => {
     if (!activeJobId || sosBusy) return;
     const ok = await confirmAction(
-      '🚨 Emergency SOS',
-      'This sends an alert to the KaamConnect safety desk with your job details and location. Use it only in an emergency. Send it now?',
-      'Send SOS',
+      `🚨 ${t('Emergency SOS')}`,
+      t('This sends an alert to the KaamConnect safety desk with your job details and location. Use it only in an emergency. Send it now?'),
+      t('Send SOS'),
       true,
     );
     if (!ok) return;
@@ -153,18 +158,18 @@ export default function TrackingScreen() {
       const result = await raiseSos(activeJobId, position);
       if (result.delivered) {
         notify(
-          result.repeated ? 'SOS already sent' : 'SOS sent',
-          'The safety desk has received your alert. If you are in danger, call 112 now.',
+          result.repeated ? t('SOS already sent') : t('SOS sent'),
+          t('The safety desk has received your alert. If you are in danger, call 112 now.'),
         );
       } else {
         // Stored on our side but the desk has not confirmed yet; the server keeps retrying by itself.
         notify(
-          'SOS saved, not confirmed yet',
-          'Your alert is saved and we keep trying to reach the safety desk. This is not confirmed yet. If you are in danger, call 112 now.',
+          t('SOS saved, not confirmed yet'),
+          t('Your alert is saved and we keep trying to reach the safety desk. This is not confirmed yet. If you are in danger, call 112 now.'),
         );
       }
     } catch (error) {
-      notify('SOS could not be sent', userMessage(error) + '\n\nIf you are in danger, call 112 now.');
+      notify(t('SOS could not be sent'), `${userMessage(error)}\n\n${t('If you are in danger, call 112 now.')}`);
     } finally {
       setSosBusy(false);
     }
@@ -177,9 +182,9 @@ export default function TrackingScreen() {
     try {
       await resetArrivalCode(activeJobId);
       await state.reload();
-      void notify('New code issued', 'Share the new code with your worker when they arrive. The old one no longer works.');
+      void notify(t('New code issued'), t('Share the new code with your worker when they arrive. The old one no longer works.'));
     } catch (error) {
-      void notify('Could not issue a new code', userMessage(error));
+      void notify(t('Could not issue a new code'), userMessage(error));
       await state.reload();
     } finally {
       setResetting(false);
@@ -202,7 +207,7 @@ export default function TrackingScreen() {
 
   const handleCall = () => {
     const phone = tracking?.worker?.phone ?? worker?.phone;
-    if (phone) void callPhone(phone, worker?.name ?? 'your worker');
+    if (phone) void callPhone(phone, worker?.name ?? t('your worker'));
   };
 
   return (
@@ -214,7 +219,7 @@ export default function TrackingScreen() {
         destination={destination}
         vehicle={tracking?.worker?.vehicle ?? worker?.vehicle}
         onTrip={setRoad}
-        padding={{ top: insets.top + 110, right: 50, bottom: 220, left: 50 }}
+        padding={{ top: insets.top + 110, right: 50, bottom: collapsed ? 110 : 220, left: 50 }}
       />
 
       {/* Floating Header */}
@@ -223,14 +228,14 @@ export default function TrackingScreen() {
           style={styles.backBtn}
           onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/home')}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={t('Go back')}
         >
           <ArrowLeft color={Colors.textMain} size={20} />
         </TouchableOpacity>
         <View style={styles.livePill}>
-          <Text style={styles.livePillText}>• {job ? STATUS_LABEL[job.status] ?? job.status : 'TRACKER'}</Text>
+          <Text style={styles.livePillText}>• {job ? statusLabel[job.status] ?? job.status : t('TRACKER')}</Text>
         </View>
-        <TouchableOpacity style={[styles.sosBtn, (sosBusy || !activeJobId) && { opacity: 0.6 }]} onPress={() => void handleSos()} disabled={sosBusy || !activeJobId} accessibilityRole="button" accessibilityLabel="Emergency SOS">
+        <TouchableOpacity style={[styles.sosBtn, (sosBusy || !activeJobId) && { opacity: 0.6 }]} onPress={() => void handleSos()} disabled={sosBusy || !activeJobId} accessibilityRole="button" accessibilityLabel={t('Emergency SOS')}>
           <AlertTriangle color="#FFFFFF" size={18} />
         </TouchableOpacity>
       </View>
@@ -243,31 +248,40 @@ export default function TrackingScreen() {
       ) : null}
 
       {/* Technician Bottom Drawer Card */}
-      <View style={[styles.bottomDrawer, { paddingBottom: Math.max(insets.bottom, 24) }]}>
-        <View style={styles.drawerHandle} />
-
-        {state.loading && <LoadingBlock label="Loading your job… / जॉब लोड हो रहा है…" />}
+      <View style={[styles.bottomDrawer, { paddingBottom: Math.max(insets.bottom, 24) }, collapsed && styles.drawerCollapsed]}>
+        {/* Pulled down, the card leaves the whole map visible; the handle brings it back */}
+        <TouchableOpacity
+          style={styles.drawerToggle}
+          onPress={() => setCollapsed((c) => !c)}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={collapsed ? t('Show the job details') : t('Hide the job details and see the whole map')}
+        >
+          <View style={styles.drawerHandle} />
+          <Text style={styles.drawerToggleText}>{collapsed ? t('Show details ▲') : t('Hide for a bigger map ▼')}</Text>
+        </TouchableOpacity>
+        {state.loading && <LoadingBlock label={t('Loading your job…')} />}
         {state.error && !state.data && <ErrorBlock message={state.error} onRetry={() => void state.reload()} />}
-        {!activeJobId && <EmptyBlock title="No job selected" hint="Book a pro or accept a quote first. / पहले बुक करें" />}
+        {!activeJobId && <EmptyBlock title={t('No job selected')} hint={t('Book a pro or accept a quote first.')} />}
         {job && cancelled && (
           <>
             <EmptyBlock title={cancelledHeadline(job, 'customer')} hint={[cancelledReason(job), visitFeeNotice(job, 'customer')].filter(Boolean).join('\n')} />
             <TouchableOpacity style={styles.standaloneBtn} onPress={() => router.replace('/(tabs)/home')} accessibilityRole="button">
-              <Text style={styles.standaloneBtnText}>Back to home</Text>
+              <Text style={styles.standaloneBtnText}>{t('Back to home')}</Text>
             </TouchableOpacity>
           </>
         )}
         {/* The worker backed out of a broadcast request: it is open again, so the next step is choosing another quote */}
         {reopened && (
           <>
-            <EmptyBlock title="Your worker had to cancel" hint="Your request is open again so other workers can quote. Choose a new quote to continue." />
+            <EmptyBlock title={t('Your worker had to cancel')} hint={t('Your request is open again so other workers can quote. Choose a new quote to continue.')} />
             <TouchableOpacity style={styles.standaloneBtn} onPress={() => router.replace('/compare-offers')} accessibilityRole="button">
-              <Text style={styles.standaloneBtnText}>View quotes</Text>
+              <Text style={styles.standaloneBtnText}>{t('View quotes')}</Text>
             </TouchableOpacity>
           </>
         )}
         {job && !cancelled && !reopened && !worker && (
-          <EmptyBlock title="Waiting for the worker to accept" hint="You will see the worker here as soon as they accept. This page refreshes by itself." />
+          <EmptyBlock title={t('Waiting for the worker to accept')} hint={t('You will see the worker here as soon as they accept. This page refreshes by itself.')} />
         )}
         {showWorker && job && worker && (
           <>
@@ -281,13 +295,13 @@ export default function TrackingScreen() {
                     <Text>🛡️</Text>
                   </View>
                   {worker.vehicle ? <Text style={styles.vehicleText}>{worker.vehicle}</Text> : null}
-                  <Text style={styles.workerSub}>{worker.trade} • Aadhaar Verified</Text>
+                  <Text style={styles.workerSub}>{categoryTitle(worker.tradeId, worker.trade, lang)} • {t('Aadhaar Verified')}</Text>
                 </View>
               </View>
 
               {job.arrivalCode ? (
                 <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={styles.codeLabel}>Arrival Code</Text>
+                  <Text style={styles.codeLabel}>{t('Arrival Code')}</Text>
                   <Text style={styles.codeNumber}>{job.arrivalCode}</Text>
                 </View>
               ) : null}
@@ -296,7 +310,7 @@ export default function TrackingScreen() {
             {job.arrivalCode ? (
               <View style={styles.noticeBox}>
                 <Text style={styles.noticeText}>
-                  Share arrival code <Text style={{ fontWeight: '800' }}>{job.arrivalCode}</Text> with worker upon entry.
+                  {t('Share this arrival code with your worker when they arrive:')} <Text style={{ fontWeight: '800' }}>{job.arrivalCode}</Text>
                 </Text>
               </View>
             ) : null}
@@ -304,13 +318,13 @@ export default function TrackingScreen() {
             {/* Five wrong codes lock the worker out: a new code unlocks them */}
             {job.arrivalLocked ? (
               <View style={styles.lockedBox} accessibilityRole="alert">
-                <Text style={styles.lockedText}>Your worker entered a wrong code too many times and is locked out.</Text>
+                <Text style={styles.lockedText}>{t('Your worker entered a wrong code too many times and is locked out.')}</Text>
                 {(job.arrivalResetsLeft ?? 0) > 0 ? (
                   <TouchableOpacity style={[styles.newCodeBtn, resetting && { opacity: 0.6 }]} onPress={() => void handleNewCode()} disabled={resetting} accessibilityRole="button">
-                    <Text style={styles.newCodeText}>{resetting ? 'Issuing…' : `Issue a new code (${job.arrivalResetsLeft} left)`}</Text>
+                    <Text style={styles.newCodeText}>{resetting ? t('Issuing…') : t('Issue a new code ({count} left)', { count: job.arrivalResetsLeft ?? 0 })}</Text>
                   </TouchableOpacity>
                 ) : (
-                  <Text style={styles.lockedText}>No new codes can be issued for this job. Call the worker, or cancel the job below.</Text>
+                  <Text style={styles.lockedText}>{t('No new codes can be issued for this job. Call the worker, or cancel the job below.')}</Text>
                 )}
               </View>
             ) : null}
@@ -321,11 +335,11 @@ export default function TrackingScreen() {
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <TouchableOpacity style={styles.callBtn} onPress={handleCall}>
               <Phone color="#FFFFFF" size={16} />
-              <Text style={styles.callBtnText}>Call Worker</Text>
+              <Text style={styles.callBtnText}>{t('Call Worker')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.progressBtn} onPress={() => router.push('/job-progress')}>
-              <Text style={styles.progressBtnText}>Job Progress →</Text>
+              <Text style={styles.progressBtnText}>{t('Job Progress →')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -333,7 +347,7 @@ export default function TrackingScreen() {
         {/* Cancel while the worker is on the way, or decline the cost once they are on site (not possible after approving it) */}
         {showWorker && job && (job.status === 'ASSIGNED' || job.status === 'ARRIVED') && (
           <TouchableOpacity style={[styles.cancelLink, cancelling && { opacity: 0.6 }]} onPress={handleCancel} disabled={cancelling} accessibilityRole="button">
-            <Text style={styles.cancelLinkText}>{cancelling ? 'Cancelling…' : job.status === 'ARRIVED' ? 'Decline the cost and cancel / रद्द करें' : 'Cancel this job / जॉब रद्द करें'}</Text>
+            <Text style={styles.cancelLinkText}>{cancelling ? t('Cancelling…') : job.status === 'ARRIVED' ? t('Decline the cost and cancel') : t('Cancel this job')}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -415,13 +429,29 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     elevation: 10
   },
+  // Collapsed, only the toggle row is left on screen; the rest is clipped away
+  drawerCollapsed: {
+    maxHeight: 74,
+    overflow: 'hidden'
+  },
+  drawerToggle: {
+    alignItems: 'center',
+    gap: 6,
+    paddingBottom: 6,
+    minHeight: 44
+  },
+  drawerToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.textMuted
+  },
   drawerHandle: {
     width: 36,
     height: 4,
     backgroundColor: '#CBD5E1',
     borderRadius: 2,
     alignSelf: 'center',
-    marginBottom: 12
+    marginBottom: 4
   },
   drawerHeader: {
     flexDirection: 'row',

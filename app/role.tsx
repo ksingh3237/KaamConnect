@@ -5,11 +5,13 @@ import { useRouter } from 'expo-router';
 import { ShieldCheck, UserSearch, Wrench, Check, ArrowRight, RefreshCw, BadgeInfo, Zap, CircleDollarSign, Verified, UserCog } from 'lucide-react-native';
 import LanguageToggle, { FULL_LANG_LABELS } from '../components/LanguageToggle';
 import { useStore } from '../store/useStore';
+import { useT } from '../i18n/useT';
 
 const LANG_LABELS = { ...FULL_LANG_LABELS, en: 'ENG' };
 
 export default function RoleScreen() {
   const router = useRouter();
+  const t = useT();
   const insets = useSafeAreaInsets();
   const { role, setRole } = useStore();
 
@@ -33,7 +35,7 @@ export default function RoleScreen() {
             <Text style={styles.headerBrand}>KaamConnect</Text>
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 4, marginTop: 2 }}>
               <View style={styles.tricityDot} />
-              <Text style={styles.headerSub}>Tricity • Chandigarh • Mohali • Panchkula</Text>
+              <Text style={styles.headerSub}>{t('Tricity • Chandigarh • Mohali • Panchkula')}</Text>
             </View>
           </View>
         </View>
@@ -46,16 +48,11 @@ export default function RoleScreen() {
         <View style={styles.titleSection}>
           <View style={styles.stepBadge}>
             <BadgeInfo color="#006c46" size={14} strokeWidth={2.5} />
-            <Text style={styles.stepBadgeText}>Step 1 of 2 • भूमिका चयन</Text>
+            <Text style={styles.stepBadgeText}>{t('Step 1 of 2 • Choose your role')}</Text>
           </View>
-          <Text style={styles.mainTitle}>
-            How will you use KaamConnect?
-          </Text>
-          <Text style={styles.mainTitleHindi}>
-            आप ऐप का उपयोग कैसे करेंगे?
-          </Text>
+          <Text style={styles.mainTitle}>{t('How will you use KaamConnect?')}</Text>
           <Text style={styles.subTitle}>
-            Choose your primary role. You can switch between modes anytime from your profile.
+            {t('Choose your primary role. You can switch between modes anytime from your profile.')}
           </Text>
         </View>
 
@@ -73,9 +70,8 @@ export default function RoleScreen() {
                   <UserSearch color="#006398" size={28} strokeWidth={1.5} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.cardTag, { color: '#006398' }]}>Customer / ग्राहक</Text>
-                  <Text style={styles.cardTitle}>I Need a Service</Text>
-                  <Text style={styles.cardSubtitle}>मुझे काम करवाना है</Text>
+                  <Text style={[styles.cardTag, { color: '#006398' }]}>{t('Customer')}</Text>
+                  <Text style={styles.cardTitle}>{t('I Need a Service')}</Text>
                 </View>
               </View>
 
@@ -88,7 +84,7 @@ export default function RoleScreen() {
               <View style={[styles.highlightBadge, { backgroundColor: '#f0f3ff' }]}>
                 <Zap color="#006398" size={14} strokeWidth={2} />
                 <Text style={[styles.highlightBadgeText, { color: '#006398' }]}>
-                  Find Electrician, Plumber, Cleaner & more
+                  {t('Find Electrician, Plumber, Cleaner & more')}
                 </Text>
               </View>
             </View>
@@ -96,15 +92,15 @@ export default function RoleScreen() {
             <View style={styles.benefitsList}>
               <View style={styles.benefitItem}>
                 <ShieldCheck color="#00b074" size={16} strokeWidth={2} />
-                <Text style={styles.benefitText}>Post free jobs & get fast Tricity responses</Text>
+                <Text style={styles.benefitText}>{t('Post free jobs & get fast Tricity responses')}</Text>
               </View>
               <View style={styles.benefitItem}>
                 <ShieldCheck color="#00b074" size={16} strokeWidth={2} />
-                <Text style={styles.benefitText}>Receive competitive worker bids with verified ratings</Text>
+                <Text style={styles.benefitText}>{t('Receive competitive worker bids with verified ratings')}</Text>
               </View>
               <View style={styles.benefitItem}>
                 <ShieldCheck color="#00b074" size={16} strokeWidth={2} />
-                <Text style={styles.benefitText}>0% commission • Pay worker directly via Cash / UPI</Text>
+                <Text style={styles.benefitText}>{t('0% commission • Pay worker directly via Cash / UPI')}</Text>
               </View>
             </View>
           </TouchableOpacity>
@@ -118,7 +114,7 @@ export default function RoleScreen() {
             {/* Ambient Recommended Tag */}
             <View style={styles.recBadge}>
               <Verified color="#ffffff" size={12} strokeWidth={2.5} />
-              <Text style={styles.recBadgeText}>Recommended</Text>
+              <Text style={styles.recBadgeText}>{t('Recommended')}</Text>
             </View>
 
             <View style={styles.cardHeader}>
@@ -127,9 +123,8 @@ export default function RoleScreen() {
                   <Wrench color="#ffffff" size={26} strokeWidth={1.5} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.cardTag, { color: '#006c46' }]}>Worker / Skilled Professional (कारीगर)</Text>
-                  <Text style={styles.cardTitle}>I Provide a Service</Text>
-                  <Text style={styles.cardSubtitle}>मैं कारीगर / काम करता हूँ</Text>
+                  <Text style={[styles.cardTag, { color: '#006c46' }]}>{t('Worker / Skilled Professional')}</Text>
+                  <Text style={styles.cardTitle}>{t('I Provide a Service')}</Text>
                 </View>
               </View>
 
@@ -142,7 +137,7 @@ export default function RoleScreen() {
               <View style={[styles.highlightBadge, { backgroundColor: 'rgba(115, 251, 184, 0.3)', borderColor: 'rgba(0, 176, 116, 0.3)', borderWidth: 1 }]}>
                 <CircleDollarSign color="#006c46" size={14} strokeWidth={2} />
                 <Text style={[styles.highlightBadgeText, { color: '#003a23' }]}>
-                  0% Commission • 100% सीधा मुनाफा
+                  {t('0% Commission • 100% direct profit')}
                 </Text>
               </View>
             </View>
@@ -150,15 +145,15 @@ export default function RoleScreen() {
             <View style={styles.benefitsList}>
               <View style={styles.benefitItem}>
                 <ShieldCheck color="#00b074" size={16} strokeWidth={2} />
-                <Text style={[styles.benefitText, { color: '#111c2d', fontWeight: '500' }]}>Get direct local customer leads in Chandigarh Tricity</Text>
+                <Text style={[styles.benefitText, { color: '#111c2d', fontWeight: '500' }]}>{t('Get direct local customer leads in Chandigarh Tricity')}</Text>
               </View>
               <View style={styles.benefitItem}>
                 <ShieldCheck color="#00b074" size={16} strokeWidth={2} />
-                <Text style={[styles.benefitText, { color: '#111c2d', fontWeight: '500' }]}>Keep 100% of your earnings • Set your own price</Text>
+                <Text style={[styles.benefitText, { color: '#111c2d', fontWeight: '500' }]}>{t('Keep 100% of your earnings • Set your own price')}</Text>
               </View>
               <View style={styles.benefitItem}>
                 <ShieldCheck color="#00b074" size={16} strokeWidth={2} />
-                <Text style={[styles.benefitText, { color: '#111c2d', fontWeight: '500' }]}>Direct customer calling with no middleman cuts</Text>
+                <Text style={[styles.benefitText, { color: '#111c2d', fontWeight: '500' }]}>{t('Direct customer calling with no middleman cuts')}</Text>
               </View>
             </View>
           </TouchableOpacity>
@@ -169,19 +164,19 @@ export default function RoleScreen() {
       <View style={[styles.footerWrap, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <TouchableOpacity style={styles.primaryBtn} onPress={handleContinue} activeOpacity={0.9}>
           <Text style={styles.primaryBtnText}>
-            Continue as {role === 'worker' ? 'Worker' : 'Customer'} • आगे बढ़ें
+            {role === 'worker' ? t('Continue as Worker') : t('Continue as Customer')}
           </Text>
           <ArrowRight color="#ffffff" size={20} strokeWidth={2.5} />
         </TouchableOpacity>
 
         <View style={styles.reassuranceNote}>
           <RefreshCw color="#00b074" size={16} strokeWidth={2} />
-          <Text style={styles.reassuranceText}>Toggle freely between Worker and Customer mode anytime</Text>
+          <Text style={styles.reassuranceText}>{t('Toggle freely between Worker and Customer mode anytime')}</Text>
         </View>
 
         <View style={styles.trustStamp}>
           <Verified color="#006c46" size={14} strokeWidth={2} />
-          <Text style={styles.trustStampText}>Aadhaar-verified & trusted community in Chandigarh, Mohali & Panchkula</Text>
+          <Text style={styles.trustStampText}>{t('Aadhaar-verified & trusted community in Chandigarh, Mohali & Panchkula')}</Text>
         </View>
       </View>
     </SafeAreaView>

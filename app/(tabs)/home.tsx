@@ -18,21 +18,12 @@ import { notify } from '../../utils/dialog';
 import AppMenu from '../../components/AppMenu';
 import WorkerHome from '../../components/WorkerHome';
 import NotificationBell from '../../components/NotificationBell';
+import IncomingOffers from '../../components/IncomingOffers';
+import { useT } from '../../i18n/useT';
 
 /** How many services Home shows before "View all" (searching shows every match). */
 const HOME_SERVICES = 6;
 
-const STEPS = [
-  { icon: ClipboardList, title: 'Select a service or post your job', hi: 'सेवा चुनें या काम पोस्ट करें' },
-  { icon: PhoneCall, title: 'Get direct calls & quotes from nearby mistris', hi: 'आस-पास के मिस्त्री से सीधे कोट पाएं' },
-  { icon: Wallet, title: 'Pay the worker directly by cash or UPI (0% commission)', hi: 'सीधे कैश/UPI से भुगतान करें' },
-];
-
-const TRUST = [
-  { icon: ShieldCheck, title: 'Aadhaar verified workers', hi: 'आधार सत्यापित कारीगर', color: '#7C3AED', bg: '#F3E8FF' },
-  { icon: Zap, title: '15 min arrival in Chandigarh, Mohali & Panchkula', hi: 'ट्राईसिटी में 15 मिनट में पहुंच', color: '#D97706', bg: '#FEF3C7' },
-  { icon: BadgeIndianRupee, title: '100% direct P2P payment', hi: 'पूरा पैसा सीधे कारीगर को', color: '#047857', bg: '#D1FAE5' },
-];
 
 /** Home is the customer marketplace or the worker's dashboard, by the role in use. */
 export default function HomeScreen() {
@@ -45,7 +36,8 @@ function CustomerHome() {
   const { selectedSector, setSelectedCategory } = useStore();
   const { customerProfile } = useSession();
   const primaryAddress = customerProfile?.addresses.find((a) => a.isPrimary) ?? customerProfile?.addresses[0] ?? null;
-  const sectorLabel = selectedSector || (primaryAddress ? `${primaryAddress.locality ?? primaryAddress.area.name}, ${primaryAddress.city.name.replace(/\s*\(.*\)/, '')}` : 'Choose your sector');
+  const t = useT();
+  const sectorLabel = selectedSector || (primaryAddress ? `${primaryAddress.locality ?? primaryAddress.area.name}, ${primaryAddress.city.name.replace(/\s*\(.*\)/, '')}` : t('Choose your sector'));
   const categories = useAsync(() => getCategories(), [], { reloadOnFocus: false });
   const [query, setQuery] = useState('');
 
@@ -56,7 +48,7 @@ function CustomerHome() {
     const all = categories.data ?? [];
     const q = query.trim().toLowerCase();
     if (!q) return all.slice(0, HOME_SERVICES);
-    return all.filter((c) => [c.title.en, c.title.hi, c.title.pa, c.examples].some((t) => t.toLowerCase().includes(q)));
+    return all.filter((c) => [c.title.en, c.title.hi, c.title.pa, c.examples].some((text) => text.toLowerCase().includes(q)));
   }, [categories.data, query]);
 
   // Tabs are switched with navigate (jump to the existing tab), never pushed, so Back never has duplicates to unwind
@@ -64,6 +56,17 @@ function CustomerHome() {
     setSelectedCategory(catId);
     router.navigate('/(tabs)/post-job');
   }, [router, setSelectedCategory]);
+
+  const steps = [
+    { icon: ClipboardList, title: t('Select a service or post your job') },
+    { icon: PhoneCall, title: t('Get direct calls & quotes from nearby mistris') },
+    { icon: Wallet, title: t('Pay the worker directly by cash or UPI (0% commission)') },
+  ];
+  const trust = [
+    { icon: ShieldCheck, title: t('Aadhaar verified workers'), color: '#7C3AED', bg: '#F3E8FF' },
+    { icon: Zap, title: t('15 min arrival in Chandigarh, Mohali & Panchkula'), color: '#D97706', bg: '#FEF3C7' },
+    { icon: BadgeIndianRupee, title: t('100% direct P2P payment'), color: '#047857', bg: '#D1FAE5' },
+  ];
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -76,14 +79,14 @@ function CustomerHome() {
         {/* Top Header Bar */}
         <View style={styles.headerBar}>
           <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => setMenuOpen(true)} style={styles.menuBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Open menu">
+            <TouchableOpacity onPress={() => setMenuOpen(true)} style={styles.menuBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('Open menu')}>
               <Menu color={Colors.textMain} size={26} strokeWidth={2.5} />
             </TouchableOpacity>
             <View style={{ flexShrink: 1 }}>
               <Text style={styles.brandTitle}>
                 Kaam<Text style={{ color: Colors.primary }}>Connect</Text>
               </Text>
-              <TouchableOpacity style={styles.locSelector} onPress={() => router.push('/customer-onboarding')} activeOpacity={0.7} hitSlop={8} accessibilityRole="button" accessibilityLabel="Change location">
+              <TouchableOpacity style={styles.locSelector} onPress={() => router.push('/customer-onboarding')} activeOpacity={0.7} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('Change location')}>
                 <MapPin color={Colors.tertiaryDark} size={14} />
                 <Text style={styles.locText} numberOfLines={1}>{sectorLabel} ▾</Text>
               </TouchableOpacity>
@@ -91,7 +94,7 @@ function CustomerHome() {
           </View>
 
           <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.iconCircle} onPress={() => void notify('Audio help / आवाज़ सहायता', 'Spoken instructions are coming soon. / बोलकर निर्देश जल्द आ रहे हैं।')} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Audio assistance">
+            <TouchableOpacity style={styles.iconCircle} onPress={() => void notify(t('Audio help'), t('Spoken instructions are coming soon.'))} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('Audio assistance')}>
               <Volume2 color={Colors.textMain} size={20} />
             </TouchableOpacity>
             <NotificationBell />
@@ -105,21 +108,24 @@ function CustomerHome() {
             style={[styles.searchInput, noFocusRing]}
             value={query}
             onChangeText={setQuery}
-            placeholder="Search electrician, plumber, AC, RO…"
+            placeholder={t('Search electrician, plumber, AC, RO…')}
             placeholderTextColor={Colors.textSubtle}
             returnKeyType="search"
-            accessibilityLabel="Search services"
+            accessibilityLabel={t('Search services')}
           />
           {searching ? (
-            <TouchableOpacity style={styles.clearBtn} onPress={() => setQuery('')} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Clear search">
+            <TouchableOpacity style={styles.clearBtn} onPress={() => setQuery('')} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('Clear search')}>
               <X color={Colors.textMuted} size={18} />
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={styles.micBtn} onPress={() => router.navigate('/(tabs)/post-job')} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Post a job">
+            <TouchableOpacity style={styles.micBtn} onPress={() => router.navigate('/(tabs)/post-job')} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('Post a job')}>
               <Mic color="#FFFFFF" size={18} />
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Quotes from workers on the customer's open requests: the first thing to answer */}
+        {!searching && <IncomingOffers />}
 
         {!searching && (
           <>
@@ -128,10 +134,10 @@ function CustomerHome() {
               <View style={styles.sosIcon}><Text style={{ fontSize: 20 }}>⚡</Text></View>
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                  <Text style={styles.sosTitle}>Need an urgent mistri?</Text>
-                  <View style={styles.sosBadge}><Text style={styles.sosBadgeText}>15 MIN ETA</Text></View>
+                  <Text style={styles.sosTitle}>{t('Need an urgent mistri?')}</Text>
+                  <View style={styles.sosBadge}><Text style={styles.sosBadgeText}>{t('15 MIN ETA')}</Text></View>
                 </View>
-                <Text style={styles.sosSub}>Post an immediate job and nearby pros respond fast.</Text>
+                <Text style={styles.sosSub}>{t('Post an immediate job and nearby pros respond fast.')}</Text>
               </View>
             </TouchableOpacity>
 
@@ -139,8 +145,8 @@ function CustomerHome() {
             <View style={styles.zeroFeeCard}>
               <Text style={{ fontSize: 26 }}>💵</Text>
               <View style={{ flex: 1 }}>
-                <Text style={styles.zeroFeeTitle}>0% Platform Fee Guarantee</Text>
-                <Text style={styles.zeroFeeSub}>Pay 100% directly to the technician by UPI or cash. No middleman.</Text>
+                <Text style={styles.zeroFeeTitle}>{t('0% Platform Fee Guarantee')}</Text>
+                <Text style={styles.zeroFeeSub}>{t('Pay 100% directly to the technician by UPI or cash. No middleman.')}</Text>
               </View>
             </View>
           </>
@@ -148,10 +154,10 @@ function CustomerHome() {
 
         {/* Services grid */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{searching ? `Results for “${query.trim()}”` : 'Popular Services in Tricity'}</Text>
+          <Text style={styles.sectionTitle}>{searching ? t('Results for “{query}”', { query: query.trim() }) : t('Popular Services in Tricity')}</Text>
           {!searching && (
             <TouchableOpacity onPress={() => router.navigate('/(tabs)/leads')} activeOpacity={0.7} hitSlop={10} accessibilityRole="button">
-              <Text style={styles.viewAllText}>View All →</Text>
+              <Text style={styles.viewAllText}>{t('View All →')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -159,7 +165,7 @@ function CustomerHome() {
         {categories.loading && <CategoryGridSkeleton />}
         {categories.error && !categories.data && <ErrorBlock message={categories.error} onRetry={() => void categories.reload()} />}
         {searching && categories.data && shown.length === 0 && (
-          <EmptyBlock title="No matching service" hint="Try another word, or post your job and nearby pros will quote. / काम पोस्ट करें" />
+          <EmptyBlock title={t('No matching service')} hint={t('Try another word, or post your job and nearby pros will quote.')} />
         )}
         <View style={styles.grid}>
           {shown.map((cat) => (
@@ -169,7 +175,7 @@ function CustomerHome() {
 
         {!searching && categories.data && categories.data.length > HOME_SERVICES && (
           <TouchableOpacity style={styles.allServicesBtn} onPress={() => router.navigate('/(tabs)/leads')} activeOpacity={0.7} accessibilityRole="button">
-            <Text style={styles.allServicesText}>Explore all {categories.data.length}+ Services / सभी सेवाएं</Text>
+            <Text style={styles.allServicesText}>{t('Explore all {count}+ Services', { count: categories.data.length })}</Text>
             <ArrowRight color={Colors.primaryDark} size={18} />
           </TouchableOpacity>
         )}
@@ -179,23 +185,22 @@ function CustomerHome() {
             {/* Post a Job Quick Prompt */}
             <View style={styles.postJobCard}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.postJobTitle}>Got a specific repair job?</Text>
-                <Text style={styles.postJobSub}>Post details and get quotes from nearby mistris.</Text>
+                <Text style={styles.postJobTitle}>{t('Got a specific repair job?')}</Text>
+                <Text style={styles.postJobSub}>{t('Post details and get quotes from nearby mistris.')}</Text>
               </View>
               <TouchableOpacity style={styles.postJobBtn} onPress={() => router.navigate('/(tabs)/post-job')} activeOpacity={0.7} accessibilityRole="button">
-                <Text style={styles.postJobBtnText}>+ Post Job</Text>
+                <Text style={styles.postJobBtnText}>{t('+ Post Job')}</Text>
               </TouchableOpacity>
             </View>
 
             {/* How it works */}
-            <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>How KaamConnect Works • 3 आसान कदम</Text>
+            <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>{t('How KaamConnect Works • 3 easy steps')}</Text>
             <View style={styles.stepsCard}>
-              {STEPS.map((step, i) => (
-                <View key={step.title} style={[styles.stepRow, i < STEPS.length - 1 && styles.stepDivider]}>
+              {steps.map((step, i) => (
+                <View key={i} style={[styles.stepRow, i < steps.length - 1 && styles.stepDivider]}>
                   <View style={styles.stepNum}><Text style={styles.stepNumText}>{i + 1}</Text></View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.stepTitle}>{step.title}</Text>
-                    <Text style={styles.stepHi}>{step.hi}</Text>
                   </View>
                   <step.icon color={Colors.primary} size={24} />
                 </View>
@@ -203,16 +208,15 @@ function CustomerHome() {
             </View>
 
             {/* Trust badges */}
-            <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>Tricity Direct Trust • भरोसा</Text>
+            <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>{t('Tricity Direct Trust')}</Text>
             <View style={styles.trustList}>
-              {TRUST.map((t) => (
-                <View key={t.title} style={styles.trustCard}>
-                  <View style={[styles.trustIcon, { backgroundColor: t.bg }]}>
-                    <t.icon color={t.color} size={24} />
+              {trust.map((item, i) => (
+                <View key={i} style={styles.trustCard}>
+                  <View style={[styles.trustIcon, { backgroundColor: item.bg }]}>
+                    <item.icon color={item.color} size={24} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.trustTitle}>{t.title}</Text>
-                    <Text style={styles.trustHi}>{t.hi}</Text>
+                    <Text style={styles.trustTitle}>{item.title}</Text>
                   </View>
                 </View>
               ))}
@@ -347,7 +351,6 @@ const styles = StyleSheet.create({
   stepNum: { width: 34, height: 34, borderRadius: 17, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
   stepNumText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
   stepTitle: { fontSize: 15, fontWeight: '700', color: Colors.textMain, lineHeight: 20 },
-  stepHi: { fontSize: 13, color: Colors.textMuted, marginTop: 2 },
   trustList: { gap: 10 },
   trustCard: {
     flexDirection: 'row',
@@ -361,5 +364,4 @@ const styles = StyleSheet.create({
   },
   trustIcon: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   trustTitle: { fontSize: 15, fontWeight: '700', color: Colors.textMain, lineHeight: 20 },
-  trustHi: { fontSize: 13, color: Colors.textMuted, marginTop: 2 },
 });

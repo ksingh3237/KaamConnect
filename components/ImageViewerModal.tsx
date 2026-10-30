@@ -5,6 +5,7 @@ import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, Text, Touchable
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
 import { Colors, Spacing } from '../constants/theme';
+import { t } from '../i18n';
 
 interface Props {
   uri: string | null;
@@ -20,10 +21,10 @@ export default function ImageViewerModal({ uri, title, onClose }: Props) {
   return (
     <Modal visible={!!uri} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       {/* A tap anywhere closes; the picture itself is not interactive */}
-      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close the picture">
+      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={t('Close the picture')}>
         <View style={[styles.bar, { paddingTop: insets.top + Spacing.sm }]}>
           <Text style={styles.title} numberOfLines={1}>{title ?? ''}</Text>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel="Close">
+          <TouchableOpacity onPress={onClose} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel={t('Close')}>
             <X color="#FFFFFF" size={22} />
           </TouchableOpacity>
         </View>
@@ -45,7 +46,7 @@ export default function ImageViewerModal({ uri, title, onClose }: Props) {
           />
         ) : null}
         {loading && !failed ? <ActivityIndicator color="#FFFFFF" style={styles.centred} /> : null}
-        {failed ? <Text style={[styles.centred, styles.error]}>This picture could not be opened. / यह फ़ोटो नहीं खुल सकी</Text> : null}
+          {failed ? <Text style={[styles.centred, styles.error]}>{t('This picture could not be opened.')}</Text> : null}
       </Pressable>
     </Modal>
   );
