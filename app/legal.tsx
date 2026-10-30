@@ -1,52 +1,81 @@
 // Terms & Conditions and Privacy Policy in plain words (?doc=terms | privacy). Reachable from the Home menu and the
 // login screen, signed in or not. This is a readable summary of how the app works today; have it reviewed by a
-// lawyer before launch.
+// lawyer before launch. Shown in the language the person chose.
 import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, FileText, Lock } from 'lucide-react-native';
 import { Colors, Radius, Spacing } from '../constants/theme';
+import { useT } from '../i18n/useT';
 
 type Doc = 'terms' | 'privacy';
+type Section = { title: string; intro: string; points: { h: string; p: string }[] };
 
-const SECTIONS: Record<Doc, { title: string; titleHi: string; intro: string; points: { h: string; p: string }[] }> = {
-  terms: {
-    title: 'Terms & Conditions',
-    titleHi: 'नियम और शर्तें',
-    intro:
-      'KaamConnect connects households in Chandigarh, Mohali and Panchkula directly with local workers. By using the app you agree to these simple rules.',
-    points: [
-      { h: '0% platform fee', p: 'KaamConnect takes no commission from customers or workers. The price you agree with the worker is the price you pay.' },
-      { h: 'Direct payment', p: 'You pay the worker yourself, in cash or by UPI, when the work is done. KaamConnect never holds or moves your money; it only records that a payment was made.' },
-      { h: 'Direct contact', p: 'Customers and workers talk to each other directly. Your full address is shown only to the worker you choose, after you accept their offer.' },
-      { h: 'The agreement is between you and the worker', p: 'Workers are independent, not KaamConnect employees. Agree on the work and the cost before it starts, and check the bill in the app before you approve it.' },
-      { h: 'Verified workers', p: 'Workers upload Aadhaar for verification before they receive jobs. Verification lowers risk but cannot guarantee the quality of every job, so read ratings and reviews.' },
-      { h: 'Be fair and safe', p: 'Give honest ratings, do not post fake jobs or offers, and treat each other with respect. Use the SOS button during a job if you feel unsafe. Accounts that misuse the app can be disabled.' },
-      { h: 'Cancelling', p: 'Cancel as early as you can if your plans change, so the other person is not left waiting.' },
-      { h: 'Changes', p: 'These terms may be updated as the app grows. We will show the new version in the app.' },
-    ],
-  },
-  privacy: {
-    title: 'Privacy Policy',
-    titleHi: 'गोपनीयता नीति',
-    intro: 'We collect only what is needed to connect you with a worker or a customer, and we never sell your data.',
-    points: [
-      { h: 'What we collect', p: 'Your mobile number (to sign you in with an OTP), your name, your sector and address, photos you add to a job, and your ratings. Workers also share their trade, experience, profile photo and Aadhaar for verification.' },
-      { h: 'Location', p: 'Your location is used only to find workers or jobs near you. A worker\'s position is shared with the customer only while that worker is on the way to the job.' },
-      { h: 'Who sees what', p: 'Workers nearby see the job, the sector and the photos, never your phone number or full address. Only the worker whose offer you accept sees your address, and your number too if you allow direct calls. Aadhaar documents are kept in private storage, used only for verification and never shown to customers.' },
-      { h: 'No selling, no ads', p: 'We do not sell or rent your personal data, and we do not share it with advertisers.' },
-      { h: 'Security', p: 'Photos and documents are only available through short-lived private links, and sign-in codes are never stored in readable form.' },
-      { h: 'Your choices', p: 'You can change your profile at any time, and you can delete your account from Profile. Deleting removes your personal details from the app.' },
-      { h: 'Messages', p: 'We send an SMS only for your sign-in code.' },
-    ],
-  },
-};
+function sections(t: (text: string) => string): Record<Doc, Section> {
+  return {
+    terms: {
+      title: t('Terms & Conditions'),
+      intro: t('KaamConnect connects households in Chandigarh, Mohali and Panchkula directly with local workers. By using the app you agree to these simple rules.'),
+      points: [
+        { h: t('0% platform fee'), p: t('KaamConnect takes no commission from customers or workers. The price you agree with the worker is the price you pay.') },
+        {
+          h: t('Direct payment'),
+          p: t('You pay the worker yourself, in cash or by UPI, when the work is done. KaamConnect never holds or moves your money; it only records that a payment was made.'),
+        },
+        {
+          h: t('Direct contact'),
+          p: t('Customers and workers talk to each other directly. Your full address is shown only to the worker you choose, after you accept their offer.'),
+        },
+        {
+          h: t('The agreement is between you and the worker'),
+          p: t('Workers are independent, not KaamConnect employees. Agree on the work and the cost before it starts, and check the bill in the app before you approve it.'),
+        },
+        {
+          h: t('Verified workers'),
+          p: t('Workers upload Aadhaar for verification before they receive jobs. Verification lowers risk but cannot guarantee the quality of every job, so read ratings and reviews.'),
+        },
+        {
+          h: t('Be fair and safe'),
+          p: t('Give honest ratings, do not post fake jobs or offers, and treat each other with respect. Use the SOS button during a job if you feel unsafe. Accounts that misuse the app can be disabled.'),
+        },
+        { h: t('Cancelling'), p: t('Cancel as early as you can if your plans change, so the other person is not left waiting.') },
+        { h: t('Changes'), p: t('These terms may be updated as the app grows. We will show the new version in the app.') },
+      ],
+    },
+    privacy: {
+      title: t('Privacy Policy'),
+      intro: t('We collect only what is needed to connect you with a worker or a customer, and we never sell your data.'),
+      points: [
+        {
+          h: t('What we collect'),
+          p: t('Your mobile number (to sign you in with an OTP), your name, your sector and address, photos you add to a job, and your ratings. Workers also share their trade, experience, profile photo and Aadhaar for verification.'),
+        },
+        {
+          h: t('Location'),
+          p: t('Your location is used only to find workers or jobs near you. A worker’s position is shared with the customer only while that worker is on the way to the job.'),
+        },
+        {
+          h: t('Who sees what'),
+          p: t('Workers nearby see the job, the sector and the photos, never your phone number or full address. Only the worker whose offer you accept sees your address, and your number too if you allow direct calls. Aadhaar documents are kept in private storage, used only for verification and never shown to customers.'),
+        },
+        { h: t('No selling, no ads'), p: t('We do not sell or rent your personal data, and we do not share it with advertisers.') },
+        { h: t('Security'), p: t('Photos and documents are only available through short-lived private links, and sign-in codes are never stored in readable form.') },
+        {
+          h: t('Your choices'),
+          p: t('You can change your profile at any time, and you can delete your account from Profile. Deleting removes your personal details from the app.'),
+        },
+        { h: t('Messages'), p: t('We send an SMS only for your sign-in code.') },
+      ],
+    },
+  };
+}
 
 export default function LegalScreen() {
+  const t = useT();
   const { doc } = useLocalSearchParams<{ doc?: string }>();
   const which: Doc = doc === 'privacy' ? 'privacy' : 'terms';
-  const content = SECTIONS[which];
+  const content = sections(t)[which];
   const Icon = which === 'privacy' ? Lock : FileText;
 
   return (
@@ -57,13 +86,13 @@ export default function LegalScreen() {
           style={styles.backBtn}
           activeOpacity={0.7}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={t('Go back')}
         >
           <ArrowLeft color={Colors.textMain} size={24} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>{content.title}</Text>
-          <Text style={styles.headerSub}>{content.titleHi}</Text>
+          <Text style={styles.headerSub}>KaamConnect</Text>
         </View>
       </View>
 
@@ -76,7 +105,7 @@ export default function LegalScreen() {
         </View>
 
         {content.points.map((point, i) => (
-          <View key={point.h} style={styles.point}>
+          <View key={i} style={styles.point}>
             <View style={styles.num}>
               <Text style={styles.numText}>{i + 1}</Text>
             </View>
@@ -93,9 +122,7 @@ export default function LegalScreen() {
           activeOpacity={0.7}
           accessibilityRole="button"
         >
-          <Text style={styles.switchText}>
-            {which === 'terms' ? 'Read the Privacy Policy / गोपनीयता नीति →' : 'Read the Terms & Conditions / नियम और शर्तें →'}
-          </Text>
+          <Text style={styles.switchText}>{which === 'terms' ? t('Read the Privacy Policy →') : t('Read the Terms & Conditions →')}</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

@@ -1,6 +1,7 @@
 // The "worker is late" state of an assigned job (docs/15-no-show.md on the server). The server decides everything
 // (late notices, the automatic release, whether it counts); this only tells the screens what to show.
 import type { JobView } from '../api/types';
+import { t } from '../i18n';
 
 export interface LateState {
   /** When the server releases the job if the worker has still not arrived. */
@@ -28,11 +29,11 @@ export function lateNotice(state: LateState, viewer: 'customer' | 'worker'): { t
   const at = clockTime(state.releaseAt);
   return viewer === 'worker'
     ? {
-        title: 'You are late • आप लेट हैं',
-        body: `The customer is waiting. If you have not arrived by ${at}, the job is released and counts as a cancellation on your record.`,
+        title: t('You are late'),
+        body: t('The customer is waiting. If you have not arrived by {time}, the job is released and counts as a cancellation on your record.', { time: at }),
       }
     : {
-        title: 'Your worker is running late',
-        body: `They have not arrived yet. If they have not arrived by ${at}, the request is released automatically. You can keep waiting or cancel below.`,
+        title: t('Your worker is running late'),
+        body: t('They have not arrived yet. If they have not arrived by {time}, the request is released automatically. You can keep waiting or cancel below.', { time: at }),
       };
 }

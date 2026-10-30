@@ -42,17 +42,18 @@ export function serviceIcon(iconKey: string): LucideIcon {
 }
 
 /** A short, static preview of the catalogue for the signed-out welcome screen (the API needs a login). */
-export const PREVIEW_SERVICES: { id: string; en: string; hi: string; iconKey: string; color: string; bg: string }[] = [
-  { id: 'electrician', en: 'Electrician', hi: 'इलेक्ट्रीशियन', iconKey: 'Zap', color: '#D97706', bg: '#FEF3C7' },
-  { id: 'plumber', en: 'Plumber', hi: 'प्लंबर', iconKey: 'Droplet', color: '#0284C7', bg: '#E0F2FE' },
-  { id: 'ac_repair', en: 'AC Repair', hi: 'एसी रिपेयर', iconKey: 'Wind', color: '#00B074', bg: '#D1FAE5' },
-  { id: 'cleaner', en: 'Cleaning', hi: 'घर की सफाई', iconKey: 'Sparkles', color: '#DB2777', bg: '#FCE7F3' },
-  { id: 'carpenter', en: 'Carpenter', hi: 'बढ़ई', iconKey: 'Hammer', color: '#B45309', bg: '#FDE68A' },
-  { id: 'painter', en: 'Painter', hi: 'पेंटर', iconKey: 'Paintbrush', color: '#7C3AED', bg: '#EDE9FE' },
-  { id: 'ro_service', en: 'RO Service', hi: 'आरओ सर्विस', iconKey: 'Droplets', color: '#0891B2', bg: '#CFFAFE' },
-  { id: 'vehicle_repair', en: 'Vehicle Repair', hi: 'वाहन मैकेनिक', iconKey: 'Wrench', color: '#DC2626', bg: '#FEE2E2' },
-  { id: 'fridge_repair', en: 'Fridge Repair', hi: 'फ्रिज रिपेयर', iconKey: 'Refrigerator', color: '#2563EB', bg: '#DBEAFE' },
-  { id: 'cctv_security', en: 'CCTV & Camera', hi: 'सीसीटीवी कैमरा', iconKey: 'Cctv', color: '#334155', bg: '#E2E8F0' },
-  { id: 'packers_movers', en: 'Packers & Movers', hi: 'पैकर्स मूवर्स', iconKey: 'Package', color: '#EA580C', bg: '#FFEDD5' },
-  { id: 'computer_it', en: 'Computer & IT', hi: 'कंप्यूटर', iconKey: 'Laptop', color: '#7C3AED', bg: '#EDE9FE' },
+// Names in the person's language come from i18n/categories.ts (categoryTitle), by id.
+export const PREVIEW_SERVICES: { id: string; en: string; iconKey: string; color: string; bg: string }[] = [
+  { id: 'electrician', en: 'Electrician', iconKey: 'Zap', color: '#D97706', bg: '#FEF3C7' },
+  { id: 'plumber', en: 'Plumber', iconKey: 'Droplet', color: '#0284C7', bg: '#E0F2FE' },
+  { id: 'ac_repair', en: 'AC Repair', iconKey: 'Wind', color: '#00B074', bg: '#D1FAE5' },
+  { id: 'cleaner', en: 'Cleaning', iconKey: 'Sparkles', color: '#DB2777', bg: '#FCE7F3' },
+  { id: 'carpenter', en: 'Carpenter', iconKey: 'Hammer', color: '#B45309', bg: '#FDE68A' },
+  { id: 'painter', en: 'Painter', iconKey: 'Paintbrush', color: '#7C3AED', bg: '#EDE9FE' },
+  { id: 'ro_service', en: 'RO Service', iconKey: 'Droplets', color: '#0891B2', bg: '#CFFAFE' },
+  { id: 'vehicle_repair', en: 'Vehicle Repair', iconKey: 'Wrench', color: '#DC2626', bg: '#FEE2E2' },
+  { id: 'fridge_repair', en: 'Fridge Repair', iconKey: 'Refrigerator', color: '#2563EB', bg: '#DBEAFE' },
+  { id: 'cctv_security', en: 'CCTV & Camera', iconKey: 'Cctv', color: '#334155', bg: '#E2E8F0' },
+  { id: 'packers_movers', en: 'Packers & Movers', iconKey: 'Package', color: '#EA580C', bg: '#FFEDD5' },
+  { id: 'computer_it', en: 'Computer & IT', iconKey: 'Laptop', color: '#7C3AED', bg: '#EDE9FE' },
 ];

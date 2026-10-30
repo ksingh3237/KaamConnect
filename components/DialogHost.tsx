@@ -4,6 +4,7 @@ import { Animated, Easing, Modal, Platform, Pressable, StyleSheet, Text, Touchab
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Radius } from '../constants/theme';
 import { useDialogs } from '../utils/dialog';
+import { t } from '../i18n';
 
 const NATIVE = Platform.OS !== 'web';
 
@@ -27,7 +28,7 @@ export default function DialogHost() {
   return (
     <Modal visible transparent animationType="fade" onRequestClose={dismiss} statusBarTranslucent>
       <View style={styles.root}>
-        <Pressable style={styles.backdrop} onPress={dismiss} accessibilityLabel="Close" />
+        <Pressable style={styles.backdrop} onPress={dismiss} accessibilityLabel={t('Close')} />
         <Animated.View
           style={[
             styles.sheet,
@@ -43,7 +44,7 @@ export default function DialogHost() {
           <View style={styles.actions}>
             {isConfirm && (
               <TouchableOpacity style={[styles.btn, styles.cancel]} onPress={() => answer(false)} activeOpacity={0.7} accessibilityRole="button">
-                <Text style={styles.cancelText}>{front.cancelLabel ?? 'Cancel'}</Text>
+                <Text style={styles.cancelText}>{front.cancelLabel ?? t('Cancel')}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
@@ -52,7 +53,7 @@ export default function DialogHost() {
               activeOpacity={0.8}
               accessibilityRole="button"
             >
-              <Text style={styles.primaryText}>{front.confirmLabel ?? 'OK'}</Text>
+              <Text style={styles.primaryText}>{front.confirmLabel ?? t('OK')}</Text>
             </TouchableOpacity>
           </View>
         </Animated.View>

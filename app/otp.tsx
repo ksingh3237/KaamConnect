@@ -10,12 +10,14 @@ import { useSession } from '../store/useSession';
 import { isApiError, userMessage } from '../api/errors';
 import { getWidgetClient, isMsg91WidgetConfigured } from '../api/msg91';
 import { notify } from '../utils/dialog';
+import { useT } from '../i18n/useT';
 
 // Seconds until "resend" is allowed again, from a deadline so the count stays right after the app was in the background.
 const secondsUntil = (deadline: number) => Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
 
 export default function OtpScreen() {
   const router = useRouter();
+  const t = useT();
   const insets = useSafeAreaInsets();
   const { mobile } = useStore();
   const { verifyOtp, resendOtp, devNotice, resendAfterSec, otpLength: OTP_LENGTH } = useSession();
@@ -99,7 +101,7 @@ export default function OtpScreen() {
       const result = await resendOtp(mobile);
       setCode('');
       setResendAt(Date.now() + result.resendAfterSec * 1000);
-      setNotice('A new code has been sent. / नया कोड भेज दिया गया');
+      setNotice(t('A new code has been sent.'));
     } catch (error) {
       if (isApiError(error) && error.retryAfterSec) setResendAt(Date.now() + error.retryAfterSec * 1000);
       if (isApiError(error) && error.code === 'OTP_SESSION_LOST') router.replace('/login');
@@ -123,14 +125,14 @@ export default function OtpScreen() {
             onPress={() => router.canGoBack() ? router.back() : router.replace('/login')}
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel="Go back"
+            accessibilityLabel={t('Go back')}
           >
             <ArrowLeft color="#111c2d" size={22} strokeWidth={2.5} />
           </TouchableOpacity>
 
           <View style={styles.tricityBadge}>
             <MapPin color="#006c46" size={15} strokeWidth={2.5} />
-            <Text style={styles.tricityBadgeText}>Tricity Chandigarh • Mohali • Panchkula</Text>
+            <Text style={styles.tricityBadgeText}>{t('Tricity Chandigarh • Mohali • Panchkula')}</Text>
           </View>
         </View>
 
@@ -146,36 +148,34 @@ export default function OtpScreen() {
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <View style={styles.pingDot} />
-              <Text style={styles.iconTitle}>DIRECT WORKER NETWORK</Text>
+              <Text style={styles.iconTitle}>{t('DIRECT WORKER NETWORK')}</Text>
             </View>
-            <Text style={styles.iconDesc}>Instant Verification • 0% Commission Platform</Text>
+            <Text style={styles.iconDesc}>{t('Instant Verification • 0% Commission Platform')}</Text>
           </View>
         </View>
 
         {/* Title & Subtitle Section */}
         <View style={styles.titleSection}>
-          <Text style={styles.mainTitle}>
-            Verify Phone Number <Text style={{ color: '#006c46' }}>/</Text> <Text style={{ fontSize: 20, color: '#3d4a41', fontWeight: '700' }}>ओटीपी सत्यापन</Text>
-          </Text>
+          <Text style={styles.mainTitle}>{t('Verify Phone Number')}</Text>
           <Text style={styles.subTitle}>
-            Enter {OTP_LENGTH}-digit code sent to <Text style={{ fontWeight: '600', color: '#111c2d' }}>+91 {mobile}</Text>
+            {t('Enter the {count}-digit code sent to', { count: OTP_LENGTH })} <Text style={{ fontWeight: '600', color: '#111c2d' }}>+91 {mobile}</Text>
           </Text>
           <TouchableOpacity
             style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, alignSelf: 'flex-start' }}
             onPress={() => router.canGoBack() ? router.back() : router.replace('/login')}
           >
             <Edit2 color="#006c46" size={15} strokeWidth={2.5} />
-            <Text style={styles.editLink}>Edit Number (बदलें)</Text>
+            <Text style={styles.editLink}>{t('Edit Number')}</Text>
           </TouchableOpacity>
         </View>
 
         {devNotice && (
           <View style={{ backgroundColor: '#FEF3C7', borderColor: '#F59E0B', borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 12, gap: 6 }} accessibilityRole="alert">
-            <Text style={{ color: '#92400E', fontWeight: '800', fontSize: 12, letterSpacing: 0.5 }}>DEVELOPMENT MODE</Text>
+            <Text style={{ color: '#92400E', fontWeight: '800', fontSize: 12, letterSpacing: 0.5 }}>{t('DEVELOPMENT MODE')}</Text>
             <Text style={{ color: '#92400E', fontSize: 13, lineHeight: 18 }}>{devNotice}</Text>
             {devCode && (
               <TouchableOpacity onPress={() => handleCodeChange(devCode)} accessibilityRole="button" style={{ alignSelf: 'flex-start', backgroundColor: '#F59E0B', borderRadius: 999, paddingVertical: 6, paddingHorizontal: 14 }}>
-                <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 12 }}>Fill test code {devCode}</Text>
+                <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 12 }}>{t('Fill test code {code}', { code: devCode })}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -230,14 +230,14 @@ export default function OtpScreen() {
             autoComplete="sms-otp"
             caretHidden
             contextMenuHidden
-            accessibilityLabel={`Enter ${OTP_LENGTH}-digit OTP`}
+            accessibilityLabel={t('Enter the {count}-digit OTP', { count: OTP_LENGTH })}
           />
         </View>
 
         {showError && (
           <View style={styles.otpErrorRow}>
             <AlertCircle color="#ef4444" size={14} />
-            <Text style={styles.otpErrorText}>Enter the {OTP_LENGTH}-digit code / {OTP_LENGTH} अंकों का कोड डालें</Text>
+            <Text style={styles.otpErrorText}>{t('Enter the {count}-digit code', { count: OTP_LENGTH })}</Text>
           </View>
         )}
 
@@ -255,9 +255,9 @@ export default function OtpScreen() {
 
         {/* Low-Literacy Audio Assist Pill */}
         <View style={styles.audioWrap}>
-          <TouchableOpacity style={styles.audioBtn} activeOpacity={0.8} onPress={() => void notify('Audio help / आवाज़ सहायता', 'Spoken instructions are coming soon. / बोलकर निर्देश जल्द आ रहे हैं।')}>
+          <TouchableOpacity style={styles.audioBtn} activeOpacity={0.8} onPress={() => void notify(t('Audio help'), t('Spoken instructions are coming soon.'))}>
             <Volume2 color="#006c46" size={19} strokeWidth={2.5} />
-            <Text style={styles.audioBtnText}>Audio code help available / आवाज द्वारा ओटीपी सुनें 🔊</Text>
+            <Text style={styles.audioBtnText}>{t('Hear the code read aloud')} 🔊</Text>
           </TouchableOpacity>
         </View>
 
@@ -266,22 +266,22 @@ export default function OtpScreen() {
           <View style={styles.resendRow}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Clock color="#006c46" size={18} strokeWidth={2.5} />
-              <Text style={styles.resendLabel}>Didn't receive SMS?</Text>
+              <Text style={styles.resendLabel}>{t('Did not receive the SMS?')}</Text>
             </View>
             <View style={styles.timerPill}>
               {secondsLeft > 0 ? (
-                <Text style={styles.timerPillText}>Resend OTP in 0:{secondsLeft < 10 ? `0${secondsLeft}` : secondsLeft}s</Text>
+                <Text style={styles.timerPillText}>{t('Resend OTP in {time}', { time: `0:${secondsLeft < 10 ? `0${secondsLeft}` : secondsLeft}` })}</Text>
               ) : (
                 <TouchableOpacity onPress={() => void handleResend()} disabled={isResending}>
-                  <Text style={[styles.timerPillText, { textDecorationLine: 'underline' }]}>{isResending ? 'Sending…' : 'Resend OTP Now'}</Text>
+                  <Text style={[styles.timerPillText, { textDecorationLine: 'underline' }]}>{isResending ? t('Sending…') : t('Resend OTP Now')}</Text>
                 </TouchableOpacity>
               )}
             </View>
           </View>
 
-          <TouchableOpacity style={styles.whatsappBtn} activeOpacity={0.8} onPress={() => setNotice('WhatsApp OTP is not available yet. Please use the SMS code. / व्हाट्सएप ओटीपी अभी उपलब्ध नहीं है')}>
+          <TouchableOpacity style={styles.whatsappBtn} activeOpacity={0.8} onPress={() => setNotice(t('Codes on WhatsApp are not available yet. Use SMS.'))}>
             <MessageSquare color="#25D366" size={20} strokeWidth={2.5} />
-            <Text style={styles.whatsappBtnText}>Get OTP on WhatsApp / व्हाट्सएप पर पाएं 💬</Text>
+            <Text style={styles.whatsappBtnText}>{t('Get OTP on WhatsApp')} 💬</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -295,18 +295,18 @@ export default function OtpScreen() {
           activeOpacity={0.9}
         >
           {isVerifying ? (
-            <Text style={styles.verifyBtnText}>Verifying / जांच हो रही है...</Text>
+            <Text style={styles.verifyBtnText}>{t('Verifying…')}</Text>
           ) : (
             <>
               <Verified color="#ffffff" size={22} strokeWidth={2} />
-              <Text style={styles.verifyBtnText}>Verify & Continue / सत्यापित करें</Text>
+              <Text style={styles.verifyBtnText}>{t('Verify & Continue')}</Text>
             </>
           )}
         </TouchableOpacity>
 
         <View style={styles.securityNote}>
           <Lock color="#006c46" size={15} strokeWidth={2.5} />
-          <Text style={styles.securityNoteText}>Automatic SIM reading supported • Safe Tricity Login</Text>
+          <Text style={styles.securityNoteText}>{t('Automatic SIM reading supported • Safe Tricity Login')}</Text>
         </View>
       </View>
     </SafeAreaView>

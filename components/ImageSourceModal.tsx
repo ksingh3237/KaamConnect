@@ -6,6 +6,7 @@ import { Modal, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Camera, ImageIcon } from 'lucide-react-native';
 import { Colors, Radius, Spacing } from '../constants/theme';
+import { t } from '../i18n';
 import type { PickedFile } from '../api/upload';
 import { captureFromCamera, pickFromGallery } from '../utils/pickImage';
 
@@ -21,7 +22,7 @@ export default function ImageSourceModal({ visible, onSelect, onCancel }: Props)
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel} statusBarTranslucent>
-      <Pressable style={styles.overlay} onPress={onCancel} accessibilityLabel="Close">
+      <Pressable style={styles.overlay} onPress={onCancel} accessibilityLabel={t('Close')}>
         {/* Swallows taps so touching the sheet itself does not dismiss it */}
         <Pressable
           style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, Spacing.lg) + Spacing.sm }]}
@@ -31,14 +32,14 @@ export default function ImageSourceModal({ visible, onSelect, onCancel }: Props)
           <View style={styles.handle} />
           <TouchableOpacity style={styles.option} onPress={() => onSelect('camera')} activeOpacity={0.8} accessibilityRole="button">
             <View style={styles.iconBox}><Camera color={Colors.primaryDark} size={22} /></View>
-            <Text style={styles.optionText}>Take Photo with Camera / फ़ोटो खींचें</Text>
+            <Text style={styles.optionText}>{t('Take Photo with Camera')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.option} onPress={() => onSelect('gallery')} activeOpacity={0.8} accessibilityRole="button">
             <View style={styles.iconBox}><ImageIcon color={Colors.primaryDark} size={22} /></View>
-            <Text style={styles.optionText}>Choose from Gallery / गैलरी से चुनें</Text>
+            <Text style={styles.optionText}>{t('Choose from Gallery')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.cancel} onPress={onCancel} activeOpacity={0.7} accessibilityRole="button">
-            <Text style={styles.cancelText}>Cancel / रद्द करें</Text>
+          <Text style={styles.cancelText}>{t('Cancel')}</Text>
           </TouchableOpacity>
         </Pressable>
       </Pressable>

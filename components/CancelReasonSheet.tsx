@@ -11,6 +11,7 @@ import { userMessage } from '../api/errors';
 import type { CancelActor, CancelBody, CancelReasonCode, CancelStage, JobView } from '../api/types';
 import { cancelCopy, consequence, needsNote, reasonsFor } from '../utils/cancelReasons';
 import { notify } from '../utils/dialog';
+import { t } from '../i18n';
 
 const NOTE_MAX = 300;
 
@@ -57,7 +58,7 @@ export default function CancelReasonSheet({ request, onConfirm, onClose }: Sheet
 
   return (
     <Modal visible={request !== null} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable style={styles.overlay} onPress={onClose} accessibilityLabel="Close">
+      <Pressable style={styles.overlay} onPress={onClose} accessibilityLabel={t('Close')}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.avoid}>
           {/* Swallows taps so touching the sheet itself does not dismiss it */}
           <Pressable style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, Spacing.lg) + Spacing.sm }]} onPress={() => {}} accessibilityViewIsModal>
@@ -66,7 +67,7 @@ export default function CancelReasonSheet({ request, onConfirm, onClose }: Sheet
             <Text style={styles.intro}>{copy.intro}</Text>
 
             <ScrollView style={styles.list} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-              <Text style={styles.why}>Why? / कारण बताएं</Text>
+              <Text style={styles.why}>{t('Why?')}</Text>
               {options.map((option) => {
                 const selected = option.code === code;
                 return (
@@ -88,12 +89,12 @@ export default function CancelReasonSheet({ request, onConfirm, onClose }: Sheet
                 <TextInput
                   style={styles.note}
                   value={note}
-                  onChangeText={(t) => setNote(t.slice(0, NOTE_MAX))}
-                  placeholder="Tell us what happened / क्या हुआ बताएं"
+                  onChangeText={(text) => setNote(text.slice(0, NOTE_MAX))}
+                  placeholder={t('Tell us what happened')}
                   placeholderTextColor={Colors.textSubtle}
                   multiline
                   maxLength={NOTE_MAX}
-                  accessibilityLabel="Describe the reason"
+                  accessibilityLabel={t('Describe the reason')}
                 />
               )}
               {what ? <Text style={styles.consequence}>{what}</Text> : null}
@@ -101,7 +102,7 @@ export default function CancelReasonSheet({ request, onConfirm, onClose }: Sheet
 
             <View style={styles.actions}>
               <TouchableOpacity style={styles.keep} onPress={onClose} activeOpacity={0.8} accessibilityRole="button">
-                <Text style={styles.keepText}>Keep the job / रहने दें</Text>
+                <Text style={styles.keepText}>{t('Keep the job')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.confirm, !ready && styles.confirmOff]}
@@ -174,7 +175,7 @@ export function useCancelJob(actor: CancelActor) {
         await options.onCancelled?.(job);
         return job;
       } catch (error) {
-        void notify('Could not cancel', userMessage(error));
+        void notify(t('Could not cancel'), userMessage(error));
         await options.onFailed?.();
         return null;
       } finally {

@@ -8,6 +8,7 @@ import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View 
 import * as Location from 'expo-location';
 import { Crosshair, MapPin, Search, X } from 'lucide-react-native';
 import { Colors, Radius, noFocusRing } from '../constants/theme';
+import { t } from '../i18n';
 import type { LocationCity } from '../api/types';
 import PickerMap, { type MapFocus } from './PickerMap';
 import { autocomplete, mapsConfigured, newSessionToken, placeDetails, type ResolvedPlace, type Suggestion } from '../utils/googlePlaces';
@@ -32,12 +33,13 @@ interface Props {
 
 const SAME_SPOT_DEG = 0.00008; // about 9 m: a re-centre that did not really move needs no new lookup
 
+// Read when shown, so they follow the language the person chose
 const NOTES = {
-  outside: 'That spot is outside Chandigarh, Mohali and Panchkula. / यह जगह ट्राईसिटी से बाहर है',
-  denied: 'Location permission is off. Allow it in Settings, or search above. / लोकेशन की अनुमति बंद है',
-  gps: 'Could not get your location. Search above or move the pin. / लोकेशन नहीं मिली',
-  lookup: 'Could not look that up right now. Check your internet and try again. / अभी पता नहीं मिला',
-} as const;
+  outside: () => t('That spot is outside Chandigarh, Mohali and Panchkula.'),
+  denied: () => t('Location permission is off. Allow it in Settings, or search above.'),
+  gps: () => t('Could not get your location. Search above or move the pin.'),
+  lookup: () => t('Could not look that up right now. Check your internet and try again.'),
+};
 
 export default function GoogleLocationPicker({ locations, onChange, initial }: Props) {
   const start = initial ?? { lat: TRICITY_CENTER.lat, lng: TRICITY_CENTER.lng };
@@ -68,7 +70,7 @@ export default function GoogleLocationPicker({ locations, onChange, initial }: P
     (place: ResolvedPlace) => {
       if (!inTricity(place.lat, place.lng)) {
         setPicked(null);
-        setNote(NOTES.outside);
+        setNote(NOTES.outside());
         return false;
       }
       const match = matchArea(latest.current.locations, place.components, place.formattedAddress);
@@ -102,7 +104,7 @@ export default function GoogleLocationPicker({ locations, onChange, initial }: P
       } catch {
         if (mine === seq.current) {
           setSuggestions([]);
-          setNote(NOTES.lookup);
+          setNote(NOTES.lookup());
         }
       } finally {
         if (mine === seq.current) setSearching(false);
@@ -123,7 +125,7 @@ export default function GoogleLocationPicker({ locations, onChange, initial }: P
       if (mine !== seq.current) return;
       if (apply(place)) setFocus({ lat: place.lat, lng: place.lng });
     } catch {
-      if (mine === seq.current) setNote(NOTES.lookup);
+      if (mine === seq.current) setNote(NOTES.lookup());
     } finally {
       if (mine === seq.current) setBusy(null);
     }
@@ -140,7 +142,7 @@ export default function GoogleLocationPicker({ locations, onChange, initial }: P
       if (mine !== seq.current) return;
       if (apply(place)) setQuery('');
     } catch {
-      if (mine === seq.current) setNote(NOTES.lookup);
+      if (mine === seq.current) setNote(NOTES.lookup());
     } finally {
       if (mine === seq.current) setBusy(null);
     }
@@ -155,13 +157,13 @@ export default function GoogleLocationPicker({ locations, onChange, initial }: P
     try {
       const perm = await Location.requestForegroundPermissionsAsync();
       if (perm.status !== 'granted') {
-        setNote(NOTES.denied);
+        setNote(NOTES.denied());
         return;
       }
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       const { latitude: lat, longitude: lng } = pos.coords;
       if (!inTricity(lat, lng)) {
-        if (mine === seq.current) setNote(NOTES.outside);
+        if (mine === seq.current) setNote(NOTES.outside());
         return;
       }
       setFocus({ lat, lng });
@@ -169,7 +171,7 @@ export default function GoogleLocationPicker({ locations, onChange, initial }: P
       if (mine !== seq.current) return;
       if (apply(place)) setQuery('');
     } catch (error) {
-      if (mine === seq.current) setNote(error instanceof Error && /^(MAPS_|GEOCODE_)/.test(error.message) ? NOTES.lookup : NOTES.gps);
+      if (mine === seq.current) setNote(error instanceof Error && /^(MAPS_|GEOCODE_)/.test(error.message) ? NOTES.lookup() : NOTES.gps());
     } finally {
       if (mine === seq.current) setBusy(null);
     }
@@ -179,7 +181,7 @@ export default function GoogleLocationPicker({ locations, onChange, initial }: P
     return (
       <View style={styles.notice}>
         <MapPin color={Colors.textMuted} size={18} />
-        <Text style={styles.noticeText}>Map search is not set up in this build. Choose your sector below. / नीचे अपना सेक्टर चुनें</Text>
+          <Text style={styles.noticeText}>{t('Map search is not set up in this build. Choose your sector below.')}</Text>
       </View>
     );
   }
@@ -192,16 +194,16 @@ export default function GoogleLocationPicker({ locations, onChange, initial }: P
           style={[styles.searchInput, noFocusRing]}
           value={query}
           onChangeText={setQuery}
-          placeholder="Search your area, sector or landmark / खोजें"
+          placeholder={t('Search your area, sector or landmark')}
           placeholderTextColor={Colors.textSubtle}
           autoCorrect={false}
           returnKeyType="search"
-          accessibilityLabel="Search a place in Chandigarh, Mohali or Panchkula"
+          accessibilityLabel={t('Search a place in Chandigarh, Mohali or Panchkula')}
         />
         {searching ? (
           <ActivityIndicator color={Colors.primary} size="small" />
         ) : query !== '' ? (
-          <TouchableOpacity hitSlop={10} onPress={() => { setQuery(''); setSuggestions([]); }} accessibilityRole="button" accessibilityLabel="Clear search">
+          <TouchableOpacity hitSlop={10} onPress={() => { setQuery(''); setSuggestions([]); }} accessibilityRole="button" accessibilityLabel={t('Clear search')}>
             <X color={Colors.textSubtle} size={18} />
           </TouchableOpacity>
         ) : null}
@@ -223,14 +225,14 @@ export default function GoogleLocationPicker({ locations, onChange, initial }: P
 
       <TouchableOpacity style={[styles.gpsBtn, busy === 'gps' && { opacity: 0.7 }]} onPress={() => void detectGps()} disabled={busy === 'gps'} activeOpacity={0.8} accessibilityRole="button">
         {busy === 'gps' ? <ActivityIndicator color={Colors.primaryDark} size="small" /> : <Crosshair color={Colors.primaryDark} size={18} />}
-        <Text style={styles.gpsText}>{busy === 'gps' ? 'Finding your location… / लोकेशन खोज रहे हैं…' : 'Detect My Current GPS Location / वर्तमान स्थान'}</Text>
+          <Text style={styles.gpsText}>{busy === 'gps' ? t('Finding your location…') : t('Detect My Current GPS Location')}</Text>
       </TouchableOpacity>
 
       <PickerMap initial={start} focus={focus} onSettle={(lat, lng) => void onPinSettled(lat, lng)} />
 
       <View style={styles.status} accessibilityLiveRegion="polite">
         {busy === 'resolve' ? (
-          <Text style={styles.statusText}>Finding the address… / पता खोज रहे हैं…</Text>
+            <Text style={styles.statusText}>{t('Finding the address…')}</Text>
         ) : note ? (
           <Text style={[styles.statusText, { color: Colors.error }]}>{note}</Text>
         ) : picked ? (
@@ -239,7 +241,7 @@ export default function GoogleLocationPicker({ locations, onChange, initial }: P
             {picked.title !== picked.line && <Text style={styles.statusText} numberOfLines={2}>{picked.line}</Text>}
           </>
         ) : (
-          <Text style={styles.statusText}>Move the map so the pin sits on your door. / नक्शा हिलाकर पिन अपने घर पर रखें</Text>
+            <Text style={styles.statusText}>{t('Move the map so the pin sits on your door.')}</Text>
         )}
       </View>
     </View>

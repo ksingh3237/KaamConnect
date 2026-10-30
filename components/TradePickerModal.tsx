@@ -18,9 +18,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, Plus, Search, Star, X } from 'lucide-react-native';
 import { Colors, Radius, noFocusRing } from '../constants/theme';
+import { pick as pickText } from '../i18n';
+import { useLang, useT } from '../i18n/useT';
 import { serviceIcon } from '../constants/services';
 import type { ServiceCategory } from '../api/types';
-import { MAX_TRADES, filterTrades, toggleTrade, tradeTabs, type TradeGroupId } from '../utils/trades';
+import { MAX_TRADES, filterTrades, toggleTrade, tradeGroupLabel, tradeTabs, type TradeGroupId } from '../utils/trades';
 
 interface TradePickerModalProps {
   visible: boolean;
@@ -58,7 +60,9 @@ export default function TradePickerModal({ visible, categories, selectedTradeIds
   useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
   const byId = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
-  const nameOf = useCallback((id: string) => byId.get(id)?.title.en ?? id, [byId]);
+  const t = useT();
+  const lang = useLang();
+  const nameOf = useCallback((id: string) => { const c = byId.get(id); return c ? pickText(c.title, lang) : id; }, [byId, lang]);
   const tabs = useMemo(() => tradeTabs(categories), [categories]);
   const shown = useMemo(() => filterTrades(categories, group, query), [categories, group, query]);
   // An odd count leaves the last card alone in its row: a spacer keeps it the same width as the others
@@ -77,10 +81,10 @@ export default function TradePickerModal({ visible, categories, selectedTradeIds
     (id: string) => {
       const change = toggleTrade(draftRef.current, id);
       setDraft(change.ids);
-      if (change.replaced) say(`You can pick 2 trades. “${nameOf(id)}” replaced “${nameOf(change.replaced)}” as 2nd. / दूसरा काम बदला गया`);
-      else if (change.promoted) say(`“${nameOf(change.promoted)}” is now your Primary trade. / अब यह मुख्य काम है`);
+      if (change.replaced) say(t('You can pick 2 trades. “{new}” replaced “{old}” as 2nd.', { new: nameOf(id), old: nameOf(change.replaced) }));
+      else if (change.promoted) say(t('“{name}” is now your Primary trade.', { name: nameOf(change.promoted) }));
     },
-    [nameOf, say],
+    [nameOf, say, t],
   );
 
   const save = () => {
@@ -101,21 +105,21 @@ export default function TradePickerModal({ visible, categories, selectedTradeIds
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <View style={styles.overlay}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" />
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel={t('Close')} />
         <KeyboardAvoidingView behavior="padding" style={{ maxHeight: windowH - insets.top }}>
           <View style={[styles.sheet, { height: Math.round(windowH * 0.9) }]}>
             <View style={styles.grabber} />
             <View style={styles.header}>
               <View style={styles.headerText}>
-                <Text style={styles.title}>Select Your Trades / काम चुनें</Text>
+                <Text style={styles.title}>{t('Select Your Trades')}</Text>
                 <View style={styles.subRow}>
-                  <Text style={styles.subtitle}>Max {MAX_TRADES} trades allowed •</Text>
-                  <View style={[styles.counter, count === MAX_TRADES && styles.counterFull]} accessibilityLabel={`${count} of ${MAX_TRADES} selected`}>
-                    <Text style={[styles.counterText, count === MAX_TRADES && styles.counterTextFull]}>{count} / {MAX_TRADES} Selected</Text>
+                  <Text style={styles.subtitle}>{t('Max {count} trades allowed •', { count: MAX_TRADES })}</Text>
+                  <View style={[styles.counter, count === MAX_TRADES && styles.counterFull]} accessibilityLabel={t('{count} of {max} selected', { count, max: MAX_TRADES })}>
+                    <Text style={[styles.counterText, count === MAX_TRADES && styles.counterTextFull]}>{t('{count} / {max} Selected', { count, max: MAX_TRADES })}</Text>
                   </View>
                 </View>
               </View>
-              <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Close">
+              <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('Close')}>
                 <X color={Colors.textMain} size={24} />
               </TouchableOpacity>
             </View>
@@ -126,16 +130,16 @@ export default function TradePickerModal({ visible, categories, selectedTradeIds
                 style={[styles.searchInput, noFocusRing]}
                 value={query}
                 onChangeText={setQuery}
-                placeholder="Search: electric, bijli, plumber, cooler… / खोजें"
+                placeholder={t('Search: electric, bijli, plumber, cooler…')}
                 numberOfLines={1}
                 placeholderTextColor={Colors.textSubtle}
                 autoCorrect={false}
                 autoCapitalize="none"
                 returnKeyType="search"
-                accessibilityLabel="Search trades"
+                accessibilityLabel={t('Search trades')}
               />
               {query.length > 0 && (
-                <TouchableOpacity onPress={() => setQuery('')} style={styles.clearBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Clear search">
+                <TouchableOpacity onPress={() => setQuery('')} style={styles.clearBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('Clear search')}>
                   <X color={Colors.textMuted} size={18} />
                 </TouchableOpacity>
               )}
@@ -147,7 +151,7 @@ export default function TradePickerModal({ visible, categories, selectedTradeIds
                 return (
                   <Pressable key={t.id} onPress={() => setGroup(t.id)} style={[styles.tab, on && styles.tabOn]} accessibilityRole="tab" accessibilityState={{ selected: on }}>
                     <Text style={[styles.tabText, on && styles.tabTextOn]} numberOfLines={1}>
-                      {t.label} ({t.id === 'all' && t.count >= 20 ? '20+' : t.count})
+                      {tradeGroupLabel(t.id)} ({t.id === 'all' && t.count >= 20 ? '20+' : t.count})
                     </Text>
                   </Pressable>
                 );
@@ -167,8 +171,8 @@ export default function TradePickerModal({ visible, categories, selectedTradeIds
               keyboardDismissMode="on-drag"
               ListEmptyComponent={
                 <View style={styles.empty}>
-                  <Text style={styles.emptyTitle}>No trade matches “{query.trim()}”</Text>
-                  <Text style={styles.emptyHint}>Try another spelling, or look in the “All” tab. / दूसरा नाम लिखकर देखें</Text>
+                  <Text style={styles.emptyTitle}>{t('No trade matches “{query}”', { query: query.trim() })}</Text>
+                  <Text style={styles.emptyHint}>{t('Try another spelling, or look in the “All” tab.')}</Text>
                 </View>
               }
             />
@@ -190,7 +194,7 @@ export default function TradePickerModal({ visible, categories, selectedTradeIds
               >
                 <Check color={Colors.onPrimary} size={22} strokeWidth={3} />
                 <Text style={styles.doneText} numberOfLines={2}>
-                  {count === 0 ? 'Pick at least 1 trade / कम से कम 1 काम चुनें' : `Done / काम सुरक्षित करें (${count}/${MAX_TRADES} Selected)`}
+                  {count === 0 ? t('Pick at least 1 trade') : t('Done ({count}/{max} Selected)', { count, max: MAX_TRADES })}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -203,7 +207,10 @@ export default function TradePickerModal({ visible, categories, selectedTradeIds
 
 const TradeCard = memo(function TradeCard({ category, slot, onPick }: { category: ServiceCategory; slot: Slot; onPick: (id: string) => void }) {
   const Icon = serviceIcon(category.iconKey);
-  const status = slot === 'primary' ? 'Primary #1' : slot === 'secondary' ? 'Secondary #2' : 'Select';
+  const t = useT();
+  const lang = useLang();
+  const status = slot === 'primary' ? t('Primary #1') : slot === 'secondary' ? t('Secondary #2') : t('Select');
+  const title = pickText(category.title, lang);
   return (
     <TouchableOpacity
       style={[styles.card, slot === 'primary' && styles.cardPrimary, slot === 'secondary' && styles.cardSecondary]}
@@ -211,14 +218,12 @@ const TradeCard = memo(function TradeCard({ category, slot, onPick }: { category
       activeOpacity={0.75}
       accessibilityRole="button"
       accessibilityState={{ selected: slot !== null }}
-      accessibilityLabel={`${category.title.en}, ${category.title.hi}. ${status}`}
+      accessibilityLabel={`${title}. ${status}`}
     >
       <View style={[styles.iconBox, { backgroundColor: category.bgColor }]}>
         <Icon color={category.color} size={26} strokeWidth={2.2} />
       </View>
-      <Text style={styles.cardEn} numberOfLines={2}>{category.title.en}</Text>
-      <Text style={styles.cardHi} numberOfLines={1}>{category.title.hi}</Text>
-      {category.title.pa !== '' && <Text style={styles.cardPa} numberOfLines={1}>{category.title.pa}</Text>}
+      <Text style={styles.cardEn} numberOfLines={2}>{title}</Text>
       <View style={[styles.badge, slot === 'primary' && styles.badgePrimary, slot === 'secondary' && styles.badgeSecondary]}>
         {slot === 'primary' && <Star color={Colors.onPrimary} size={13} fill={Colors.onPrimary} />}
         {slot === 'secondary' && <Check color={Colors.onPrimary} size={13} strokeWidth={3} />}
@@ -282,8 +287,6 @@ const styles = StyleSheet.create({
   cardSecondary: { borderColor: SECONDARY, backgroundColor: Colors.tertiaryLight },
   iconBox: { width: 48, height: 48, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   cardEn: { fontSize: 15, fontWeight: '800', color: Colors.textMain },
-  cardHi: { fontSize: 14, fontWeight: '600', color: Colors.textMain, marginTop: 1 },
-  cardPa: { fontSize: 13, fontWeight: '500', color: Colors.textMuted },
   badge: {
     flexDirection: 'row',
     alignItems: 'center',

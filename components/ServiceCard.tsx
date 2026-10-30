@@ -1,5 +1,5 @@
-// One service in the 2-column grid: a real work photo with the icon and visit fee on top, the bilingual name, typical
-// jobs and a "Book Direct" call to action. A category without a photo (added on the server later) shows its colour
+// One service in the 2-column grid: a real work photo with the icon and a "Visit Fee Applicable" note on top (the fee
+// itself is what each worker quotes), the name and typical jobs in the person's language, and a "Book Direct" call to action. A category without a photo (added on the server later) shows its colour
 // and icon instead.
 import React, { memo } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -7,6 +7,9 @@ import { ArrowRight } from 'lucide-react-native';
 import { Colors, Radius } from '../constants/theme';
 import { SERVICE_PHOTOS, serviceIcon } from '../constants/services';
 import type { ServiceCategory } from '../api/types';
+import { pick } from '../i18n';
+import { categoryExamples } from '../i18n/categories';
+import { useLang, useT } from '../i18n/useT';
 
 interface Props {
   category: ServiceCategory;
@@ -16,12 +19,15 @@ interface Props {
 function ServiceCard({ category, onPress }: Props) {
   const Icon = serviceIcon(category.iconKey);
   const photo = SERVICE_PHOTOS[category.id];
+  const t = useT();
+  const lang = useLang();
+  const title = pick(category.title, lang);
   return (
     <Pressable
       onPress={() => onPress(category.id)}
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
       accessibilityRole="button"
-      accessibilityLabel={`${category.title.en}, ${category.title.hi}. Visit from ₹${category.baseVisitFee}. Book direct.`}
+      accessibilityLabel={`${title}. ${t('Visit Fee Applicable')}. ${t('Book Direct')}`}
     >
       <View style={[styles.photoWrap, { backgroundColor: category.bgColor }]}>
         {photo ? (
@@ -32,22 +38,21 @@ function ServiceCard({ category, onPress }: Props) {
           </View>
         )}
         <View style={styles.zeroFee}>
-          <Text style={styles.zeroFeeText}>0% FEE</Text>
+          <Text style={styles.zeroFeeText}>{t('0% FEE')}</Text>
         </View>
         <View style={styles.overlayBadge}>
           <View style={[styles.iconDot, { backgroundColor: category.bgColor }]}>
             <Icon color={category.color} size={14} strokeWidth={2.4} />
           </View>
-          <Text style={styles.feeText}>₹{category.baseVisitFee} visit</Text>
+          <Text style={styles.feeText} numberOfLines={1}>{t('Visit Fee Applicable')}</Text>
         </View>
       </View>
 
       <View style={styles.body}>
-        <Text style={styles.title} numberOfLines={2}>{category.title.en}</Text>
-        <Text style={styles.titleHi} numberOfLines={1}>{category.title.hi}</Text>
-        <Text style={styles.examples} numberOfLines={2}>{category.examples}</Text>
+        <Text style={styles.title} numberOfLines={2}>{title}</Text>
+        <Text style={styles.examples} numberOfLines={2}>{categoryExamples(category.id, category.examples, lang)}</Text>
         <View style={styles.cta}>
-          <Text style={styles.ctaText}>Book Direct</Text>
+          <Text style={styles.ctaText}>{t('Book Direct')}</Text>
           <ArrowRight color="#FFFFFF" size={15} strokeWidth={2.6} />
         </View>
       </View>
@@ -106,6 +111,7 @@ const styles = StyleSheet.create({
   overlayBadge: {
     position: 'absolute',
     left: 8,
+    maxWidth: '92%',
     bottom: 8,
     flexDirection: 'row',
     alignItems: 'center',
@@ -124,6 +130,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   feeText: {
+    flexShrink: 1,
     fontSize: 12,
     fontWeight: '800',
     color: Colors.textMain,
@@ -137,12 +144,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: Colors.textMain,
     lineHeight: 20,
-  },
-  titleHi: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.primaryDark,
-    marginTop: 1,
   },
   examples: {
     fontSize: 13,

@@ -2,11 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { User, Wrench, RefreshCw } from 'lucide-react-native';
 import { UserRole } from '../store/useStore';
+import { useT } from '../i18n/useT';
 
-const MODES = {
-  customer: { Icon: User, title: 'Customer Mode', tag: 'ग्राहक', description: 'Looking for trusted local handymen' },
-  worker: { Icon: Wrench, title: 'Worker Mode', tag: 'कारीगर', description: 'Offering skilled services across the Tricity' }
-} as const;
 
 interface ModeSwitchCardProps {
   // The mode the user is currently setting up
@@ -17,8 +14,11 @@ interface ModeSwitchCardProps {
 
 // "<Mode> Mode  [tag]  •  Switch" card shown at the top of both onboarding screens
 export default function ModeSwitchCard({ mode, onSwitch }: ModeSwitchCardProps) {
-  const { Icon, title, tag, description } = MODES[mode];
-  const other = mode === 'customer' ? 'worker' : 'customer';
+  const t = useT();
+  const { Icon, title, tag, description } =
+    mode === 'customer'
+      ? { Icon: User, title: t('Customer Mode'), tag: t('Customer'), description: t('Looking for trusted local handymen') }
+      : { Icon: Wrench, title: t('Worker Mode'), tag: t('Worker'), description: t('Offering skilled services across the Tricity') };
 
   return (
     <View style={styles.card}>
@@ -42,9 +42,9 @@ export default function ModeSwitchCard({ mode, onSwitch }: ModeSwitchCardProps) 
         activeOpacity={0.8}
         hitSlop={8}
         accessibilityRole="button"
-        accessibilityLabel={`Switch to ${other} mode`}
+        accessibilityLabel={mode === 'customer' ? t('Switch to worker mode') : t('Switch to customer mode')}
       >
-        <Text style={styles.switchText}>Switch</Text>
+        <Text style={styles.switchText}>{t('Switch')}</Text>
         <RefreshCw color="#006c46" size={16} strokeWidth={2.5} />
       </TouchableOpacity>
     </View>

@@ -16,17 +16,23 @@ import { EmptyBlock, ErrorBlock, LoadingBlock } from '../../components/StateBloc
 import { LeadCardSkeleton } from '../../components/skeletons/LeadCardSkeleton';
 import ServiceCard from '../../components/ServiceCard';
 import NotificationBell from '../../components/NotificationBell';
+import { pick } from '../../i18n';
+import { categoryTitle } from '../../i18n/categories';
+import { useLang, useT } from '../../i18n/useT';
 
-const LEAD_FILTERS: { id: 'all' | 'immediate' | 'scheduled'; label: string }[] = [
-  { id: 'all', label: 'All Leads' },
-  { id: 'immediate', label: 'Immediate' },
-  { id: 'scheduled', label: 'Scheduled' },
-];
 const LEADS_POLL_MS = 15000; // new requests show up while the radar is open
 
 export default function LeadsScreen() {
   const router = useRouter();
+  const t = useT();
+  const lang = useLang();
   const { role, setRole, setSelectedCategory, setActiveJobId } = useStore();
+  const leadFilters: { id: 'all' | 'immediate' | 'scheduled'; label: string; empty: string }[] = [
+    { id: 'all', label: t('All Leads'), empty: t('No leads right now. New requests appear here by themselves.') },
+    { id: 'immediate', label: t('Immediate'), empty: t('No immediate leads right now. New requests appear here by themselves.') },
+    { id: 'scheduled', label: t('Scheduled'), empty: t('No scheduled leads right now. New requests appear here by themselves.') },
+  ];
+  const statusLabel: Partial<Record<string, string>> = { ASSIGNED: t('ON THE WAY'), ARRIVED: t('ARRIVED'), IN_PROGRESS: t('IN PROGRESS'), WORK_COMPLETED: t('BILL READY') };
   const { me } = useSession();
   const isWorker = role === 'worker';
   const [leadFilter, setLeadFilter] = useState<'all' | 'immediate' | 'scheduled'>('all');
@@ -54,7 +60,7 @@ export default function LeadsScreen() {
       void leads.reload();
       void myJobs.reload();
     } catch (error) {
-      notify(accept ? 'Could not accept' : 'Could not decline', userMessage(error));
+      notify(accept ? t('Could not accept') : t('Could not decline'), userMessage(error));
       void leads.reload();
     } finally {
       setDirectBusy(null);
@@ -84,9 +90,9 @@ export default function LeadsScreen() {
         <View style={styles.headerBar}>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>
-              {isWorker ? 'Leads Radar • काम रडार' : 'Browse Services • सेवाएं'}
+              {isWorker ? t('Leads Radar') : t('Browse Services')}
             </Text>
-            <Text style={styles.headerSub}>Chandigarh • Mohali • Panchkula</Text>
+            <Text style={styles.headerSub}>{t('Chandigarh • Mohali • Panchkula')}</Text>
           </View>
           <NotificationBell />
         </View>
@@ -98,30 +104,30 @@ export default function LeadsScreen() {
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
                   <View style={styles.radarDot} />
-                  <Text style={styles.radarHeroTitle}>Live Customer Job Radar</Text>
+                  <Text style={styles.radarHeroTitle}>{t('Live Customer Job Radar')}</Text>
                 </View>
                 <View style={styles.zeroDeductBadge}>
-                  <Text style={styles.zeroDeductText}>0% DEDUCTION</Text>
+                  <Text style={styles.zeroDeductText}>{t('0% DEDUCTION')}</Text>
                 </View>
               </View>
               <Text style={styles.radarHeroSub}>
-                Repair requests near your base area. Tap to quote directly!
+                {t('Repair requests near your base area. Tap to quote directly!')}
               </Text>
             </View>
 
             {/* Jobs the worker is already on */}
             {activeJobs.length > 0 && (
               <View style={{ marginBottom: Spacing.md }}>
-                <Text style={[styles.leadTitle, { marginBottom: 6 }]}>Your active jobs</Text>
+                <Text style={[styles.leadTitle, { marginBottom: 6 }]}>{t('Your active jobs')}</Text>
                 {activeJobs.map((job) => (
                   <TouchableOpacity key={job.id} style={[styles.leadCard, { marginBottom: 8 }]} onPress={() => openJob(job.id)} accessibilityRole="button">
                     <View style={styles.leadHeader}>
                       <View style={{ flex: 1 }}>
-                        <View style={styles.catPill}><Text style={styles.catPillText}>{job.category.title}</Text></View>
+                        <View style={styles.catPill}><Text style={styles.catPillText}>{categoryTitle(job.category.id, job.category.title, lang)}</Text></View>
                         <Text style={styles.leadTitle}>{job.title}</Text>
                         <Text style={styles.leadLoc}>{job.customerName} • {job.area}</Text>
                       </View>
-                      <View style={styles.timeTag}><Text style={styles.timeTagText}>{job.status.replace('_', ' ')}</Text></View>
+                      <View style={styles.timeTag}><Text style={styles.timeTagText}>{statusLabel[job.status] ?? job.status.replace('_', ' ')}</Text></View>
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -135,7 +141,7 @@ export default function LeadsScreen() {
               style={styles.chipsScroll}
               contentContainerStyle={styles.chipsRow}
             >
-              {LEAD_FILTERS.map((filter) => {
+              {leadFilters.map((filter) => {
                 const isActive = filter.id === leadFilter;
                 return (
                   <TouchableOpacity
@@ -157,10 +163,10 @@ export default function LeadsScreen() {
 
             {leads.loading && <LeadCardSkeleton />}
             {leads.error && !leads.data && <ErrorBlock message={leads.error} onRetry={() => void leads.reload()} />}
-            {leads.errorCode === 'WORKER_NOT_VERIFIED' && <EmptyBlock title="Profile under review" hint="Leads open up once the team has verified your Aadhaar. / सत्यापन के बाद लीड दिखेंगे" />}
+            {leads.errorCode === 'WORKER_NOT_VERIFIED' && <EmptyBlock title={t('Profile under review')} hint={t('Leads open up once the team has verified your Aadhaar.')} />}
             {leads.data && visibleLeads.length === 0 && (
               <View style={styles.emptyCard}>
-                <Text style={styles.emptyText}>No {LEAD_FILTERS.find((x) => x.id === leadFilter)?.label.toLowerCase()} right now. New requests appear here by themselves.</Text>
+                <Text style={styles.emptyText}>{leadFilters.find((x) => x.id === leadFilter)?.empty}</Text>
               </View>
             )}
 
@@ -169,7 +175,7 @@ export default function LeadsScreen() {
               <View key={lead.id} style={styles.leadCard}>
                 <View style={styles.leadHeader}>
                   <View style={{ flex: 1 }}>
-                    <View style={styles.catPill}><Text style={styles.catPillText}>{lead.category.title.en}{lead.isDirect ? ' • Direct request' : ''}</Text></View>
+                    <View style={styles.catPill}><Text style={styles.catPillText}>{pick(lead.category.title, lang)}{lead.isDirect ? ` • ${t('Direct request')}` : ''}</Text></View>
                     <Text style={styles.leadTitle}>{lead.title}</Text>
                   </View>
                   <View style={styles.timeTag}><Text style={styles.timeTagText}>{timeAgo(lead.postedAt)}</Text></View>
@@ -180,30 +186,30 @@ export default function LeadsScreen() {
                 {lead.hasVoiceNote && (
                   <View style={styles.audioBox}>
                     <Play color="#0284C7" size={14} />
-                    <Text style={styles.audioBoxText}>Customer left a voice note • open the lead to listen</Text>
+                    <Text style={styles.audioBoxText}>{t('Customer left a voice note • open the lead to listen')}</Text>
                   </View>
                 )}
 
                 <View style={styles.leadFooter}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.leadLoc}>📍 {lead.areaName}{lead.distanceKm !== null ? ` (${lead.distanceKm} km)` : ''}</Text>
+                    <Text style={styles.leadLoc}>📍 {lead.areaName}{lead.distanceKm !== null ? ` (${t('{km} km', { km: lead.distanceKm })})` : ''}</Text>
                     <Text style={styles.leadBudget}>
-                      {lead.urgency === 'IMMEDIATE' ? 'Immediate' : lead.scheduledFor ? whenLabel(lead.scheduledFor) : lead.urgency.toLowerCase()} • Visit from ₹{lead.baseVisitFee}
+                      {lead.urgency === 'IMMEDIATE' ? t('Immediate') : lead.scheduledFor ? whenLabel(lead.scheduledFor) : lead.urgency === 'AFTERNOON' ? t('Afternoon') : lead.urgency === 'TOMORROW' ? t('Tomorrow') : t('Scheduled')} • {t('Visit from ₹{fee}', { fee: lead.baseVisitFee })}
                     </Text>
-                    {lead.myOffer && <Text style={styles.leadBudget}>Your quote: ₹{lead.myOffer.visitFee} • {lead.myOffer.etaMinutes} min</Text>}
+                    {lead.myOffer && <Text style={styles.leadBudget}>{t('Your quote: ₹{fee} • {min} min', { fee: lead.myOffer.visitFee, min: lead.myOffer.etaMinutes })}</Text>}
                   </View>
                   {lead.isDirect && lead.leadState === 'NEW' ? (
                     <View style={{ flexDirection: 'row', gap: 6 }}>
                       <TouchableOpacity style={[styles.quoteBtn, directBusy !== null && { opacity: 0.6 }]} disabled={directBusy !== null} onPress={() => void answerDirect(lead.id, true)} accessibilityRole="button">
-                        <Text style={styles.quoteBtnText}>{directBusy === lead.id ? '…' : 'Accept'}</Text>
+                        <Text style={styles.quoteBtnText}>{directBusy === lead.id ? '…' : t('Accept')}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={[styles.quoteBtn, { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: Colors.borderDark }, directBusy !== null && { opacity: 0.6 }]} disabled={directBusy !== null} onPress={() => void answerDirect(lead.id, false)} accessibilityRole="button">
-                        <Text style={[styles.quoteBtnText, { color: Colors.textMain }]}>Decline</Text>
+                        <Text style={[styles.quoteBtnText, { color: Colors.textMain }]}>{t('Decline')}</Text>
                       </TouchableOpacity>
                     </View>
                   ) : (
                     <TouchableOpacity style={styles.quoteBtn} onPress={() => router.push({ pathname: '/lead-offer', params: { id: lead.id } })} accessibilityRole="button">
-                      <Text style={styles.quoteBtnText}>{lead.myOffer ? 'View Quote →' : 'Send Quote →'}</Text>
+                      <Text style={styles.quoteBtnText}>{lead.myOffer ? t('View Quote →') : t('Send Quote →')}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -213,8 +219,8 @@ export default function LeadsScreen() {
         ) : (
           /* CUSTOMER MODE: Service Category Directory */
           <View>
-            <Text style={styles.catIntro}>Tap a service to post your job • 0% commission, pay the worker directly</Text>
-            {categories.loading && <LoadingBlock label="Loading services… / सेवाएँ लोड हो रही हैं…" />}
+            <Text style={styles.catIntro}>{t('Tap a service to post your job • 0% commission, pay the worker directly')}</Text>
+            {categories.loading && <LoadingBlock label={t('Loading services…')} />}
             {categories.error && !categories.data && <ErrorBlock message={categories.error} onRetry={() => void categories.reload()} />}
             <View style={styles.catGrid}>
               {(categories.data ?? []).map((cat) => (

@@ -8,6 +8,7 @@ import { Colors, Radius, Spacing } from '../constants/theme';
 import { deleteAccount } from '../api/endpoints';
 import { isApiError, userMessage } from '../api/errors';
 import { useSession } from '../store/useSession';
+import { useT } from '../i18n/useT';
 
 interface Props {
   visible: boolean;
@@ -17,6 +18,7 @@ interface Props {
 }
 
 export default function DeleteAccountModal({ visible, onClose, onDeleted }: Props) {
+  const t = useT();
   const { user, devNotice, requestOtp, clearLocal } = useSession();
   const [step, setStep] = useState<'explain' | 'code'>('explain');
   const [code, setCode] = useState('');
@@ -85,8 +87,8 @@ export default function DeleteAccountModal({ visible, onClose, onDeleted }: Prop
             <View style={styles.iconWrap}>
               <AlertTriangle color={Colors.error} size={20} />
             </View>
-            <Text style={styles.title}>Delete my account / खाता हटाएं</Text>
-            <TouchableOpacity onPress={close} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
+            <Text style={styles.title}>{t('Delete my account')}</Text>
+            <TouchableOpacity onPress={close} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('Close')}>
               <X color={Colors.textMuted} size={20} />
             </TouchableOpacity>
           </View>
@@ -94,23 +96,23 @@ export default function DeleteAccountModal({ visible, onClose, onDeleted }: Prop
           <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ gap: 10 }} keyboardShouldPersistTaps="handled">
             {step === 'explain' ? (
               <>
-                <Text style={styles.lead}>This cannot be undone. Your login ends right away.</Text>
-                <Text style={styles.sectionLabel}>REMOVED</Text>
+                <Text style={styles.lead}>{t('This cannot be undone. Your login ends right away.')}</Text>
+                <Text style={styles.sectionLabel}>{t('REMOVED')}</Text>
                 <Text style={styles.body}>
-                  • Your name, photo and phone number{'\n'}• Your saved addresses and the addresses on your past jobs{'\n'}• Aadhaar photos, UPI ID and vehicle details (workers){'\n'}• Photos and voice notes you attached to jobs
+                  • {t('Your name, photo and phone number')}{'\n'}• {t('Your saved addresses and the addresses on your past jobs')}{'\n'}• {t('Aadhaar photos, UPI ID and vehicle details (workers)')}{'\n'}• {t('Photos and voice notes you attached to jobs')}
                 </Text>
-                <Text style={styles.sectionLabel}>KEPT (without your name)</Text>
+                <Text style={styles.sectionLabel}>{t('KEPT (without your name)')}</Text>
                 <Text style={styles.body}>
-                  Completed jobs, bills, payments and ratings stay, because the other person and the business still need them. They show you as “Deleted user”. Your phone number becomes free: signing up again later starts a brand-new account.
+                  {t('Completed jobs, bills, payments and ratings stay, because the other person and the business still need them. They show you as “Deleted user”. Your phone number becomes free: signing up again later starts a brand-new account.')}
                 </Text>
                 <Text style={styles.note}>
-                  How long these records are kept is still to be confirmed with legal advice; nothing here is a legal statement.
+                  {t('How long these records are kept is still to be confirmed with legal advice; nothing here is a legal statement.')}
                 </Text>
-                <Text style={styles.body}>You cannot delete while a job is open or in progress, or while an SOS alert of yours is still open. Finish or cancel it first.</Text>
+                <Text style={styles.body}>{t('You cannot delete while a job is open or in progress, or while an SOS alert of yours is still open. Finish or cancel it first.')}</Text>
               </>
             ) : (
               <>
-                <Text style={styles.lead}>Enter the 6-digit code sent to +91 {(user?.phone ?? '').replace(/^\+91/, '')}</Text>
+                <Text style={styles.lead}>{t('Enter the 6-digit code sent to +91 {phone}', { phone: (user?.phone ?? '').replace(/^\+91/, '') })}</Text>
                 {devNotice ? (
                   <Text style={styles.devBanner} accessibilityRole="alert">
                     {devNotice}
@@ -119,17 +121,17 @@ export default function DeleteAccountModal({ visible, onClose, onDeleted }: Prop
                 <TextInput
                   style={styles.input}
                   value={code}
-                  onChangeText={(t) => setCode(t.replace(/\D/g, '').slice(0, 6))}
+                  onChangeText={(text) => setCode(text.replace(/\D/g, '').slice(0, 6))}
                   placeholder="• • • • • •"
                   placeholderTextColor={Colors.textSubtle}
                   keyboardType="number-pad"
                   maxLength={6}
-                  accessibilityLabel="Confirmation code"
+                  accessibilityLabel={t('Confirmation code')}
                   autoFocus
                 />
                 <TouchableOpacity style={styles.checkRow} onPress={() => setUnderstood((v) => !v)} accessibilityRole="checkbox" accessibilityState={{ checked: understood }}>
                   <View style={[styles.checkBox, understood && styles.checkBoxOn]}>{understood ? <Text style={styles.tick}>✓</Text> : null}</View>
-                  <Text style={styles.checkText}>I understand my account will be deleted and this cannot be undone.</Text>
+                  <Text style={styles.checkText}>{t('I understand my account will be deleted and this cannot be undone.')}</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -153,15 +155,15 @@ export default function DeleteAccountModal({ visible, onClose, onDeleted }: Prop
 
           <View style={styles.actions}>
             <TouchableOpacity style={styles.cancelBtn} onPress={close} disabled={busy === 'delete'} accessibilityRole="button">
-              <Text style={styles.cancelText}>Keep my account</Text>
+              <Text style={styles.cancelText}>{t('Keep my account')}</Text>
             </TouchableOpacity>
             {step === 'explain' ? (
               <TouchableOpacity style={[styles.dangerBtn, busy !== null && styles.disabled]} onPress={() => void sendCode()} disabled={busy !== null} accessibilityRole="button">
-                {busy === 'send' ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.dangerText}>Send code</Text>}
+                {busy === 'send' ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.dangerText}>{t('Send code')}</Text>}
               </TouchableOpacity>
             ) : (
               <TouchableOpacity style={[styles.dangerBtn, !canDelete && styles.disabled]} onPress={() => void confirmDelete()} disabled={!canDelete} accessibilityRole="button">
-                {busy === 'delete' ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.dangerText}>Delete my account</Text>}
+                {busy === 'delete' ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.dangerText}>{t('Delete my account')}</Text>}
               </TouchableOpacity>
             )}
           </View>

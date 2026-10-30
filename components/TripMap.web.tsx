@@ -4,6 +4,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Navigation } from 'lucide-react-native';
 import { Colors, Radius } from '../constants/theme';
+import { t } from '../i18n';
 import { distanceKm as straightLineKm, vehicleEmoji } from '../utils/trip';
 import type { TripMapProps } from './TripMap';
 
@@ -12,7 +13,7 @@ export default function TripMap({ worker, destination, vehicle, distanceKm = nul
   return (
     <View style={[styles.wrap, fill ? StyleSheet.absoluteFill : { height: Math.min(height, 130) }]}>
       <Navigation color={Colors.primaryDark} size={26} />
-      <Text style={styles.text}>The live map is available in the mobile app.</Text>
+      <Text style={styles.text}>{t('The live map is available in the mobile app.')}</Text>
       {worker && (
         <Text style={styles.coords}>
           {vehicleEmoji(vehicle)} {worker.lat.toFixed(5)}, {worker.lng.toFixed(5)}

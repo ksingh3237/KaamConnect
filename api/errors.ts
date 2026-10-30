@@ -1,5 +1,6 @@
 // One error type for everything the API (or the network) can go wrong with, plus the text the user sees.
 // The server sends machine-readable codes and no user text (see docs/03-api-spec.md section 1); the wording lives here.
+import { currentLanguage, t } from '../i18n';
 
 export interface FieldIssue {
   field: string;
@@ -27,55 +28,84 @@ export class ApiError extends Error {
 
 export const isApiError = (e: unknown): e is ApiError => e instanceof ApiError;
 
-const MESSAGES: Record<string, string> = {
-  NETWORK: 'Cannot reach the server. Check your connection and try again. / सर्वर से संपर्क नहीं हो सका',
-  TIMEOUT: 'The server took too long to answer. Please try again. / सर्वर ने जवाब देने में बहुत समय लिया',
-  OTP_INVALID: 'That code is wrong or has expired. / कोड गलत है या समाप्त हो गया',
-  OTP_LOCKED: 'Too many wrong codes. Request a new code. / बहुत गलत कोड, नया कोड मंगाएं',
-  OTP_COOLDOWN: 'Please wait a moment before asking for another code. / कृपया थोड़ा रुकें',
-  OTP_LIMIT: 'Too many codes requested. Try again later. / बहुत अधिक कोड मांगे गए, बाद में प्रयास करें',
-  OTP_EXPIRED: 'That code has expired. Request a new one. / कोड समाप्त हो गया, नया कोड मंगाएं',
-  OTP_BAD_NUMBER: 'Enter a valid 10-digit mobile number. / सही नंबर डालें',
-  OTP_CONFIG: 'Phone verification is not set up correctly right now. Please try again later. / फ़ोन सत्यापन अभी उपलब्ध नहीं है',
-  OTP_PROVIDER_UNAVAILABLE: 'The verification service is not reachable right now. Please try again. / सत्यापन सेवा अभी उपलब्ध नहीं है',
-  OTP_PROVIDER_ERROR: 'The verification service gave an unexpected answer. Please try again. / सत्यापन में गड़बड़ी, दोबारा प्रयास करें',
-  OTP_SESSION_LOST: 'This verification has ended. Please enter your number again. / सत्यापन समाप्त, नंबर दोबारा डालें',
-  OTP_SEND_FAILED: 'We could not send the code. Please try again. / कोड नहीं भेजा जा सका',
-  UNAUTHENTICATED: 'Your session has ended. Please sign in again. / कृपया दोबारा लॉगिन करें',
-  ACCOUNT_DISABLED: 'This account has been disabled. Please contact support. / यह खाता बंद है',
-  TOO_MANY_REQUESTS: 'Too many requests. Please wait a moment. / बहुत अधिक अनुरोध, थोड़ी देर रुकें',
-  VALIDATION_FAILED: 'Please check the highlighted details. / कृपया जानकारी जांचें',
-  NOT_FOUND: 'We could not find that. / यह नहीं मिला',
-  JOB_NOT_OPEN: 'This request is no longer open. / यह अनुरोध अब खुला नहीं है',
-  INVALID_TRANSITION: 'This job has just changed, so that is no longer possible. Please check its latest status. / जॉब की स्थिति बदल गई है, कृपया दोबारा देखें',
-  OFFER_UNAVAILABLE: 'That quote is not available right now. Choose another. / यह कोटेशन अभी उपलब्ध नहीं',
-  OFFER_EXISTS: 'You have already sent a quote for this job. / आप पहले ही कोटेशन भेज चुके हैं',
-  WORKER_UNAVAILABLE: 'That worker can no longer make this time. / कारीगर इस समय उपलब्ध नहीं',
-  CODE_LOCKED: 'Too many wrong codes. Ask the customer for a new code. / ग्राहक से नया कोड मांगें',
-  RESET_LIMIT: 'No more new codes can be issued for this job. You can cancel it, or call the worker. / इस जॉब के लिए और कोड जारी नहीं हो सकते',
-  RESET_COOLDOWN: 'A new code was issued a moment ago. Please wait a little. / नया कोड अभी जारी हुआ है, थोड़ी देर रुकें',
-  RESET_FAILED: 'Could not issue a new code just now. Please try again. / नया कोड अभी जारी नहीं हो सका',
-  ACTIVE_JOB_BLOCKS_DELETION: 'Finish or cancel your active jobs before deleting your account.',
-  ADMIN_CANNOT_DELETE_SELF: 'An admin account cannot be deleted from the app.',
-  STORAGE_UNAVAILABLE: 'We could not remove your files right now, so nothing was deleted. Please try again. / फ़ाइलें अभी नहीं हटाई जा सकीं',
-  SOS_NOT_AVAILABLE: 'SOS is available while a worker is assigned to your job. If you are in danger, call 112.',
-  NOT_VERIFIED: 'Your worker profile is not verified yet. / आपकी प्रोफ़ाइल अभी सत्यापित नहीं है',
-  CUSTOMER_PROFILE_REQUIRED: 'Please complete your customer profile first. / पहले प्रोफ़ाइल पूरा करें',
-  WORKER_PROFILE_REQUIRED: 'Please complete your worker profile first. / पहले प्रोफ़ाइल पूरा करें',
+
+// Read when the message is shown (not when this file loads), so it follows the language the person chose
+const MESSAGES: Record<string, () => string> = {
+  NETWORK: () => t('Cannot reach the server. Check your connection and try again.'),
+  TIMEOUT: () => t('The server took too long to answer. Please try again.'),
+  OTP_INVALID: () => t('That code is wrong or has expired.'),
+  OTP_LOCKED: () => t('Too many wrong codes. Request a new code.'),
+  OTP_COOLDOWN: () => t('Please wait a moment before asking for another code.'),
+  OTP_LIMIT: () => t('Too many codes requested. Try again later.'),
+  OTP_EXPIRED: () => t('That code has expired. Request a new one.'),
+  OTP_BAD_NUMBER: () => t('Enter a valid 10-digit mobile number.'),
+  OTP_CONFIG: () => t('Phone verification is not set up correctly right now. Please try again later.'),
+  OTP_PROVIDER_UNAVAILABLE: () => t('The verification service is not reachable right now. Please try again.'),
+  OTP_PROVIDER_ERROR: () => t('The verification service gave an unexpected answer. Please try again.'),
+  OTP_SESSION_LOST: () => t('This verification has ended. Please enter your number again.'),
+  OTP_SEND_FAILED: () => t('We could not send the code. Please try again.'),
+  CHANNEL_NOT_AVAILABLE: () => t('Codes on WhatsApp are not available yet. Use SMS.'),
+  UNAUTHENTICATED: () => t('Your session has ended. Please sign in again.'),
+  TOKEN_EXPIRED: () => t('Your session has ended. Please sign in again.'),
+  REFRESH_INVALID: () => t('Your session has ended. Please sign in again.'),
+  REFRESH_REUSED: () => t('Your session has ended. Please sign in again.'),
+  ACCOUNT_DISABLED: () => t('This account has been disabled. Please contact support.'),
+  TOO_MANY_REQUESTS: () => t('Too many requests. Please wait a moment.'),
+  VALIDATION_FAILED: () => t('Please check the highlighted details.'),
+  NOT_FOUND: () => t('We could not find that.'),
+  FORBIDDEN: () => t('That is not allowed. Please try again.'),
+  PROFILE_NOT_FOUND: () => t('Please complete your profile first.'),
+  JOB_NOT_OPEN: () => t('This request is no longer open.'),
+  INVALID_TRANSITION: () => t('This job has just changed, so that is no longer possible. Please check its latest status.'),
+  OFFER_UNAVAILABLE: () => t('That quote is not available right now. Choose another.'),
+  OFFER_NOT_PENDING: () => t('This quote has already been answered or withdrawn.'),
+  OFFER_EXISTS: () => t('You have already sent a quote for this job.'),
+  OWN_JOB: () => t('You cannot quote on your own request.'),
+  BACKED_OUT: () => t('You backed out of this request, so you cannot quote on it again.'),
+  DIRECT_JOB: () => t('This request was sent to one worker, who has to accept it.'),
+  DIRECT_LIMIT: () => t('You already have the most worker requests waiting. Wait for an answer first.'),
+  JOB_LIMIT: () => t('You have the most open requests allowed. Close one before posting another.'),
+  ADDRESS_LIMIT: () => t('You have saved the most addresses allowed. Remove one first.'),
+  WORKER_UNAVAILABLE: () => t('That worker can no longer make this time.'),
+  WORKER_OFFLINE: () => t('This worker is not taking jobs right now. Post your job to reach other nearby workers.'),
+  WORKER_BUSY: () => t('You are already working on another job. Finish it before arriving at this one.'),
+  SCHEDULE_CONFLICT: () => t('You already have a booking that clashes with this time.'),
+  ARRIVAL_CODE_INVALID: () => t('That code is not right. Check it with the customer.'),
+  CODE_LOCKED: () => t('Too many wrong codes. Ask the customer for a new code.'),
+  RESET_LIMIT: () => t('No more new codes can be issued for this job. You can cancel it, or call the worker.'),
+  RESET_COOLDOWN: () => t('A new code was issued a moment ago. Please wait a little.'),
+  RESET_FAILED: () => t('Could not issue a new code just now. Please try again.'),
+  BILL_CHANGED: () => t('The bill changed. Review the new total before approving.'),
+  BILL_NOT_AVAILABLE: () => t('There is no bill until a worker has been chosen.'),
+  PHOTO_LIMIT: () => t('You have added the most photos allowed for this side.'),
+  WORK_PHOTOS_REQUIRED: () => t('Add at least one BEFORE and one AFTER photo before marking the work finished.'),
+  RECEIPT_NOT_AVAILABLE: () => t('A receipt is available once the payment has been recorded.'),
+  TRACKING_NOT_AVAILABLE: () => t('Tracking is available once a worker is on the job.'),
+  REVIEW_NOT_ALLOWED: () => t('You can review a job once it is completed and paid.'),
+  ALREADY_REVIEWED: () => t('You have already reviewed this job.'),
+  DOCUMENTS_MISSING: () => t('Please upload both sides of your Aadhaar card.'),
+  ACTIVE_JOB_BLOCKS_DELETION: () => t('Finish or cancel your active jobs before deleting your account.'),
+  ADMIN_CANNOT_DELETE_SELF: () => t('An admin account cannot be deleted from the app.'),
+  STORAGE_UNAVAILABLE: () => t('We could not remove your files right now, so nothing was deleted. Please try again.'),
+  SOS_NOT_AVAILABLE: () => t('SOS is available while a worker is assigned to your job. If you are in danger, call 112.'),
+  NOT_VERIFIED: () => t('Your worker profile is not verified yet.'),
+  CUSTOMER_PROFILE_REQUIRED: () => t('Please complete your customer profile first.'),
+  WORKER_PROFILE_REQUIRED: () => t('Please complete your worker profile first.'),
 };
 
 /** Text for the user. Field-level problems are shown beside their fields; this is the general line. */
 export function userMessage(error: unknown): string {
   if (isApiError(error)) {
-    const known = MESSAGES[error.code];
+    const known = MESSAGES[error.code]?.();
     if (known) {
       if (error.code === 'TOO_MANY_REQUESTS' || error.code === 'OTP_COOLDOWN' || error.code === 'OTP_LIMIT') {
         return error.retryAfterSec ? `${known} (${error.retryAfterSec}s)` : known;
       }
       return known;
     }
-    if (error.status >= 500) return 'Something went wrong on our side. Please try again. / कुछ गड़बड़ हुई, दोबारा प्रयास करें';
-    return error.message || 'Something went wrong. / कुछ गलत हुआ';
+    if (error.status >= 500) return t('Something went wrong on our side. Please try again.');
+    // A code this app does not know yet: the server's own words are English, so other languages get the general line
+    if (error.message && currentLanguage() === 'en') return error.message;
   }
-  return 'Something went wrong. / कुछ गलत हुआ';
+  return t('Something went wrong. Please try again.');
 }

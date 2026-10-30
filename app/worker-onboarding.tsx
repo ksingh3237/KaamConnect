@@ -26,6 +26,9 @@ import { serviceIcon } from '../constants/services';
 import { noFocusRing } from '../constants/theme';
 import { reconcileScheduledRadius, scheduledRadiusChoices } from '../utils/radius';
 import type { DocumentType, Lang, ServiceCategory, VerificationStatus } from '../api/types';
+import { pick } from '../i18n';
+import { LANGUAGE_NAMES } from '../components/LanguageToggle';
+import { useLang, useT } from '../i18n/useT';
 
 const ID_PLACEHOLDER = require('../assets/images/id-card-placeholder.png');
 const AVATAR_PLACEHOLDER = require('../assets/images/avatar-placeholder.png');
@@ -49,6 +52,8 @@ const HtmlColors = {
 
 export default function WorkerOnboardingScreen() {
   const router = useRouter();
+  const t = useT();
+  const lang = useLang();
   const insets = useSafeAreaInsets();
   const { pick: pickImage, modal: imageSourceModal } = useImagePicker();
   const { show: viewImage, modal: imageViewerModal } = useImageViewer();
@@ -63,7 +68,7 @@ export default function WorkerOnboardingScreen() {
 
   const [name, setName] = useState(existing?.fullName ?? '');
   // First entry is the primary trade, the optional second one is the secondary
-  const [trades, setTrades] = useState<string[]>(existing?.trades.map((t) => t.categoryId) ?? []);
+  const [trades, setTrades] = useState<string[]>(existing?.trades.map((trade) => trade.categoryId) ?? []);
   const [pickingTrades, setPickingTrades] = useState(false);
   // The grey box around an input shows the focus border, not the browser's ring on the smaller input inside it
   const [focused, setFocused] = useState<string | null>(null);
@@ -98,6 +103,7 @@ export default function WorkerOnboardingScreen() {
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [photo, setPhoto] = useState<PickedFile | null>(null);
+  const avatarUri = photo?.uri ?? existing?.photoUrl ?? null;
   const [photoKey, setPhotoKey] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   // Aadhaar images are chosen now and uploaded when the profile is saved (the server needs the profile to exist first)
@@ -105,7 +111,7 @@ export default function WorkerOnboardingScreen() {
   // Signed, short-lived links to the Aadhaar images already on the server, so a returning worker can see them
   const [docUrls, setDocUrls] = useState<Partial<Record<DocumentType, string>>>({});
 
-  const onFileTypes = (['AADHAAR_FRONT', 'AADHAAR_BACK'] as const).filter((t) => existing?.documents[t]).join(',');
+  const onFileTypes = (['AADHAAR_FRONT', 'AADHAAR_BACK'] as const).filter((type) => existing?.documents[type]).join(',');
   useEffect(() => {
     if (!onFileTypes) return;
     let live = true;
@@ -127,10 +133,10 @@ export default function WorkerOnboardingScreen() {
   const baseLabel = useMemo(() => {
     for (const city of locations.data ?? []) {
       const area = city.areas.find((a) => a.id === baseAreaId);
-      if (area) return { title: `Base: ${localityName ?? area.name}, ${city.name.replace(/\s*\(.*\)/, '')}`, city: city.name };
+      if (area) return { title: t('Base: {place}', { place: `${localityName ?? area.name}, ${city.name.replace(/\s*\(.*\)/, '')}` }), city: city.name };
     }
     return null;
-  }, [locations.data, baseAreaId, localityName]);
+  }, [locations.data, baseAreaId, localityName, t]);
 
   const displayPhone = (user?.phone ?? '').replace(/^\+91/, '');
 
@@ -197,15 +203,15 @@ export default function WorkerOnboardingScreen() {
   const handleSubmit = async () => {
     if (saving || photoBusy) return;
     setFormError(null);
-    if (!name.trim()) return fail('Enter your full name as on your ID. / पहचान पत्र के अनुसार पूरा नाम लिखें');
-    if (trades.length === 0) return fail('Choose at least one trade. / कम से कम एक काम चुनें');
-    if (languages.length === 0) return fail('Choose at least one language. / कम से कम एक भाषा चुनें');
-    if (baseAreaId === null) return fail('Choose your base sector. / अपना बेस सेक्टर चुनें');
-    if (shopAddress.trim().length > 0 && shopAddress.trim().length < 3) return fail('Write your full shop / home address. / पूरा पता लिखें');
+    if (!name.trim()) return fail(t('Enter your full name as on your ID.'));
+    if (trades.length === 0) return fail(t('Choose at least one trade.'));
+    if (languages.length === 0) return fail(t('Choose at least one language.'));
+    if (baseAreaId === null) return fail(t('Choose your base sector.'));
+    if (shopAddress.trim().length > 0 && shopAddress.trim().length < 3) return fail(t('Write your full shop / home address.'));
     const haveFront = !!docs.AADHAAR_FRONT || !!existing?.documents.AADHAAR_FRONT;
     const haveBack = !!docs.AADHAAR_BACK || !!existing?.documents.AADHAAR_BACK;
-    if (!haveFront || !haveBack) return fail('Add both Aadhaar photos (front and back). / आधार की दोनों फ़ोटो जोड़ें');
-    if (visitingFee !== '' && !/^[0-9]{1,6}$/.test(visitingFee)) return fail('Visiting fee must be a whole number of rupees. / विज़िटिंग फ़ीस पूरी संख्या में लिखें');
+    if (!haveFront || !haveBack) return fail(t('Add both Aadhaar photos (front and back).'));
+    if (visitingFee !== '' && !/^[0-9]{1,6}$/.test(visitingFee)) return fail(t('Visiting fee must be a whole number of rupees.'));
     if (!agreed) {
       setAgreeError(true);
       scrollRef.current?.scrollToEnd({ animated: true });
@@ -272,17 +278,17 @@ export default function WorkerOnboardingScreen() {
             style={styles.backBtn}
             onPress={() => router.canGoBack() ? router.back() : router.replace('/role')}
             accessibilityRole="button"
-            accessibilityLabel="Go back"
+            accessibilityLabel={t('Go back')}
           >
             <ArrowLeft color={HtmlColors.onSurface} size={24} />
           </TouchableOpacity>
           <View style={styles.logo}>
             <Wrench color={HtmlColors.onPrimary} size={18} />
           </View>
-          <Text style={styles.headerTitle} numberOfLines={1}>Worker Profile</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>{t('Worker Profile')}</Text>
         </View>
         <View style={styles.headerRight}>
-          <View style={styles.tricityBadge}><Text style={styles.tricityBadgeText}>Tricity</Text></View>
+          <View style={styles.tricityBadge}><Text style={styles.tricityBadgeText}>{t('Tricity')}</Text></View>
           <View style={styles.headerAvatar}><User color={HtmlColors.onPrimary} size={18} /></View>
         </View>
       </View>
@@ -292,28 +298,27 @@ export default function WorkerOnboardingScreen() {
         <View style={styles.trustBanner}>
           <View style={styles.trustBannerLeft}>
             <ShieldCheck color={HtmlColors.primary} size={20} />
-            <Text style={styles.trustBannerText}>Zero Commission Guarantee</Text>
+            <Text style={styles.trustBannerText}>{t('Zero Commission Guarantee')}</Text>
           </View>
-          <View style={styles.tricityVerified}><Text style={styles.tricityVerifiedText}>Tricity Verified</Text></View>
+          <View style={styles.tricityVerified}><Text style={styles.tricityVerifiedText}>{t('Tricity Verified')}</Text></View>
         </View>
 
         {/* Worker Mode Card */}
         {/* Header Section & Public Privacy Trust Pill */}
         <View style={styles.formHeader}>
           <View style={styles.formHeaderTitleRow}>
-            <Text style={styles.formHeaderTitle}>Worker Profile & Verification</Text>
-            <View style={styles.freePill}><Text style={styles.freePillText}>100% Free</Text></View>
+            <Text style={styles.formHeaderTitle}>{t('Worker Profile & Verification')}</Text>
+            <View style={styles.freePill}><Text style={styles.freePillText}>{t('100% Free')}</Text></View>
           </View>
-          <Text style={styles.formHeaderSub}>कारीगर प्रोफाइल एवं पहचान सत्यापन</Text>
 
           <View style={styles.securityBadge}>
             <View style={styles.securityIconBg}><Shield color={HtmlColors.primary} size={18} /></View>
             <View style={{ flex: 1, marginLeft: 12 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
-                <Text style={styles.securityTitle}>Identity Verified on KaamConnect</Text>
+                <Text style={styles.securityTitle}>{t('Identity Verified on KaamConnect')}</Text>
                 <View style={styles.pulseDot} />
               </View>
-              <Text style={styles.securityDesc}>Aadhaar details remain encrypted & are never shown publicly. Only the green verification badge appears to customers.</Text>
+              <Text style={styles.securityDesc}>{t('Aadhaar details remain encrypted & are never shown publicly. Only the green verification badge appears to customers.')}</Text>
             </View>
           </View>
         </View>
@@ -322,17 +327,26 @@ export default function WorkerOnboardingScreen() {
         <View style={styles.card}>
           <View style={styles.photoContainer}>
             <View style={styles.avatarWrap}>
-              <Image source={photo ? { uri: photo.uri } : AVATAR_PLACEHOLDER} style={[styles.avatarImage, photoBusy && { opacity: 0.5 }]} />
+              {/* The picture already on the account is shown until a new one is picked, and opens full screen on a tap */}
+              <TouchableOpacity
+                onPress={() => (avatarUri ? viewImage(avatarUri, t('Profile photo')) : void handlePickPhoto())}
+                disabled={photoBusy}
+                activeOpacity={0.85}
+                accessibilityRole={avatarUri ? 'imagebutton' : 'button'}
+                accessibilityLabel={avatarUri ? t('View your profile photo full screen') : t('Add profile photo')}
+              >
+                <Image source={avatarUri ? { uri: avatarUri } : AVATAR_PLACEHOLDER} style={[styles.avatarImage, photoBusy && { opacity: 0.5 }]} />
+              </TouchableOpacity>
               {photoBusy && <ActivityIndicator color={HtmlColors.primary} style={{ position: 'absolute', alignSelf: 'center', top: '40%' }} />}
-              <TouchableOpacity style={styles.cameraBtn} onPress={() => void handlePickPhoto()} disabled={photoBusy} accessibilityRole="button" accessibilityLabel="Add profile photo">
+              <TouchableOpacity style={styles.cameraBtn} onPress={() => void handlePickPhoto()} disabled={photoBusy} accessibilityRole="button" accessibilityLabel={t('Add profile photo')}>
                 <Camera color={HtmlColors.onPrimary} size={16} />
               </TouchableOpacity>
             </View>
-            <Text style={styles.photoTitle}>Add clear smiling photo</Text>
-            <Text style={styles.photoSub}>साफ़ फोटो लगाएं (ग्राहकों का भरोसा बढ़ता है)</Text>
+            <Text style={styles.photoTitle}>{t('Add clear smiling photo')}</Text>
+            <Text style={styles.photoSub}>{t('A clear photo builds customer trust')}</Text>
             <View style={styles.photoCheck}>
               <CheckCircle2 color={HtmlColors.primary} size={16} />
-              <Text style={styles.photoCheckText}>Face clearly visible</Text>
+              <Text style={styles.photoCheckText}>{t('Face clearly visible')}</Text>
             </View>
           </View>
         </View>
@@ -341,26 +355,26 @@ export default function WorkerOnboardingScreen() {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <IdCard color={HtmlColors.primary} size={20} />
-            <Text style={styles.cardTitle}>Personal Details (निजी विवरण)</Text>
+            <Text style={styles.cardTitle}>{t('Personal Details')}</Text>
           </View>
           <View style={styles.inputGroup}>
             <View style={styles.labelRow}>
-              <Text style={styles.label}>Full Name / ਪੂਰਾ ਨਾਂ</Text>
-              <Text style={styles.labelHighlight}>As per Govt ID</Text>
+              <Text style={styles.label}>{t('Full Name')}</Text>
+              <Text style={styles.labelHighlight}>{t('As per Govt ID')}</Text>
             </View>
             <View style={wrapStyle("name")}>
               <User color={HtmlColors.onSurfaceVariant} size={20} style={styles.inputIcon} />
-              <TextInput style={styles.input} {...focusProps("name")} value={name} onChangeText={setName} placeholder="Your full name / ਪੂਰਾ ਨਾਂ" placeholderTextColor={HtmlColors.outline} maxLength={80} />
+              <TextInput style={styles.input} {...focusProps("name")} value={name} onChangeText={setName} placeholder={t('Your full name')} placeholderTextColor={HtmlColors.outline} maxLength={80} />
             </View>
           </View>
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Mobile Number / ਮੋਬਾਈਲ</Text>
+            <Text style={styles.label}>{t('Mobile Number')}</Text>
             <View style={styles.inputWrapper}>
               <Phone color={HtmlColors.onSurfaceVariant} size={20} style={styles.inputIcon} />
               <TextInput style={[styles.input, { fontFamily: 'monospace' }]} value={`+91 ${displayPhone}`} editable={false} />
               <View style={styles.verifiedTag}>
                 <ShieldCheck color={HtmlColors.primary} size={16} />
-                <Text style={styles.verifiedTagText}>Verified</Text>
+                <Text style={styles.verifiedTagText}>{t('Verified')}</Text>
               </View>
             </View>
           </View>
@@ -371,11 +385,11 @@ export default function WorkerOnboardingScreen() {
           <View style={[styles.cardHeader, { justifyContent: 'space-between' }]}>
             <View style={styles.cardHeaderMain}>
               <Wrench color={HtmlColors.primary} size={20} />
-              <Text style={styles.cardTitle}>Primary Trade (मुख्य काम)</Text>
+              <Text style={styles.cardTitle}>{t('Primary Trade')}</Text>
             </View>
-            <Text style={styles.maxText}>Max 2</Text>
+            <Text style={styles.maxText}>{t('Max 2')}</Text>
           </View>
-          {categories.loading && <LoadingBlock label="Loading trades… / काम लोड हो रहे हैं…" />}
+          {categories.loading && <LoadingBlock label={t('Loading trades…')} />}
           {categories.error && !categories.data && <ErrorBlock message={categories.error} onRetry={() => void categories.reload()} />}
           {categories.data && (
             <View style={styles.tradeSlots}>
@@ -396,21 +410,20 @@ export default function WorkerOnboardingScreen() {
           <View style={[styles.cardHeader, { justifyContent: 'space-between' }]}>
             <View style={styles.cardHeaderMain}>
               <Medal color={HtmlColors.primary} size={20} />
-              <Text style={styles.cardTitle}>Experience & Skills</Text>
+              <Text style={styles.cardTitle}>{t('Experience & Skills')}</Text>
             </View>
-            <View style={styles.expBadge}><Text style={styles.expBadgeText}>{exp} Years Exp</Text></View>
+            <View style={styles.expBadge}><Text style={styles.expBadgeText}>{t('{years} Years Exp', { years: exp })}</Text></View>
           </View>
 
           <View style={styles.expStepperRow}>
-            <Text style={styles.expStepperLabel}>Total Field Experience:</Text>
+            <Text style={styles.expStepperLabel}>{t('Total Field Experience:')}</Text>
             <View style={styles.stepper}>
               <TouchableOpacity style={styles.stepperBtn} onPress={() => adjustExp(-1)}><Minus color={HtmlColors.onSurface} size={18} /></TouchableOpacity>
-              <Text style={styles.stepperVal}>{exp} <Text style={styles.stepperUnit}>yrs</Text></Text>
+              <Text style={styles.stepperVal}>{exp} <Text style={styles.stepperUnit}>{t('yrs')}</Text></Text>
               <TouchableOpacity style={styles.stepperBtn} onPress={() => adjustExp(1)}><Plus color={HtmlColors.onSurface} size={18} /></TouchableOpacity>
             </View>
           </View>
-
-          <Text style={styles.skillsLabel}>Skills / विशेषज्ञता (Tap to toggle):</Text>
+          <Text style={styles.skillsLabel}>{t('Skills (tap one to remove it):')}</Text>
           <View style={styles.chipsWrap}>
             {skills.map((s, i) => (
               <TouchableOpacity key={i} style={styles.skillChip} onPress={() => removeSkill(s)}>
@@ -426,7 +439,7 @@ export default function WorkerOnboardingScreen() {
                   onChangeText={setSkillDraft}
                   onSubmitEditing={commitSkill}
                   onBlur={commitSkill}
-                  placeholder="e.g. Wiring"
+                  placeholder={t('e.g. Wiring')}
                   placeholderTextColor={HtmlColors.outline}
                   maxLength={40}
                   autoFocus
@@ -435,7 +448,7 @@ export default function WorkerOnboardingScreen() {
             ) : (
               <TouchableOpacity style={styles.addSkillChip} onPress={() => setAddingSkill(true)} accessibilityRole="button">
                 <Plus color={HtmlColors.onSurfaceVariant} size={16} />
-                <Text style={styles.addSkillChipText}>Add Skill</Text>
+                <Text style={styles.addSkillChipText}>{t('Add Skill')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -445,21 +458,20 @@ export default function WorkerOnboardingScreen() {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Globe color={HtmlColors.primary} size={20} />
-            <Text style={styles.cardTitle}>Languages Spoken (भाषाएं)</Text>
+            <Text style={styles.cardTitle}>{t('Languages Spoken')}</Text>
           </View>
-          <Text style={styles.cardDesc}>Helps customers communicate smoothly with you</Text>
+          <Text style={styles.cardDesc}>{t('Helps customers communicate smoothly with you')}</Text>
           <View style={styles.langGrid}>
             {([
-              ['hi', 'Hindi', 'हिंदी'],
-              ['pa', 'Punjabi', 'ਪੰਜਾਬੀ'],
-              ['en', 'Basic English', 'ਅੰਗਰੇਜ਼ੀ'],
-            ] as const).map(([code, title, sub]) => {
+              ['hi', LANGUAGE_NAMES.hi],
+              ['pa', LANGUAGE_NAMES.pa],
+              ['en', LANGUAGE_NAMES.en],
+            ] as const).map(([code, title]) => {
               const on = languages.includes(code);
               return (
                 <TouchableOpacity key={code} style={on ? styles.langBoxActive : styles.langBox} onPress={() => toggleLanguage(code)} accessibilityRole="button" accessibilityState={{ selected: on }}>
                   {on ? <CheckCircle2 color={HtmlColors.primary} size={20} /> : <PlusCircle color={HtmlColors.primary} size={20} />}
                   <Text style={styles.langTitle}>{title}</Text>
-                  <Text style={styles.langSub}>{sub}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -471,9 +483,9 @@ export default function WorkerOnboardingScreen() {
           <View style={[styles.cardHeader, { justifyContent: 'space-between' }]}>
             <View style={styles.cardHeaderMain}>
               <MapPin color={HtmlColors.primary} size={20} />
-              <Text style={styles.cardTitle}>Service Base & Radius</Text>
+              <Text style={styles.cardTitle}>{t('Service Base & Radius')}</Text>
             </View>
-            <Text style={styles.labelHighlight}>{baseLabel?.city ?? 'Choose base'}</Text>
+            <Text style={styles.labelHighlight}>{baseLabel?.city ?? t('Choose base')}</Text>
           </View>
 
           {locations.data && (
@@ -486,15 +498,15 @@ export default function WorkerOnboardingScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
               <View style={styles.mapPinBg}><MapPin color={HtmlColors.primary} size={18} /></View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.baseTitle}>{baseLabel?.title ?? 'Choose your base sector'}</Text>
-                <Text style={styles.baseSub}>Leads near this sector and inside your radius reach you</Text>
+                <Text style={styles.baseTitle}>{baseLabel?.title ?? t('Choose your base sector')}</Text>
+                <Text style={styles.baseSub}>{t('Leads near this sector and inside your radius reach you')}</Text>
               </View>
             </View>
-            <TouchableOpacity hitSlop={12} onPress={() => setPickingBase((v) => !v)} accessibilityRole="button"><Text style={styles.changeLink}>{pickingBase ? 'Done' : baseLabel ? 'Change' : 'Choose'}</Text></TouchableOpacity>
+            <TouchableOpacity hitSlop={12} onPress={() => setPickingBase((v) => !v)} accessibilityRole="button"><Text style={styles.changeLink}>{pickingBase ? t('Done') : baseLabel ? t('Change') : t('Choose')}</Text></TouchableOpacity>
           </View>
           {(pickingBase || baseAreaId === null) && (
             <View style={{ marginTop: 10 }}>
-              {locations.loading && <LoadingBlock label="Loading sectors… / सेक्टर लोड हो रहे हैं…" />}
+              {locations.loading && <LoadingBlock label={t('Loading sectors…')} />}
               {locations.error && !locations.data && <ErrorBlock message={locations.error} onRetry={() => void locations.reload()} />}
               {locations.data && (
                 <SectorPicker
@@ -502,7 +514,7 @@ export default function WorkerOnboardingScreen() {
                   value={baseAreaId}
                   locality={localityName}
                   onChange={(id, _label, locality) => { setBaseAreaId(id); setLocalityName(locality); setPickingBase(false); }}
-                  placeholder="Choose your base sector / बेस सेक्टर चुनें"
+                  placeholder={t('Choose your base sector')}
                 />
               )}
             </View>
@@ -510,7 +522,7 @@ export default function WorkerOnboardingScreen() {
 
           <View style={[styles.inputGroup, { marginTop: 14 }]}>
             <View style={styles.labelRow}>
-              <Text style={styles.label}>Address / Workshop / Shop (दुकान या कार्यशाला का पता)</Text>
+              <Text style={styles.label}>{t('Address / Workshop / Shop')}</Text>
             </View>
             <View style={wrapStyle("address")}>
               <MapPin color={HtmlColors.onSurfaceVariant} size={20} style={styles.inputIcon} />
@@ -518,18 +530,18 @@ export default function WorkerOnboardingScreen() {
                 style={styles.input} {...focusProps("address")}
                 value={shopAddress}
                 onChangeText={setShopAddress}
-                placeholder="Shop / house no., street, landmark"
+                placeholder={t('Shop / house no., street, landmark')}
                 placeholderTextColor={HtmlColors.outline}
                 maxLength={200}
-                accessibilityLabel="Address, workshop or shop"
+                accessibilityLabel={t('Address / Workshop / Shop')}
               />
             </View>
-            <Text style={styles.addressHint}>Private: only you and the KaamConnect verification team see it. / यह निजी है</Text>
+            <Text style={styles.addressHint}>{t('Private: only you and the KaamConnect verification team see it.')}</Text>
           </View>
 
           <View style={[styles.labelRow, { marginTop: 12, marginBottom: 8 }]}>
-            <Text style={styles.label}>Job Alert Radius (कार्य क्षेत्र):</Text>
-            <Text style={styles.radiusLabelHighlight}>{radius} {radius === '6 km' && '(Recommended)'}</Text>
+            <Text style={styles.label}>{t('Job Alert Radius:')}</Text>
+            <Text style={styles.radiusLabelHighlight}>{t('{km} km', { km: parseInt(radius, 10) })} {radius === '6 km' && t('(Recommended)')}</Text>
           </View>
           <View style={styles.radiusGrid}>
             {['3 km', '6 km', '12 km'].map((r) => (
@@ -542,16 +554,16 @@ export default function WorkerOnboardingScreen() {
                 }}
               >
                 <Text style={[styles.radiusBtnText, radius === r && styles.radiusBtnTextActive]}>
-                  {r} {r === '6 km' && '★'}
+                  {t('{km} km', { km: parseInt(r, 10) })} {r === '6 km' && '★'}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
-          <Text style={styles.radiusNote}>Higher radius means more customer call notifications across Mohali & Panchkula.</Text>
+          <Text style={styles.radiusNote}>{t('Higher radius means more customer call notifications across Mohali & Panchkula.')}</Text>
 
           <View style={[styles.labelRow, { marginTop: 16, marginBottom: 8 }]}>
-            <Text style={styles.label}>Future bookings (आगे की बुकिंग):</Text>
-            <Text style={styles.radiusLabelHighlight}>{scheduledRadius ? `${scheduledRadius} km` : 'Same as above'}</Text>
+            <Text style={styles.label}>{t('Future bookings:')}</Text>
+            <Text style={styles.radiusLabelHighlight}>{scheduledRadius ? t('{km} km', { km: scheduledRadius }) : t('Same as above')}</Text>
           </View>
           <View style={styles.radiusGrid}>
             {[null, ...scheduledRadiusChoices(parseInt(radius, 10))].map((km) => (
@@ -560,13 +572,13 @@ export default function WorkerOnboardingScreen() {
                 style={[styles.radiusBtn, scheduledRadius === km && styles.radiusBtnActive]}
                 onPress={() => setScheduledRadius(km)}
                 accessibilityRole="button"
-                accessibilityLabel={km ? `Future bookings within ${km} km` : 'Future bookings: same radius as live jobs'}
+                accessibilityLabel={km ? t('Future bookings within {km} km', { km }) : t('Future bookings: same radius as live jobs')}
               >
-                <Text style={[styles.radiusBtnText, scheduledRadius === km && styles.radiusBtnTextActive]}>{km ? `${km} km` : 'Same'}</Text>
+                <Text style={[styles.radiusBtnText, scheduledRadius === km && styles.radiusBtnTextActive]}>{km ? t('{km} km', { km }) : t('Same')}</Text>
               </TouchableOpacity>
             ))}
           </View>
-          <Text style={styles.radiusNote}>Jobs booked for a later day are matched from your base sector, so you can accept work farther away.</Text>
+          <Text style={styles.radiusNote}>{t('Jobs booked for a later day are matched from your base sector, so you can accept work farther away.')}</Text>
         </View>
 
         {/* Section 7: ID Verification */}
@@ -574,15 +586,15 @@ export default function WorkerOnboardingScreen() {
           <View style={[styles.cardHeader, { justifyContent: 'space-between' }]}>
             <View style={styles.cardHeaderMain}>
               <ShieldCheck color={HtmlColors.primary} size={20} />
-              <Text style={styles.cardTitle}>Govt ID Verification</Text>
+              <Text style={styles.cardTitle}>{t('Govt ID Verification')}</Text>
             </View>
-            <View style={styles.mandatoryBadge}><Text style={styles.mandatoryBadgeText}>Mandatory</Text></View>
+            <View style={styles.mandatoryBadge}><Text style={styles.mandatoryBadgeText}>{t('Mandatory')}</Text></View>
           </View>
 
           <View style={styles.encryptNote}>
             <Lock color={HtmlColors.primary} size={20} />
             <Text style={styles.encryptNoteText}>
-              Your Aadhaar number and document images are <Text style={{ fontWeight: '700' }}>AES-256 encrypted</Text>. Customers only see the <Text style={{ color: HtmlColors.primary, fontWeight: '700' }}>"Identity Verified"</Text> checkmark. No card numbers are ever stored publicly.
+              {t('Your Aadhaar images are kept in private storage. Customers only see the “Identity Verified” checkmark, never your card or its number.')}
             </Text>
           </View>
 
@@ -590,18 +602,18 @@ export default function WorkerOnboardingScreen() {
             {(['AADHAAR_FRONT', 'AADHAAR_BACK'] as const).map((type) => {
               const chosen = docs[type];
               const onFile = !!existing?.documents[type];
-              const label = type === 'AADHAAR_FRONT' ? 'Aadhaar Front' : 'Aadhaar Back';
+              const label = type === 'AADHAAR_FRONT' ? t('Aadhaar Front') : t('Aadhaar Back');
               // The picture itself, so the worker can check it is the right side and readable before saving
               const preview = chosen?.uri ?? docUrls[type] ?? null;
               return (
-                <TouchableOpacity key={type} style={styles.idCardBox} onPress={() => void handlePickDoc(type)} accessibilityRole="button" accessibilityLabel={`Choose ${label} photo`}>
+                <TouchableOpacity key={type} style={styles.idCardBox} onPress={() => void handlePickDoc(type)} accessibilityRole="button" accessibilityLabel={t('Choose {side} photo', { side: label })}>
                   {preview ? (
                     <TouchableOpacity
                       style={styles.idThumbBox}
                       onPress={() => viewImage(preview, label)}
                       activeOpacity={0.85}
                       accessibilityRole="imagebutton"
-                      accessibilityLabel={`View ${label} full screen`}
+                      accessibilityLabel={t('View {side} full screen', { side: label })}
                     >
                       <Image source={{ uri: preview }} style={styles.idThumb} resizeMode="cover" accessibilityIgnoresInvertColors />
                       <View style={styles.idThumbBadge}><CheckCircle2 color="#FFFFFF" size={14} /></View>
@@ -615,17 +627,17 @@ export default function WorkerOnboardingScreen() {
                   {chosen ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
                       <CheckCircle2 color={HtmlColors.primary} size={14} />
-                      <Text style={styles.idBoxStatus}>Selected (uploads on save)</Text>
+                      <Text style={styles.idBoxStatus}>{t('Selected (uploads on save)')}</Text>
                     </View>
                   ) : onFile ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
                       <CheckCircle2 color={HtmlColors.primary} size={14} />
-                      <Text style={styles.idBoxStatus}>Already on file</Text>
+                      <Text style={styles.idBoxStatus}>{t('Already on file')}</Text>
                     </View>
                   ) : (
-                    <Text style={styles.idBoxStatusGray}>Tap to choose a photo</Text>
+                    <Text style={styles.idBoxStatusGray}>{t('Tap to choose a photo')}</Text>
                   )}
-                  <Text style={chosen || onFile ? styles.idBoxAction : styles.idBoxActionPrimary}>{chosen || onFile ? 'Tap to change' : 'Add photo'}</Text>
+                  <Text style={chosen || onFile ? styles.idBoxAction : styles.idBoxActionPrimary}>{chosen || onFile ? t('Tap to change') : t('Add photo')}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -636,9 +648,9 @@ export default function WorkerOnboardingScreen() {
             <View style={styles.aadhaarOverlay}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 <ShieldCheck color="#73fbb8" size={16} />
-                <Text style={[styles.aadhaarOverlayTitle, { flexShrink: 1 }]}>Reviewed by the KaamConnect team</Text>
+                <Text style={[styles.aadhaarOverlayTitle, { flexShrink: 1 }]}>{t('Reviewed by the KaamConnect team')}</Text>
               </View>
-              <Text style={styles.aadhaarOverlaySub}>Your profile goes live once the review is done</Text>
+              <Text style={styles.aadhaarOverlaySub}>{t('Your profile goes live once the review is done')}</Text>
             </View>
           </View>
         </View>
@@ -647,24 +659,24 @@ export default function WorkerOnboardingScreen() {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <CreditCard color={HtmlColors.primary} size={20} />
-            <Text style={styles.cardTitle}>Payment & Vehicle (optional)</Text>
+            <Text style={styles.cardTitle}>{t('Payment & Vehicle (optional)')}</Text>
           </View>
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Visiting fee ₹ / विज़िटिंग फ़ीस</Text>
+            <Text style={styles.label}>{t('Visiting fee ₹')}</Text>
             <View style={wrapStyle("fee")}>
-              <TextInput style={styles.input} {...focusProps("fee")} value={visitingFee} onChangeText={(t) => setVisitingFee(t.replace(/[^0-9]/g, '').slice(0, 6))} placeholder="e.g. 200" placeholderTextColor={HtmlColors.outline} keyboardType="number-pad" />
+              <TextInput style={styles.input} {...focusProps("fee")} value={visitingFee} onChangeText={(text) => setVisitingFee(text.replace(/[^0-9]/g, '').slice(0, 6))} placeholder={t('e.g. 200')} placeholderTextColor={HtmlColors.outline} keyboardType="number-pad" />
             </View>
           </View>
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>UPI ID / यूपीआई आईडी</Text>
+            <Text style={styles.label}>{t('UPI ID')}</Text>
             <View style={wrapStyle("upi")}>
               <TextInput style={styles.input} {...focusProps("upi")} value={upiId} onChangeText={setUpiId} placeholder="name@bank" placeholderTextColor={HtmlColors.outline} autoCapitalize="none" maxLength={80} />
             </View>
           </View>
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Vehicle / वाहन</Text>
+            <Text style={styles.label}>{t('Vehicle')}</Text>
             <View style={wrapStyle("vehicle")}>
-              <TextInput style={styles.input} {...focusProps("vehicle")} value={vehicle} onChangeText={setVehicle} placeholder="e.g. Hero Splendor (CH 01 AB 1234)" placeholderTextColor={HtmlColors.outline} maxLength={80} />
+              <TextInput style={styles.input} {...focusProps("vehicle")} value={vehicle} onChangeText={setVehicle} placeholder={t('e.g. Hero Splendor (CH 01 AB 1234)')} placeholderTextColor={HtmlColors.outline} maxLength={80} />
             </View>
           </View>
         </View>
@@ -685,10 +697,10 @@ export default function WorkerOnboardingScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.agreeText}>
-              I agree to receive direct calls from Tricity residents and keep 100% of my earnings without any middleman commission.
+              {t('I agree to receive direct calls from Tricity residents and keep 100% of my earnings without any middleman commission.')}
             </Text>
             {agreeError && (
-              <Text style={styles.agreeErrorText}>Please tick this box to continue / आगे बढ़ने के लिए सहमति दें</Text>
+              <Text style={styles.agreeErrorText}>{t('Please tick this box to continue.')}</Text>
             )}
           </View>
         </TouchableOpacity>
@@ -703,9 +715,9 @@ export default function WorkerOnboardingScreen() {
         )}
         <TouchableOpacity style={[styles.saveBtn, (saving || photoBusy) && { opacity: 0.7 }]} onPress={() => void handleSubmit()} disabled={saving || photoBusy}>
           <Save color={HtmlColors.onPrimary} size={22} />
-          <Text style={styles.saveBtnText}>{saving ? 'Saving… / सहेज रहे हैं…' : 'Save & Go to Dashboard • प्रोफाइल सेव करें'}</Text>
+          <Text style={styles.saveBtnText}>{saving ? t('Saving…') : t('Save & Go to Dashboard')}</Text>
         </TouchableOpacity>
-        <Text style={styles.footerNote}>Tricity Worker Network • Chandigarh, Mohali, Panchkula</Text>
+        <Text style={styles.footerNote}>{t('Tricity Worker Network • Chandigarh, Mohali, Panchkula')}</Text>
       </View>
 
       {/* Success Modal */}
@@ -713,23 +725,23 @@ export default function WorkerOnboardingScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalIconBox}><CheckCircle2 color={HtmlColors.primary} size={36} /></View>
-            <Text style={styles.modalTitle}>{resultStatus === 'VERIFIED' ? 'Badhai Ho! (बधाई हो)' : 'Profile submitted (प्रोफ़ाइल जमा हुई)'}</Text>
+            <Text style={styles.modalTitle}>{resultStatus === 'VERIFIED' ? t('Congratulations!') : t('Profile submitted')}</Text>
             <Text style={styles.modalDesc}>
               {resultStatus === 'VERIFIED'
-                ? 'Your profile is verified. You are now live on the Tricity Artisan Radar for direct customer calls!'
-                : 'Our team will review your Aadhaar photos. Customers can find you and you will see leads once the review is done.'}
+                ? t('Your profile is verified. You are now live on the Tricity Artisan Radar for direct customer calls!')
+                : t('Our team will review your Aadhaar photos. Customers can find you and you will see leads once the review is done.')}
             </Text>
 
             <View style={styles.modalInfoBox}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                 <Phone color={HtmlColors.primary} size={16} />
-                <Text style={styles.modalInfoTitle}>{resultStatus === 'VERIFIED' ? 'Direct Calling Active' : 'Under review'}</Text>
+                <Text style={styles.modalInfoTitle}>{resultStatus === 'VERIFIED' ? t('Direct Calling Active') : t('Under review')}</Text>
               </View>
-              <Text style={styles.modalInfoText}>No commission cuts will ever be deducted from your earnings.</Text>
+              <Text style={styles.modalInfoText}>{t('No commission cuts will ever be deducted from your earnings.')}</Text>
             </View>
 
             <TouchableOpacity style={styles.modalBtn} onPress={() => void handleGoDashboard()}>
-              <Text style={styles.modalBtnText}>Open my dashboard (डैशबोर्ड खोलें)</Text>
+              <Text style={styles.modalBtnText}>{t('Open my dashboard')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -761,7 +773,8 @@ export default function WorkerOnboardingScreen() {
 }
 
 // One of the two trade rows on the form (50px each, so Section 3 stays about 110px for any catalogue size).
-// Empty: a button that opens the picker. Filled: icon, bilingual name, badge, and Edit (Primary) or Remove (Secondary).
+// Empty: a button that opens the picker. Filled: icon, name in the person's language, badge, and Edit (Primary) or
+// Remove (Secondary).
 function TradeSlot({
   kind, id, categories, onOpen, onRemove,
 }: {
@@ -771,6 +784,8 @@ function TradeSlot({
   onOpen: () => void;
   onRemove?: () => void;
 }) {
+  const t = useT();
+  const lang = useLang();
   const primary = kind === 'primary';
   if (id === undefined) {
     return (
@@ -779,21 +794,21 @@ function TradeSlot({
         onPress={onOpen}
         activeOpacity={0.7}
         accessibilityRole="button"
-        accessibilityLabel={primary ? 'Select primary trade' : 'Add secondary trade, optional'}
+        accessibilityLabel={primary ? t('Select Primary Trade') : t('Add Secondary Trade (Optional)')}
       >
         <Plus color={HtmlColors.primary} size={20} />
         <Text style={styles.slotEmptyText} numberOfLines={1}>
-          {primary ? 'Select Primary Trade / मुख्य काम चुनें' : 'Add Secondary Trade / दूसरा काम (Optional)'}
+          {primary ? t('Select Primary Trade') : t('Add Secondary Trade (Optional)')}
         </Text>
       </TouchableOpacity>
     );
   }
   const cat = categories.find((c) => c.id === id);
   const Icon = cat ? serviceIcon(cat.iconKey) : Wrench;
-  const title = cat ? `${cat.title.en} (${cat.title.hi})` : id;
+  const title = cat ? pick(cat.title, lang) : id;
   return (
     <View style={[styles.slot, styles.slotFilled]}>
-      <TouchableOpacity style={styles.slotMain} onPress={onOpen} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={`${primary ? 'Primary' : 'Secondary'} trade: ${title}. Change`}>
+      <TouchableOpacity style={styles.slotMain} onPress={onOpen} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={primary ? t('Primary trade: {name}. Change', { name: title }) : t('Second trade: {name}. Change', { name: title })}>
         <View style={[styles.slotIcon, { backgroundColor: cat?.bgColor ?? HtmlColors.surfaceContainer }]}>
           <Icon color={cat?.color ?? HtmlColors.onSurfaceVariant} size={20} />
         </View>
@@ -801,7 +816,7 @@ function TradeSlot({
           <Text style={styles.slotTitle} numberOfLines={1}>{title}</Text>
           <View style={[styles.slotBadge, !primary && styles.slotBadgeSecondary]}>
             {primary && <Star color={HtmlColors.primary} size={12} fill={HtmlColors.primary} />}
-            <Text style={[styles.slotBadgeText, !primary && styles.slotBadgeTextSecondary]}>{primary ? 'Primary • मुख्य' : '2nd Trade • दूसरा'}</Text>
+            <Text style={[styles.slotBadgeText, !primary && styles.slotBadgeTextSecondary]}>{primary ? t('Primary') : t('2nd Trade')}</Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -810,10 +825,10 @@ function TradeSlot({
         onPress={primary ? onOpen : onRemove}
         hitSlop={{ top: 6, bottom: 6 }}
         accessibilityRole="button"
-        accessibilityLabel={primary ? 'Edit trades' : 'Remove secondary trade'}
+        accessibilityLabel={primary ? t('Edit trades') : t('Remove secondary trade')}
       >
         {primary ? <Pencil color={HtmlColors.primary} size={14} /> : <X color={HtmlColors.error} size={14} />}
-        <Text style={[styles.slotActionText, !primary && { color: HtmlColors.error }]}>{primary ? 'Edit / बदलें' : 'Remove'}</Text>
+        <Text style={[styles.slotActionText, !primary && { color: HtmlColors.error }]}>{primary ? t('Edit') : t('Remove')}</Text>
       </TouchableOpacity>
     </View>
   );

@@ -8,6 +8,9 @@ const LANGUAGES: Language[] = ['en', 'hi', 'pa'];
 export const SHORT_LANG_LABELS: Record<Language, string> = { en: 'EN', hi: 'हिं', pa: 'ਪੰ' };
 export const FULL_LANG_LABELS: Record<Language, string> = { en: 'EN', hi: 'हिंदी', pa: 'ਪੰਜਾਬੀ' };
 
+/** Each language by its own name, the way people look for it. */
+export const LANGUAGE_NAMES: Record<Language, string> = { en: 'English', hi: 'हिंदी', pa: 'ਪੰਜਾਬੀ' };
+
 const A11Y_LABELS: Record<Language, string> = { en: 'English', hi: 'Hindi', pa: 'Punjabi' };
 
 interface LanguageToggleProps {

@@ -1,6 +1,7 @@
 // Logic behind the worker's trade picker: which tab a category sits in, searching (English, Hindi, Punjabi and the
 // way people type Hindi in Latin letters), and the "at most two trades" rule. Kept free of React so it can be tested.
 import type { ServiceCategory } from '../api/types';
+import { t } from '../i18n';
 
 export const MAX_TRADES = 2;
 
@@ -60,6 +61,24 @@ const ALIASES: Record<string, string> = {
   catering_food: 'halwai khana cook chef party',
   cctv_security: 'camera security dvr intercom',
 };
+
+/** A tab's name in the person's language. */
+export function tradeGroupLabel(id: TradeGroupId): string {
+  switch (id) {
+    case 'all':
+      return t('All');
+    case 'electrical':
+      return t('Electrical & AC');
+    case 'civil':
+      return t('Plumbing & Civil');
+    case 'cleaning':
+      return t('Cleaning & Washing');
+    case 'vehicles':
+      return t('Vehicles & Moving');
+    default:
+      return t('More');
+  }
+}
 
 export function tradeGroupOf(categoryId: string): Exclude<TradeGroupId, 'all'> {
   return GROUP_OF[categoryId] ?? 'other';

@@ -8,9 +8,11 @@ import { useStore } from '../../store/useStore';
 import { listLeads } from '../../api/endpoints';
 import { useSession } from '../../store/useSession';
 import { usePresenceLocation } from '../../utils/usePresenceLocation';
+import { useT } from '../../i18n/useT';
 
 export default function TabLayout() {
   const { role } = useStore();
+  const t = useT();
   const isWorker = role === 'worker';
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -55,14 +57,14 @@ export default function TabLayout() {
       <Tabs.Screen
         name="home"
         options={{
-          title: 'Home',
+          title: t('Home'),
           tabBarIcon: ({ color, size }) => <Home color={color} size={size} />
         }}
       />
       <Tabs.Screen
         name="leads"
         options={{
-          title: isWorker ? 'Leads' : 'Services',
+          title: isWorker ? t('Leads') : t('Services'),
           tabBarIcon: ({ color, size }) => <Compass color={color} size={size} />
         }}
       />
@@ -79,7 +81,7 @@ export default function TabLayout() {
           }
         }}
         options={{
-          title: isWorker ? 'Quote' : 'Post',
+          title: isWorker ? t('Quote') : t('Post'),
           tabBarIcon: ({ color }) => (
             <View style={styles.postCta}>
               <Plus color="#FFFFFF" size={26} strokeWidth={3} />
@@ -95,14 +97,14 @@ export default function TabLayout() {
       <Tabs.Screen
         name="activity"
         options={{
-          title: 'Activity',
+          title: t('Activity'),
           tabBarIcon: ({ color, size }) => <ClipboardList color={color} size={size} />
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profile',
+          title: t('Profile'),
           tabBarIcon: ({ color, size }) => <User color={color} size={size} />
         }}
       />

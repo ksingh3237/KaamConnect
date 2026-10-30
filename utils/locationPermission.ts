@@ -6,6 +6,7 @@
 import { Linking, PermissionsAndroid, Platform } from 'react-native';
 import * as Location from 'expo-location';
 import { confirmAction, notify } from './dialog';
+import { t } from '../i18n';
 
 /**
  *  granted      - foreground permission is on and the phone's location is on
@@ -36,7 +37,7 @@ async function openLocationSettings(): Promise<void> {
 }
 
 async function offerSettings(title: string, message: string, open: () => Promise<void>): Promise<void> {
-  if (await confirmAction(title, message, 'Open settings / सेटिंग खोलें')) await open();
+  if (await confirmAction(title, message, t('Open settings'))) await open();
 }
 
 /**
@@ -53,7 +54,7 @@ export async function requestWorkerLocationAccess(): Promise<LocationAccess> {
       servicesOn = await Location.hasServicesEnabledAsync();
     }
     if (!servicesOn) {
-      await offerSettings('Location is switched off / लोकेशन बंद है', 'Turn on Location (GPS) in your phone settings so customers can see you coming.', openLocationSettings);
+      await offerSettings(t('Location is switched off'), t('Turn on Location (GPS) in your phone settings so customers can see you coming.'), openLocationSettings);
       return 'services_off';
     }
 
@@ -62,13 +63,13 @@ export async function requestWorkerLocationAccess(): Promise<LocationAccess> {
     if (!foreground.granted) {
       if (!foreground.canAskAgain) {
         await offerSettings(
-          'Location permission is blocked / अनुमति बंद है',
-          'You blocked location for KaamConnect. Open Settings > Permissions > Location and choose "Allow" so we can show your arrival to the customer.',
+          t('Location permission is blocked'),
+          t('You blocked location for KaamConnect. Open Settings > Permissions > Location and choose "Allow" so we can show your arrival to the customer.'),
           () => Linking.openSettings(),
         );
         return 'blocked';
       }
-      await notify('Location not allowed / लोकेशन की अनुमति नहीं', 'Without location the customer cannot see you coming and nearby jobs are harder to find. You can allow it any time from the job screen.');
+      await notify(t('Location not allowed'), t('Without location the customer cannot see you coming and nearby jobs are harder to find. You can allow it any time from the job screen.'));
       return 'ask';
     }
 
@@ -87,7 +88,7 @@ export async function requestWorkerLocationAccess(): Promise<LocationAccess> {
     }
     return 'granted';
   } catch {
-    await notify('Could not check location / लोकेशन नहीं मिली', 'Please check that location is on for your phone and try again.');
+    await notify(t('Could not check location'), t('Please check that location is on for your phone and try again.'));
     return 'ask';
   }
 }
