@@ -25,6 +25,7 @@ import { useImagePicker } from "../../components/ImageSourceModal";
 import { useImageViewer } from "../../components/ImageViewerModal";
 import type { CreateJobBody, JobTiming } from "../../api/types";
 import { ErrorBlock, LoadingBlock } from "../../components/StateBlocks";
+import { KeyboardAwareScrollView } from "../../components/KeyboardAwareScrollView";
 import GoogleLocationPicker, {
   type PickedLocation,
 } from "../../components/GoogleLocationPicker";
@@ -241,7 +242,7 @@ export default function PostJobScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <ScrollView
+      <KeyboardAwareScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -601,7 +602,7 @@ export default function PostJobScreen() {
             {posting ? t("Posting…") : t("Broadcast Request to Nearby Pros (Free)")}
           </Text>
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardAwareScrollView>
       {imageSourceModal}
       {imageViewer}
     </SafeAreaView>

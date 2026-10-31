@@ -62,6 +62,11 @@ export default function ActivityScreen() {
     router.push(path);
   };
 
+  // Tapping the card itself: the screen for where the job stands. A finished or cancelled one opens its full story
+  // (milestones, photos, bill, or who cancelled and why), the same page a notification about it opens.
+  const customerCardPath = (job: JobListItem) =>
+    job.status === 'OPEN' ? (job.isDirect ? '/tracking' : '/compare-offers') : job.status === 'ASSIGNED' ? '/tracking' : '/job-progress';
+
   // Asks why first (the worker is told the reason), then cancels. The sheet words it for the job's stage.
   const handleCancel = (job: JobListItem) => {
     if (busyId || cancelling) return;
@@ -96,7 +101,13 @@ export default function ActivityScreen() {
   const renderCustomerCard = (job: JobListItem) => {
     const ongoing = activeTab === 'ongoing';
     return (
-      <View key={job.id} style={[styles.card, ongoing && styles.ongoingCard]}>
+      <TouchableOpacity
+        key={job.id}
+        style={[styles.card, ongoing && styles.ongoingCard]}
+        onPress={() => open(job.id, customerCardPath(job))}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+      >
         <View style={styles.ongoingHeader}>
           <View style={{ flex: 1 }}>
             {ongoing && (
@@ -169,7 +180,7 @@ export default function ActivityScreen() {
             </>
           )}
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 

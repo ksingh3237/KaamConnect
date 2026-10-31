@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Switch
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, User, Verified, Camera, CameraIcon, BadgeInfo, UserCircle, MapPin, Building, Mic, PhoneCall, ShieldCheck, ArrowRight, CheckCircle2 } from 'lucide-react-native';
+import { KeyboardAwareScrollView } from '../components/KeyboardAwareScrollView';
 import LanguageToggle, { FULL_LANG_LABELS, LANGUAGE_NAMES } from '../components/LanguageToggle';
 import { useStore } from '../store/useStore';
 import { resetTo } from '../utils/navigation';
@@ -166,7 +167,7 @@ export default function CustomerOnboardingScreen() {
         </View>
       </View>
 
-      <ScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Step Banner & Lang Switcher */}
         <View style={styles.stepBannerRow}>
           <View style={styles.stepBadge}>
@@ -390,7 +391,7 @@ export default function CustomerOnboardingScreen() {
             </Text>
           </View>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {/* Bottom Sticky Action Container */}
       <View style={[styles.footerWrap, { paddingBottom: Math.max(insets.bottom, 16) }]}>

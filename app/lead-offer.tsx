@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Linking, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Image, Linking, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Play, Send } from 'lucide-react-native';
@@ -11,6 +11,8 @@ import { confirmAction, notify } from '../utils/dialog';
 import { whenLabel } from '../utils/time';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../components/StateBlocks';
 import { useImageViewer } from '../components/ImageViewerModal';
+import { KeyboardAwareScrollView } from '../components/KeyboardAwareScrollView';
+import { useStore } from '../store/useStore';
 import { pick } from '../i18n';
 import { useLang, useT } from '../i18n/useT';
 
@@ -24,6 +26,7 @@ export default function LeadOfferScreen() {
   const t = useT();
   const lang = useLang();
   const { id } = useLocalSearchParams<{ id?: string }>();
+  const setActiveJobId = useStore((s) => s.setActiveJobId);
   const leadState = useAsync(() => (id ? getLead(id) : Promise.resolve(null)), [id], { reloadOnFocus: false });
   const lead = leadState.data;
   const initials = (lead?.customerName ?? '')
@@ -44,7 +47,9 @@ export default function LeadOfferScreen() {
   // A quote still waiting for the customer can be changed or taken back; a withdrawn or declined one is sent afresh
   const liveOffer = lead?.myOffer?.status === 'PENDING' ? lead.myOffer : null;
   const alreadyQuoted = liveOffer !== null;
-  // Only an accepted quote makes the job this worker's (leadState ACCEPTED just means they answered the lead)
+  // Only an accepted quote (or accepted direct request) makes the job this worker's. leadState ACCEPTED just means they
+  // answered the lead, so a worker who quoted and lost still has it: that one is closed, not won. A worker who backs out
+  // has their offer turned WITHDRAWN, so ACCEPTED here really is their job (booked, done or cancelled).
   const won = lead?.myOffer?.status === 'ACCEPTED';
   const [busy, setBusy] = useState<'withdraw' | 'hide' | null>(null);
   // Set when sending finds the request already taken or cancelled
@@ -52,9 +57,20 @@ export default function LeadOfferScreen() {
   const closed =
     closedOnSend ||
     (leadState.errorCode !== null && CLOSED_CODES.has(leadState.errorCode)) ||
-    // not open any more, and not because this worker won it (their accepted quote / accepted direct request)
-    (!!lead && lead.status !== 'OPEN' && lead.leadState !== 'ACCEPTED' && lead.myOffer?.status !== 'ACCEPTED');
+    // Taken by someone else, cancelled, completed, or its time ran out (an old "new job near you" in the bell)
+    (!!lead && !won && (lead.status !== 'OPEN' || (lead.expiresAt !== null && Date.parse(lead.expiresAt) <= Date.now())));
   const toRadar = () => router.replace('/(tabs)/leads');
+  const toJob = () => {
+    if (!lead) return;
+    setActiveJobId(lead.id);
+    router.replace('/job-progress');
+  };
+
+  // The job is this worker's: there is nothing to quote, the progress screen is the page for it (the whole story,
+  // including a cancelled or completed one). Happens from an old lead notification or a lead card.
+  useEffect(() => {
+    if (won) toJob();
+  }, [won]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Start from the category's standard visit fee, or from the quote already sent
   useEffect(() => {
@@ -130,7 +146,7 @@ export default function LeadOfferScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.headerBar}>
           <TouchableOpacity
@@ -218,7 +234,8 @@ export default function LeadOfferScreen() {
           )}
         </View>
 
-        {/* Worker Quote Form */}
+        {/* Worker Quote Form: only while there is still something to quote on */}
+        {!closed && !won && (
         <View style={[styles.card, { borderColor: Colors.primary, borderWidth: 2 }]}>
           <Text style={styles.quoteHeaderTitle}>{t('Your Quote to Customer')}</Text>
           <Text style={styles.quoteHeaderSub}>{t('Set your inspection rate & earliest arrival time.')}</Text>
@@ -268,9 +285,17 @@ export default function LeadOfferScreen() {
             />
           </View>
         </View>
+        )}
 
         {formError && <Text style={[styles.errorText, { textAlign: 'center', marginBottom: 8 }]} accessibilityRole="alert">{formError}</Text>}
-        {won && <EmptyBlock title={t('This request is now yours')} hint={t('Open it from Your active jobs on the leads page.')} />}
+        {won && (
+          <>
+            <EmptyBlock title={t('This request is now yours')} hint={t('Open it from Your active jobs on the leads page.')} />
+            <TouchableOpacity style={styles.sendQuoteBtn} onPress={toJob} activeOpacity={0.8} accessibilityRole="button">
+              <Text style={styles.sendQuoteBtnText}>{t('Job progress')}</Text>
+            </TouchableOpacity>
+          </>
+        )}
         {liveOffer && !closed && (
           <Text style={styles.quotedNote}>{t('You quoted ₹{fee}, arriving in {min} min. Change it below, or withdraw it.', { fee: liveOffer.visitFee, min: liveOffer.etaMinutes })}</Text>
         )}
@@ -294,7 +319,7 @@ export default function LeadOfferScreen() {
         )}
           </>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
       {imageViewer}
     </SafeAreaView>
   );
