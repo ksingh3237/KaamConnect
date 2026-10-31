@@ -7,6 +7,7 @@ import {
   Medal, Minus, Plus, X, Globe, Check, CheckCircle2, PlusCircle, MapPin, Lock, CreditCard, Save, Camera, IdCard, Phone, Shield,
   Wind, Paintbrush, Sparkles, Tv, Truck, Star, Pencil
 } from 'lucide-react-native';
+import { KeyboardAwareScrollView } from '../components/KeyboardAwareScrollView';
 import { useStore } from '../store/useStore';
 import { resetTo } from '../utils/navigation';
 import { useSession } from '../store/useSession';
@@ -293,7 +294,7 @@ export default function WorkerOnboardingScreen() {
         </View>
       </View>
 
-      <ScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Subtle Trust Banner Header */}
         <View style={styles.trustBanner}>
           <View style={styles.trustBannerLeft}>
@@ -704,7 +705,7 @@ export default function WorkerOnboardingScreen() {
             )}
           </View>
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {/* Footer CTA */}
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>

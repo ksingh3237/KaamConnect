@@ -3,6 +3,7 @@ import { AppState, View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, CheckCircle2, MapPin, Navigation, Phone, ShieldCheck, Zap } from 'lucide-react-native';
+import { KeyboardAwareScrollView } from '../components/KeyboardAwareScrollView';
 import { Colors, Spacing, Radius } from '../constants/theme';
 import { useStore } from '../store/useStore';
 import { useAsync } from '../api/useAsync';
@@ -347,7 +348,7 @@ export default function JobProgressScreen() {
         </View>
       </View>
 
-      <ScrollView ref={scrollRef} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView ref={scrollRef} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {!activeJobId && <EmptyBlock title={t('No job selected')} hint={t('Open a job from Activity.')} />}
         {activeJobId && state.loading && <LoadingBlock label={t('Loading job…')} />}
         {state.error && !state.data && <ErrorBlock message={state.error} onRetry={() => void state.reload()} />}
@@ -488,7 +489,7 @@ export default function JobProgressScreen() {
             {job.status === 'CANCELLED' && (
               <View style={[styles.card, styles.cancelledCard]} onLayout={onSectionLayout('cancelled')} accessibilityRole="alert">
                 <Text style={styles.cancelledTitle}>{cancelledHeadline(job, isWorker ? 'worker' : 'customer')}</Text>
-                <Text style={styles.cancelledReason}>{cancelledReason(job, 'worker')}</Text>
+                <Text style={styles.cancelledReason}>{cancelledReason(job, isWorker ? 'worker' : 'customer')}</Text>
                 {visitFeeNotice(job, isWorker ? 'worker' : 'customer') ? <Text style={styles.cancelledFee}>{visitFeeNotice(job, isWorker ? 'worker' : 'customer')}</Text> : null}
                 <TouchableOpacity
                   style={[styles.smallBtn, { paddingVertical: 14, marginTop: Spacing.md }]}
@@ -779,7 +780,7 @@ export default function JobProgressScreen() {
             {actionError && <Text style={styles.errorLine} accessibilityRole="alert">{actionError}</Text>}
           </>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <WorkerLocationPermissionModal
         visible={askLocation}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Star, ArrowRight, ShieldCheck, Check } from 'lucide-react-native';
@@ -12,6 +12,7 @@ import { isApiError, userMessage } from '../api/errors';
 import type { ReviewTag } from '../api/types';
 import Avatar from '../components/Avatar';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../components/StateBlocks';
+import { KeyboardAwareScrollView } from '../components/KeyboardAwareScrollView';
 import { categoryTitle } from '../i18n/categories';
 import { useLang, useT } from '../i18n/useT';
 
@@ -84,7 +85,7 @@ export default function RatingReviewScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <KeyboardAwareScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Worker Summary Profile */}
         <View style={styles.workerSummary}>
           <View style={styles.avatarWrap}>
@@ -229,7 +230,7 @@ export default function RatingReviewScreen() {
           </Text>
           {saving ? <ActivityIndicator color="#FFFFFF" /> : <ArrowRight color="#FFFFFF" size={18} />}
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }
