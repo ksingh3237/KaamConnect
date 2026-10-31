@@ -111,6 +111,18 @@ export function remainingPath(path: LatLng[], point: LatLng): LatLng[] {
   return [point, ...path.slice(nearestSegment(path, point).segment + 1)];
 }
 
+/**
+ * Routing services snap both ends to the nearest road, so a route can stop short of the house or run past it to a
+ * road on the other side. The line on the map must still end on the red pin: append the address when the route's
+ * last point is more than ARRIVE_GAP_M away from it.
+ */
+export const ARRIVE_GAP_M = 15;
+export function endAtDestination(path: LatLng[], destination: LatLng): LatLng[] {
+  const last = path[path.length - 1];
+  if (!last) return [destination];
+  return distanceKm(last, destination) * 1000 > ARRIVE_GAP_M ? [...path, destination] : path;
+}
+
 /** How long a path is along its own segments, in kilometres. */
 export function pathLengthKm(path: LatLng[]): number {
   let km = 0;

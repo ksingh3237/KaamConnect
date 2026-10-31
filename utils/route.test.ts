@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodePolyline, offRouteMeters, parseGoogleRoute, parseOsrmRoute, pathLengthKm, remainingPath, resample } from './route';
+import { decodePolyline, endAtDestination, offRouteMeters, parseGoogleRoute, parseOsrmRoute, pathLengthKm, remainingPath, resample } from './route';
 import { distanceKm } from './trip';
 
 // Straight road going east along one latitude, about 1.1 km long
@@ -83,6 +83,21 @@ describe('offRouteMeters / remainingPath', () => {
   it('drops the part already driven and starts at the worker', () => {
     const worker = { lat: 30.7333, lng: 76.7765 };
     expect(remainingPath(road, worker)).toEqual([worker, road[2]]);
+  });
+});
+
+describe('endAtDestination', () => {
+  const pin = { lat: 30.6870, lng: 76.7310 };
+  it('finishes the line on the pin when the road route stops on a road away from the house', () => {
+    const path = [{ lat: 30.6900, lng: 76.7350 }, { lat: 30.6880, lng: 76.7320 }];
+    expect(endAtDestination(path, pin)).toEqual([...path, pin]);
+  });
+  it('leaves a route that already ends at the pin alone', () => {
+    const path = [{ lat: 30.6900, lng: 76.7350 }, { lat: 30.68701, lng: 76.73101 }];
+    expect(endAtDestination(path, pin)).toBe(path);
+  });
+  it('draws straight to the pin when there is no path', () => {
+    expect(endAtDestination([], pin)).toEqual([pin]);
   });
 });
 

@@ -18,7 +18,6 @@ import { notify } from '../../utils/dialog';
 import AppMenu from '../../components/AppMenu';
 import WorkerHome from '../../components/WorkerHome';
 import NotificationBell from '../../components/NotificationBell';
-import IncomingOffers from '../../components/IncomingOffers';
 import { useT } from '../../i18n/useT';
 
 /** How many services Home shows before "View all" (searching shows every match). */
@@ -123,9 +122,6 @@ function CustomerHome() {
             </TouchableOpacity>
           )}
         </View>
-
-        {/* Quotes from workers on the customer's open requests: the first thing to answer */}
-        {!searching && <IncomingOffers />}
 
         {!searching && (
           <>

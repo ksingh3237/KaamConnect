@@ -118,6 +118,11 @@ export const getLead = (id: string) => get<LeadDetail>(`/leads/${id}`);
 export const sendOffer = (leadId: string, body: { visitFee: number; etaMinutes: number; message?: string }) =>
   post<OfferSummary>(`/leads/${leadId}/offers`, body);
 export const declineLead = (leadId: string) => post<void>(`/leads/${leadId}/decline`);
+/** Change the fee, arrival time or note of a quote that is still waiting for the customer. */
+export const reviseOffer = (offerId: string, body: { visitFee: number; etaMinutes: number; message?: string }) =>
+  patch<OfferSummary>(`/offers/${offerId}`, body);
+/** Take back a quote that is still waiting; the worker may quote again later. */
+export const withdrawOffer = (offerId: string) => del<void>(`/offers/${offerId}`);
 export const listWorkerJobs = (tab: JobTab, cursor?: string) =>
   get<WorkerJobsPage>('/workers/me/jobs', { query: { tab, limit: 20, cursor } });
 /** The worker's own cancellations (a re-opened job leaves their job list, so this is where it is kept) and the repeat back-out warning. */

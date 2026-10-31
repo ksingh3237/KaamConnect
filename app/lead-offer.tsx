@@ -5,9 +5,9 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Play, Send } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../constants/theme';
 import { useAsync } from '../api/useAsync';
-import { getLead, sendOffer } from '../api/endpoints';
+import { declineLead, getLead, reviseOffer, sendOffer, withdrawOffer } from '../api/endpoints';
 import { isApiError, userMessage } from '../api/errors';
-import { notify } from '../utils/dialog';
+import { confirmAction, notify } from '../utils/dialog';
 import { whenLabel } from '../utils/time';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../components/StateBlocks';
 import { useImageViewer } from '../components/ImageViewerModal';
@@ -41,7 +41,12 @@ export default function LeadOfferScreen() {
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const alreadyQuoted = !!lead?.myOffer;
+  // A quote still waiting for the customer can be changed or taken back; a withdrawn or declined one is sent afresh
+  const liveOffer = lead?.myOffer?.status === 'PENDING' ? lead.myOffer : null;
+  const alreadyQuoted = liveOffer !== null;
+  // Only an accepted quote makes the job this worker's (leadState ACCEPTED just means they answered the lead)
+  const won = lead?.myOffer?.status === 'ACCEPTED';
+  const [busy, setBusy] = useState<'withdraw' | 'hide' | null>(null);
   // Set when sending finds the request already taken or cancelled
   const [closedOnSend, setClosedOnSend] = useState(false);
   const closed =
@@ -70,8 +75,10 @@ export default function LeadOfferScreen() {
     }
     setSending(true);
     try {
-      await sendOffer(lead.id, { visitFee: Number(fee), etaMinutes: eta, ...(message.trim() ? { message: message.trim() } : {}) });
-      void notify(`✅ ${t('Quote Sent')}`, t('Your quote of ₹{fee} has been sent to {name}. You will see it here as accepted if they choose you.', { fee, name: lead.customerName }));
+      const body = { visitFee: Number(fee), etaMinutes: eta, ...(message.trim() ? { message: message.trim() } : {}) };
+      if (liveOffer) await reviseOffer(liveOffer.id, body);
+      else await sendOffer(lead.id, body);
+      void notify(liveOffer ? `✅ ${t('Quote updated')}` : `✅ ${t('Quote Sent')}`, t('Your quote of ₹{fee} has been sent to {name}. You will see it here as accepted if they choose you.', { fee, name: lead.customerName }));
       router.replace('/(tabs)/leads');
     } catch (error) {
       if (isApiError(error) && CLOSED_CODES.has(error.code)) {
@@ -82,6 +89,42 @@ export default function LeadOfferScreen() {
       setFormError(userMessage(error) + (fields ? ` (${fields})` : ''));
     } finally {
       setSending(false);
+    }
+  };
+
+  // Take the quote back: the customer no longer sees it, and the lead stays on the radar
+  const handleWithdraw = async () => {
+    if (!liveOffer || busy) return;
+    const ok = await confirmAction(t('Withdraw your quote?'), t('The customer will no longer see it. You can quote again while the request is open.'), t('Withdraw'), true);
+    if (!ok) return;
+    setBusy('withdraw');
+    setFormError(null);
+    try {
+      await withdrawOffer(liveOffer.id);
+      await leadState.reload();
+    } catch (error) {
+      setFormError(userMessage(error));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Not interested, or the time has passed: the lead leaves this worker's radar for good and no more alerts come for it
+  const handleHide = async () => {
+    if (!lead || busy) return;
+    const ok = await confirmAction(t('Remove this lead?'), t('It will disappear from your radar and you will not be alerted about it again.'), t('Remove'), true);
+    if (!ok) return;
+    setBusy('hide');
+    setFormError(null);
+    try {
+      if (liveOffer) await withdrawOffer(liveOffer.id);
+      await declineLead(lead.id);
+      toRadar();
+    } catch (error) {
+      if (isApiError(error) && CLOSED_CODES.has(error.code)) toRadar();
+      else setFormError(userMessage(error));
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -227,12 +270,27 @@ export default function LeadOfferScreen() {
         </View>
 
         {formError && <Text style={[styles.errorText, { textAlign: 'center', marginBottom: 8 }]} accessibilityRole="alert">{formError}</Text>}
-        {lead.leadState === 'ACCEPTED' && <EmptyBlock title={t('This request is now yours')} hint={t('Open it from Your active jobs on the leads page.')} />}
-        {!closed && (
-          <TouchableOpacity style={[styles.sendQuoteBtn, (sending || lead.leadState !== 'NEW') && { opacity: 0.7 }]} onPress={() => void handleSendOffer()} disabled={sending || lead.leadState !== 'NEW'} activeOpacity={0.8} accessibilityRole="button">
+        {won && <EmptyBlock title={t('This request is now yours')} hint={t('Open it from Your active jobs on the leads page.')} />}
+        {liveOffer && !closed && (
+          <Text style={styles.quotedNote}>{t('You quoted ₹{fee}, arriving in {min} min. Change it below, or withdraw it.', { fee: liveOffer.visitFee, min: liveOffer.etaMinutes })}</Text>
+        )}
+        {!closed && !won && (
+          <TouchableOpacity style={[styles.sendQuoteBtn, (sending || busy !== null) && { opacity: 0.7 }]} onPress={() => void handleSendOffer()} disabled={sending || busy !== null} activeOpacity={0.8} accessibilityRole="button">
             {sending ? <ActivityIndicator color="#FFFFFF" /> : <Send color="#FFFFFF" size={18} />}
             <Text style={styles.sendQuoteBtnText}>{sending ? t('Sending…') : alreadyQuoted ? t('Update Quote (0% Commission)') : t('Send Direct Quote to Customer (0% Commission)')}</Text>
           </TouchableOpacity>
+        )}
+        {!closed && !won && (
+          <View style={styles.secondaryRow}>
+            {liveOffer && (
+              <TouchableOpacity style={[styles.secondaryBtn, busy !== null && { opacity: 0.6 }]} onPress={() => void handleWithdraw()} disabled={busy !== null || sending} activeOpacity={0.8} accessibilityRole="button">
+                {busy === 'withdraw' ? <ActivityIndicator color={Colors.textMain} /> : <Text style={styles.secondaryBtnText}>{t('Withdraw quote')}</Text>}
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={[styles.secondaryBtn, styles.hideBtn, busy !== null && { opacity: 0.6 }]} onPress={() => void handleHide()} disabled={busy !== null || sending} activeOpacity={0.8} accessibilityRole="button">
+              {busy === 'hide' ? <ActivityIndicator color={Colors.error} /> : <Text style={styles.hideBtnText}>{t('Not interested • Remove lead')}</Text>}
+            </TouchableOpacity>
+          </View>
         )}
           </>
         )}
@@ -514,7 +572,49 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     textAlign: 'center',
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '800'
+  },
+  quotedNote: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#065F46',
+    backgroundColor: '#F0FDF4',
+    borderRadius: Radius.md,
+    padding: 10,
+    marginBottom: 10,
+    textAlign: 'center'
+  },
+  secondaryRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: -8,
+    marginBottom: 24
+  },
+  secondaryBtn: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: Radius.lg,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8
+  },
+  secondaryBtnText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Colors.textMain,
+    textAlign: 'center'
+  },
+  hideBtn: {
+    borderColor: '#FCA5A5'
+  },
+  hideBtnText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Colors.error,
+    textAlign: 'center'
   }
 });
