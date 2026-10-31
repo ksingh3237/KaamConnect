@@ -75,6 +75,31 @@ export async function saveLanguage(lang: 'en' | 'hi' | 'pa'): Promise<void> {
   }
 }
 
+const SEEN_OFFERS_KEY = 'kaamconnect.seen-offers.v1';
+/** Enough for every quote still open, and small enough for SecureStore's value limit (about 2 KB). */
+const SEEN_OFFERS_MAX = 40;
+
+/** Quote ids already popped up on this phone (newest last), so a quote is announced once. */
+export async function loadSeenOffers(): Promise<string[]> {
+  try {
+    const raw = Platform.OS === 'web' ? globalThis.localStorage?.getItem(SEEN_OFFERS_KEY) ?? null : await SecureStore.getItemAsync(SEEN_OFFERS_KEY);
+    const ids: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveSeenOffers(ids: string[]): Promise<void> {
+  try {
+    const raw = JSON.stringify(ids.slice(-SEEN_OFFERS_MAX));
+    if (Platform.OS === 'web') globalThis.localStorage?.setItem(SEEN_OFFERS_KEY, raw);
+    else await SecureStore.setItemAsync(SEEN_OFFERS_KEY, raw);
+  } catch {
+    /* not remembered: at worst a quote pops up once more after a restart */
+  }
+}
+
 const ROLE_KEY = 'kaamconnect.role.v1';
 
 /** The app mode the person last used ('customer' | 'worker'), so a restart reopens the same side. Not secret. */

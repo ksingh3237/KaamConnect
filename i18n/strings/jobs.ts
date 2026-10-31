@@ -33,6 +33,25 @@ export const jobs: Record<string, { hi: string; pa: string }> = {
   'Update Quote (0% Commission)': { hi: 'कोटेशन बदलें (0% कमीशन)', pa: 'ਕੋਟੇਸ਼ਨ ਬਦਲੋ (0% ਕਮਿਸ਼ਨ)' },
   'Send Direct Quote to Customer (0% Commission)': { hi: 'ग्राहक को सीधा कोटेशन भेजें (0% कमीशन)', pa: 'ਗਾਹਕ ਨੂੰ ਸਿੱਧਾ ਕੋਟੇਸ਼ਨ ਭੇਜੋ (0% ਕਮਿਸ਼ਨ)' },
 
+  'Quote updated': { hi: 'कोटेशन बदल दिया गया', pa: 'ਕੋਟੇਸ਼ਨ ਬਦਲ ਦਿੱਤਾ ਗਿਆ' },
+  'Withdraw your quote?': { hi: 'अपना कोटेशन वापस लें?', pa: 'ਆਪਣਾ ਕੋਟੇਸ਼ਨ ਵਾਪਸ ਲੈਣਾ ਹੈ?' },
+  'The customer will no longer see it. You can quote again while the request is open.': {
+    hi: 'ग्राहक को यह अब नहीं दिखेगा। अनुरोध खुला रहने तक आप फिर से कोटेशन दे सकते हैं।',
+    pa: 'ਗਾਹਕ ਨੂੰ ਇਹ ਹੁਣ ਨਹੀਂ ਦਿਖੇਗਾ। ਬੇਨਤੀ ਖੁੱਲ੍ਹੀ ਰਹਿਣ ਤੱਕ ਤੁਸੀਂ ਮੁੜ ਕੋਟੇਸ਼ਨ ਦੇ ਸਕਦੇ ਹੋ।',
+  },
+  Withdraw: { hi: 'वापस लें', pa: 'ਵਾਪਸ ਲਓ' },
+  'Remove this lead?': { hi: 'यह लीड हटाएँ?', pa: 'ਇਹ ਲੀਡ ਹਟਾਉਣੀ ਹੈ?' },
+  'It will disappear from your radar and you will not be alerted about it again.': {
+    hi: 'यह आपके रडार से हट जाएगी और इसकी सूचना फिर नहीं आएगी।',
+    pa: 'ਇਹ ਤੁਹਾਡੇ ਰਡਾਰ ਤੋਂ ਹਟ ਜਾਵੇਗੀ ਅਤੇ ਇਸਦੀ ਸੂਚਨਾ ਮੁੜ ਨਹੀਂ ਆਵੇਗੀ।',
+  },
+  'You quoted ₹{fee}, arriving in {min} min. Change it below, or withdraw it.': {
+    hi: 'आपने ₹{fee} बताया, {min} मिनट में पहुँचने का। नीचे बदलें, या वापस लें।',
+    pa: 'ਤੁਸੀਂ ₹{fee} ਦੱਸਿਆ, {min} ਮਿੰਟ ਵਿੱਚ ਪਹੁੰਚਣ ਦਾ। ਹੇਠਾਂ ਬਦਲੋ, ਜਾਂ ਵਾਪਸ ਲਓ।',
+  },
+  'Withdraw quote': { hi: 'कोटेशन वापस लें', pa: 'ਕੋਟੇਸ਼ਨ ਵਾਪਸ ਲਓ' },
+  'Not interested • Remove lead': { hi: 'दिलचस्पी नहीं • लीड हटाएँ', pa: 'ਦਿਲਚਸਪੀ ਨਹੀਂ • ਲੀਡ ਹਟਾਓ' },
+
   // Rating
   Punctual: { hi: 'समय पर', pa: 'ਸਮੇਂ ਸਿਰ' },
   'Fair Price': { hi: 'वाजिब दाम', pa: 'ਜਾਇਜ਼ ਭਾਅ' },

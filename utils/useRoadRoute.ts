@@ -6,10 +6,15 @@
 // read off that remaining part - so both keep moving with the worker without another request.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchRoadRoute, type RoadRoute } from './directions';
-import { offRouteMeters, pathLengthKm, remainingPath } from './route';
-import { roadTrip, type LatLng, type RoadTrip } from './trip';
+import { endAtDestination, offRouteMeters, pathLengthKm, remainingPath } from './route';
+import { distanceKm, roadTrip, type LatLng, type RoadTrip } from './trip';
 
 export const OFF_ROUTE_M = 150;
+/**
+ * Closer than this to the address, a road route says nothing useful (it would be snapped to some road around the
+ * corner and wander off): the map shows the short direct line to the pin instead.
+ */
+export const NEAR_DESTINATION_M = 200;
 export const MIN_REFETCH_MS = 30_000;
 
 /** The road still to drive: the line, its length and the arrival time. Null while there is no route. */
@@ -43,6 +48,7 @@ export function useRoadRoute(worker: LatLng | null, destination: LatLng | null):
       forDestination.current = null;
       return undefined;
     }
+    if (distanceKm(worker, destination) * 1000 < NEAR_DESTINATION_M) return undefined; // see the memo below
     const destinationChanged = forDestination.current !== destKey;
     const due = destinationChanged || route === null || offRouteMeters(route.path, worker) > OFF_ROUTE_M;
     if (!due || inFlight.current) return undefined;
@@ -61,8 +67,9 @@ export function useRoadRoute(worker: LatLng | null, destination: LatLng | null):
   }, [workerLat, workerLng, destKey]);
 
   return useMemo(() => {
-    if (!route) return null;
-    const path = worker ? remainingPath(route.path, worker) : route.path;
+    if (!route || !destination) return null;
+    if (worker && distanceKm(worker, destination) * 1000 < NEAR_DESTINATION_M) return null;
+    const path = endAtDestination(worker ? remainingPath(route.path, worker) : route.path, destination);
     return { path, ...roadTrip(route, pathLengthKm(path)) };
-  }, [route, workerLat, workerLng]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [route, workerLat, workerLng, destKey]); // eslint-disable-line react-hooks/exhaustive-deps
 }

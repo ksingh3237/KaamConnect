@@ -50,15 +50,10 @@ export const common: Record<string, { hi: string; pa: string }> = {
   '1 Offer': { hi: '1 ऑफ़र', pa: '1 ਪੇਸ਼ਕਸ਼' },
   '{count} Offers': { hi: '{count} ऑफ़र', pa: '{count} ਪੇਸ਼ਕਸ਼ਾਂ' },
 
-  // Incoming offers on Home
-  'Offers for your requests': { hi: 'आपके अनुरोधों पर ऑफ़र', pa: 'ਤੁਹਾਡੀਆਂ ਬੇਨਤੀਆਂ ’ਤੇ ਪੇਸ਼ਕਸ਼ਾਂ' },
-  'Your open requests': { hi: 'आपके खुले अनुरोध', pa: 'ਤੁਹਾਡੀਆਂ ਖੁੱਲ੍ਹੀਆਂ ਬੇਨਤੀਆਂ' },
-  'Finding workers for “{title}”': { hi: '“{title}” के लिए कारीगर ढूँढ रहे हैं', pa: '“{title}” ਲਈ ਕਾਰੀਗਰ ਲੱਭ ਰਹੇ ਹਾਂ' },
-  'Nearby workers have been told. Their offers will appear here.': {
-    hi: 'आस-पास के कारीगरों को बता दिया गया है। उनके ऑफ़र यहाँ दिखेंगे।',
-    pa: 'ਨੇੜਲੇ ਕਾਰੀਗਰਾਂ ਨੂੰ ਦੱਸ ਦਿੱਤਾ ਗਿਆ ਹੈ। ਉਹਨਾਂ ਦੀਆਂ ਪੇਸ਼ਕਸ਼ਾਂ ਇੱਥੇ ਦਿਖਣਗੀਆਂ।',
-  },
+  // New-quote popup (OfferToastHost)
   'See all {count} offers': { hi: 'सभी {count} ऑफ़र देखें', pa: 'ਸਾਰੀਆਂ {count} ਪੇਸ਼ਕਸ਼ਾਂ ਵੇਖੋ' },
+
+  'New quote {position} of {total} • {title}': { hi: 'नया कोटेशन {position} / {total} • {title}', pa: 'ਨਵਾਂ ਕੋਟੇਸ਼ਨ {position} / {total} • {title}' },
 
   // Compare Offers
   'You already booked a worker for this request.': { hi: 'आप इस अनुरोध के लिए कारीगर बुक कर चुके हैं।', pa: 'ਤੁਸੀਂ ਇਸ ਬੇਨਤੀ ਲਈ ਕਾਰੀਗਰ ਬੁੱਕ ਕਰ ਚੁੱਕੇ ਹੋ।' },
