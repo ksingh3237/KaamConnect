@@ -13,6 +13,7 @@ import { useCancelJob } from '../../components/CancelReasonSheet';
 import { backOutWarning } from '../../utils/cancelReasons';
 import { callPhone, notify } from '../../utils/dialog';
 import { timeAgo, whenLabel } from '../../utils/time';
+import { isBooked } from '../../utils/appointment';
 import { EmptyBlock, ErrorBlock } from '../../components/StateBlocks';
 import { ActivityJobSkeleton } from '../../components/skeletons/ActivityJobSkeleton';
 import { categoryTitle } from '../../i18n/categories';
@@ -112,7 +113,7 @@ export default function ActivityScreen() {
           <View style={{ flex: 1 }}>
             {ongoing && (
               <View style={styles.activePill}>
-                <Text style={styles.activePillText}>{statusText[job.status]}</Text>
+                <Text style={styles.activePillText}>{isBooked(job) ? t('BOOKED') : statusText[job.status]}</Text>
               </View>
             )}
             <Text style={ongoing ? styles.jobTitle : styles.pastJobTitle}>{job.title}</Text>
@@ -192,7 +193,7 @@ export default function ActivityScreen() {
           <View style={{ flex: 1 }}>
             {ongoing && (
               <View style={styles.activePill}>
-                <Text style={styles.activePillText}>{statusText[job.status]}</Text>
+                <Text style={styles.activePillText}>{isBooked(job) ? t('BOOKED') : statusText[job.status]}</Text>
               </View>
             )}
             <Text style={ongoing ? styles.jobTitle : styles.pastJobTitle}>{job.title}</Text>

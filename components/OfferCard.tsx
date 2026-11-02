@@ -12,6 +12,7 @@ import { categoryTitle } from '../i18n/categories';
 import { useLang, useT } from '../i18n/useT';
 import { useStore } from '../store/useStore';
 import { callPhone, confirmAction, notify } from '../utils/dialog';
+import { whenLabel } from '../utils/time';
 import Avatar from './Avatar';
 
 export type OfferBusy = { offerId: string; kind: 'accept' | 'decline' } | null;
@@ -25,9 +26,11 @@ interface Props {
   onDecline: () => void;
   /** A line above the worker naming the request (Home lists quotes from several requests). */
   context?: string;
+  /** The request's appointment time. A quote for it means "I will come then", so the minutes-away ETA is not shown. */
+  appointment?: string | null;
 }
 
-export default function OfferCard({ offer, fastest, busy, onAccept, onDecline, context }: Props) {
+export default function OfferCard({ offer, fastest, busy, onAccept, onDecline, context, appointment }: Props) {
   const t = useT();
   const lang = useLang();
   const worker = offer.worker;
@@ -55,7 +58,11 @@ export default function OfferCard({ offer, fastest, busy, onAccept, onDecline, c
           <View style={styles.metaRow}>
             <Text style={styles.rating}>⭐ {worker.rating ?? t('New')} ({worker.reviewsCount})</Text>
             <Text style={styles.metaDim}>📍 {worker.distanceKm !== null ? t('{km} km', { km: worker.distanceKm }) : worker.areaName}</Text>
-            <Text style={styles.metaDim}>⏱️ {t('{min} Min ETA', { min: offer.etaMinutes })}</Text>
+            {appointment ? (
+              <Text style={styles.metaDim}>📅 {whenLabel(appointment)}</Text>
+            ) : (
+              <Text style={styles.metaDim}>⏱️ {t('{min} Min ETA', { min: offer.etaMinutes })}</Text>
+            )}
           </View>
         </View>
       </View>

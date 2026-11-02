@@ -31,6 +31,8 @@ import GoogleLocationPicker, {
 } from "../../components/GoogleLocationPicker";
 import SectorPicker from "../../components/SectorPicker";
 import { isOtherArea } from "../../utils/sectors";
+import { defaultSlot, hourLabel, slotsFor } from "../../utils/appointment";
+import { whenLabel } from "../../utils/time";
 import { pick } from "../../i18n";
 import { categoryExamples } from "../../i18n/categories";
 import { useLang, useT } from "../../i18n/useT";
@@ -43,9 +45,13 @@ export default function PostJobScreen() {
   const router = useRouter();
   const t = useT();
   const lang = useLang();
+  // Afternoon disappears in the evening, once no afternoon hour is at least 30 minutes away (the server refuses it too)
+  const afternoonLeft = slotsFor("AFTERNOON").length > 0;
   const timings: { id: JobTiming; label: string }[] = [
     { id: "IMMEDIATE", label: t("Immediate (30m)") },
-    { id: "AFTERNOON", label: t("Afternoon") },
+    ...(afternoonLeft
+      ? [{ id: "AFTERNOON" as JobTiming, label: t("Afternoon") }]
+      : []),
     { id: "TOMORROW", label: t("Tomorrow") },
   ];
   const { pick: pickImage, modal: imageSourceModal } = useImagePicker();
@@ -81,6 +87,19 @@ export default function PostJobScreen() {
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [timing, setTiming] = useState<JobTiming>("IMMEDIATE");
+  // The appointment hour for Afternoon / Tomorrow (ISO with +05:30). Re-checked against the slots still on offer.
+  const [slotIso, setSlotIso] = useState<string | null>(null);
+  const slots = slotsFor(timing);
+  const slot =
+    slots.find((s) => s.iso === slotIso) ?? defaultSlot(timing) ?? null;
+  const chooseTiming = (next: JobTiming) => {
+    setTiming(next);
+    setSlotIso(defaultSlot(next)?.iso ?? null);
+  };
+  // Left on Afternoon until the evening: fall back to Immediate rather than offer a choice that no longer exists
+  useEffect(() => {
+    if (timing === "AFTERNOON" && !afternoonLeft) chooseTiming("IMMEDIATE");
+  }, [timing, afternoonLeft]); // eslint-disable-line react-hooks/exhaustive-deps
   const [titleError, setTitleError] = useState(false);
   const [photos, setPhotos] = useState<
     { file: PickedFile; key: string | null; failed?: boolean }[]
@@ -214,6 +233,7 @@ export default function PostJobScreen() {
         title: title.trim(),
         ...(desc.trim() ? { description: desc.trim() } : {}),
         timing,
+        ...(timing !== "IMMEDIATE" && slot ? { scheduledFor: slot.iso } : {}),
         ...jobAddress,
         ...(photos.length
           ? { photoKeys: photos.flatMap((p) => (p.key ? [p.key] : [])) }
@@ -435,7 +455,7 @@ export default function PostJobScreen() {
                   styles.timingBtn,
                   timing === option.id && styles.timingBtnActive,
                 ]}
-                onPress={() => setTiming(option.id)}
+                onPress={() => chooseTiming(option.id)}
                 accessibilityRole="button"
                 accessibilityState={{ selected: timing === option.id }}
               >
@@ -450,6 +470,44 @@ export default function PostJobScreen() {
               </TouchableOpacity>
             ))}
           </View>
+          {timing !== "IMMEDIATE" && slots.length > 0 && (
+            <>
+              <Text style={[styles.label, { marginTop: 14 }]}>
+                {t("What time should the worker come?")} *
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.slotRow}
+              >
+                {slots.map((s) => {
+                  const on = slot?.iso === s.iso;
+                  return (
+                    <TouchableOpacity
+                      key={s.iso}
+                      style={[styles.slotBtn, on && styles.timingBtnActive]}
+                      onPress={() => setSlotIso(s.iso)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: on }}
+                    >
+                      <Text
+                        style={[styles.timingText, on && styles.timingTextActive]}
+                      >
+                        {hourLabel(s.hour)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+              {slot && (
+                <Text style={styles.slotNote}>
+                  {t("The worker will come: {when}", {
+                    when: whenLabel(slot.iso),
+                  })}
+                </Text>
+              )}
+            </>
+          )}
         </View>
 
         {/* Job Location */}
@@ -782,6 +840,26 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   timingTextActive: {
+    color: "#065F46",
+  },
+  slotRow: {
+    gap: 6,
+    paddingVertical: 2,
+  },
+  slotBtn: {
+    minWidth: 64,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: Radius.md,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  slotNote: {
+    marginTop: 10,
+    fontSize: 14,
+    fontWeight: "700",
     color: "#065F46",
   },
   radioRow: {

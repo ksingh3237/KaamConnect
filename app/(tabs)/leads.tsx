@@ -10,6 +10,7 @@ import { useAsync } from '../../api/useAsync';
 import { acceptDirect, declineDirect, getCategories, listLeads, listWorkerJobs } from '../../api/endpoints';
 import { userMessage } from '../../api/errors';
 import { useWorkerTracking } from '../../utils/useWorkerTracking';
+import { isBooked } from '../../utils/appointment';
 import { notify } from '../../utils/dialog';
 import { timeAgo, whenLabel } from '../../utils/time';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../../components/StateBlocks';
@@ -44,7 +45,7 @@ export default function LeadsScreen() {
   const visibleLeads = leads.data?.items ?? [];
   const activeJobs = myJobs.data?.items ?? [];
   // Share the device position while a job is on the way, so the customer's tracker can move (utils/workerTracking.ts)
-  useWorkerTracking(!isWorker || !myJobs.data ? undefined : (activeJobs.find((j) => j.status === 'ASSIGNED')?.id ?? null));
+  useWorkerTracking(!isWorker || !myJobs.data ? undefined : (activeJobs.find((j) => j.status === 'ASSIGNED' && !isBooked(j))?.id ?? null));
 
   const answerDirect = async (jobId: string, accept: boolean) => {
     if (directBusy) return;
@@ -127,7 +128,7 @@ export default function LeadsScreen() {
                         <Text style={styles.leadTitle}>{job.title}</Text>
                         <Text style={styles.leadLoc}>{job.customerName} • {job.area}</Text>
                       </View>
-                      <View style={styles.timeTag}><Text style={styles.timeTagText}>{statusLabel[job.status] ?? job.status.replace('_', ' ')}</Text></View>
+                      <View style={styles.timeTag}><Text style={styles.timeTagText}>{isBooked(job) ? t('BOOKED') : statusLabel[job.status] ?? job.status.replace('_', ' ')}</Text></View>
                     </View>
                   </TouchableOpacity>
                 ))}

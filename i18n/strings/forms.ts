@@ -2,6 +2,8 @@
 export const forms: Record<string, { hi: string; pa: string }> = {
   // Post a job
   'Immediate (30m)': { hi: 'तुरंत (30 मिनट)', pa: 'ਤੁਰੰਤ (30 ਮਿੰਟ)' },
+  'What time should the worker come?': { hi: 'कारीगर कितने बजे आए?', pa: 'ਕਾਰੀਗਰ ਕਿੰਨੇ ਵਜੇ ਆਵੇ?' },
+  'The worker will come: {when}': { hi: 'कारीगर आएगा: {when}', pa: 'ਕਾਰੀਗਰ ਆਵੇਗਾ: {when}' },
   'Choose a service first.': { hi: 'पहले कोई सेवा चुनें।', pa: 'ਪਹਿਲਾਂ ਕੋਈ ਸੇਵਾ ਚੁਣੋ।' },
   'Add your address first.': { hi: 'पहले अपना पता जोड़ें।', pa: 'ਪਹਿਲਾਂ ਆਪਣਾ ਪਤਾ ਜੋੜੋ।' },
   'Post Job & Details': { hi: 'काम पोस्ट करें', pa: 'ਕੰਮ ਪੋਸਟ ਕਰੋ' },
