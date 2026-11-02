@@ -9,6 +9,7 @@ import { declineLead, getLead, reviseOffer, sendOffer, withdrawOffer } from '../
 import { isApiError, userMessage } from '../api/errors';
 import { confirmAction, notify } from '../utils/dialog';
 import { whenLabel } from '../utils/time';
+import { mediaPath, steadyUrl } from '../utils/steadyUrl';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../components/StateBlocks';
 import { useImageViewer } from '../components/ImageViewerModal';
 import { KeyboardAwareScrollView } from '../components/KeyboardAwareScrollView';
@@ -51,6 +52,8 @@ export default function LeadOfferScreen() {
   // answered the lead, so a worker who quoted and lost still has it: that one is closed, not won. A worker who backs out
   // has their offer turned WITHDRAWN, so ACCEPTED here really is their job (booked, done or cancelled).
   const won = lead?.myOffer?.status === 'ACCEPTED';
+  // The time the customer asked for (Afternoon / Tomorrow / exact). Null for "as soon as possible".
+  const appointment = lead && lead.urgency !== 'IMMEDIATE' ? lead.scheduledFor : null;
   const [busy, setBusy] = useState<'withdraw' | 'hide' | null>(null);
   // Set when sending finds the request already taken or cancelled
   const [closedOnSend, setClosedOnSend] = useState(false);
@@ -216,9 +219,9 @@ export default function LeadOfferScreen() {
           {lead.photoUrls.length > 0 && (
             <>
               <Text style={[styles.formLabel, { marginTop: 10, marginBottom: 4 }]}>{t('Customer Attached Photos:')}</Text>
-              {lead.photoUrls.map((url, index) => (
+              {lead.photoUrls.map((signed) => steadyUrl(signed)).map((url, index) => (
                 <TouchableOpacity
-                  key={url}
+                  key={mediaPath(url)}
                   style={[styles.leadImg, { marginBottom: 8 }]}
                   onPress={() => viewImage(url, `Customer photo ${index + 1}`)}
                   activeOpacity={0.85}
@@ -238,7 +241,7 @@ export default function LeadOfferScreen() {
         {!closed && !won && (
         <View style={[styles.card, { borderColor: Colors.primary, borderWidth: 2 }]}>
           <Text style={styles.quoteHeaderTitle}>{t('Your Quote to Customer')}</Text>
-          <Text style={styles.quoteHeaderSub}>{t('Set your inspection rate & earliest arrival time.')}</Text>
+          <Text style={styles.quoteHeaderSub}>{appointment ? t('Set your inspection rate.') : t('Set your inspection rate & earliest arrival time.')}</Text>
 
           <View style={styles.formGroup}>
             <Text style={styles.formLabel}>{t('Visiting & Inspection Fee')} *</Text>
@@ -262,6 +265,13 @@ export default function LeadOfferScreen() {
             )}
           </View>
 
+          {/* A request for a time (Afternoon / Tomorrow): the time is the customer's, so there is no "how quickly" to pick */}
+          {appointment ? (
+          <View style={[styles.formGroup, styles.appointmentBox]}>
+            <Text style={styles.appointmentTitle}>📅 {t('The customer wants you at {when}', { when: whenLabel(appointment) })}</Text>
+            <Text style={styles.hintText}>{t('Sending this quote means you agree to come at that time. You can start the job from one hour before.')}</Text>
+          </View>
+          ) : (
           <View style={styles.formGroup}>
             <Text style={styles.formLabel}>{t('How quickly can you arrive?')}</Text>
             <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -272,6 +282,7 @@ export default function LeadOfferScreen() {
               ))}
             </View>
           </View>
+          )}
 
           <View style={styles.formGroup}>
             <Text style={styles.formLabel}>{t('Message to Customer (Optional)')}</Text>
@@ -297,7 +308,11 @@ export default function LeadOfferScreen() {
           </>
         )}
         {liveOffer && !closed && (
-          <Text style={styles.quotedNote}>{t('You quoted ₹{fee}, arriving in {min} min. Change it below, or withdraw it.', { fee: liveOffer.visitFee, min: liveOffer.etaMinutes })}</Text>
+          <Text style={styles.quotedNote}>
+            {appointment
+              ? t('You quoted ₹{fee} for {when}. Change it below, or withdraw it.', { fee: liveOffer.visitFee, when: whenLabel(appointment) })
+              : t('You quoted ₹{fee}, arriving in {min} min. Change it below, or withdraw it.', { fee: liveOffer.visitFee, min: liveOffer.etaMinutes })}
+          </Text>
         )}
         {!closed && !won && (
           <TouchableOpacity style={[styles.sendQuoteBtn, (sending || busy !== null) && { opacity: 0.7 }]} onPress={() => void handleSendOffer()} disabled={sending || busy !== null} activeOpacity={0.8} accessibilityRole="button">
@@ -599,6 +614,17 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '800'
+  },
+  appointmentBox: {
+    backgroundColor: '#F0FDF4',
+    borderRadius: Radius.md,
+    padding: 12,
+  },
+  appointmentTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#065F46',
+    marginBottom: 4,
   },
   quotedNote: {
     fontSize: 13,

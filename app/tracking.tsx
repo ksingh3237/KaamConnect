@@ -18,8 +18,9 @@ import { useCancelJob } from '../components/CancelReasonSheet';
 import { cancelledHeadline, cancelledMessage, cancelledReason, visitFeeNotice } from '../utils/cancelReasons';
 import { callPhone, confirmAction, notify } from '../utils/dialog';
 import { currentPosition } from '../utils/position';
-import { timeAgo } from '../utils/time';
-import { AT_THE_DOOR_KM, trackingPill, type RoadTrip } from '../utils/trip';
+import { timeAgo, whenLabel } from '../utils/time';
+import { AT_THE_DOOR_KM, distanceKm, trackingPill, type RoadTrip } from '../utils/trip';
+import { isBooked } from '../utils/appointment';
 import { buzz } from '../utils/alerts';
 import { jobStep } from '../utils/jobStep';
 import { categoryTitle } from '../i18n/categories';
@@ -116,9 +117,14 @@ export default function TrackingScreen() {
   const away = road?.distanceKm ?? (liveIsNewer ? live.distanceKm : (tracking?.distanceKm ?? null));
   const stale = fix ? Date.now() - Date.parse(fix.updatedAt) > STALE_MS : false;
   const status = tracking?.status ?? job?.status ?? 'OPEN';
-  const pill =
-    trackingPill({ status, hasLocation: fix !== null, stale, etaMinutes: eta, distanceKm: away, lastSeen: fix ? timeAgo(fix.updatedAt) : undefined }) ||
-    (statusLabel[status] ?? '');
+  // Accepted for a later time (Afternoon / Tomorrow): nobody is on the way yet, so no countdown and no door
+  const booked = !!job && isBooked(job);
+  // To the pin, unrounded: the only distance the door message may be decided on
+  const doorKm = workerPoint && destination ? distanceKm(workerPoint, destination) : null;
+  const pill = booked
+    ? `📅 ${t('Booked for {when} • your worker sets off about an hour before', { when: whenLabel(job!.scheduledFor!) })}`
+    : trackingPill({ status, hasLocation: fix !== null, stale, etaMinutes: eta, distanceKm: away, doorKm, lastSeen: fix ? timeAgo(fix.updatedAt) : undefined }) ||
+      (statusLabel[status] ?? '');
 
   // The job moved on while the customer was reading this screen (socket or poll): buzz, so it is not missed with the
   // phone on the table. The screen itself already shows the change; this is only the nudge to look at it.
@@ -133,14 +139,14 @@ export default function TrackingScreen() {
 
   // The worker has reached the address but has not entered the code yet: the customer needs to open the door
   useEffect(() => {
-    if (status !== 'ASSIGNED' || stale || away === null || away > AT_THE_DOOR_KM) {
-      if (away !== null && away > AT_THE_DOOR_KM) doorBuzzed.current = false;
+    if (booked || status !== 'ASSIGNED' || stale || doorKm === null || doorKm > AT_THE_DOOR_KM) {
+      if (doorKm !== null && doorKm > AT_THE_DOOR_KM) doorBuzzed.current = false;
       return;
     }
     if (doorBuzzed.current) return;
     doorBuzzed.current = true;
     buzz('loud');
-  }, [status, stale, away]);
+  }, [booked, status, stale, doorKm]);
 
   const handleSos = async () => {
     if (!activeJobId || sosBusy) return;
@@ -233,7 +239,7 @@ export default function TrackingScreen() {
           <ArrowLeft color={Colors.textMain} size={20} />
         </TouchableOpacity>
         <View style={styles.livePill}>
-          <Text style={styles.livePillText}>• {job ? statusLabel[job.status] ?? job.status : t('TRACKER')}</Text>
+          <Text style={styles.livePillText}>• {job ? (booked ? t('BOOKED') : statusLabel[job.status] ?? job.status) : t('TRACKER')}</Text>
         </View>
         <TouchableOpacity style={[styles.sosBtn, (sosBusy || !activeJobId) && { opacity: 0.6 }]} onPress={() => void handleSos()} disabled={sosBusy || !activeJobId} accessibilityRole="button" accessibilityLabel={t('Emergency SOS')}>
           <AlertTriangle color="#FFFFFF" size={18} />
@@ -306,6 +312,13 @@ export default function TrackingScreen() {
                 </View>
               ) : null}
             </View>
+
+            {booked && job.scheduledFor ? (
+              <View style={styles.noticeBox}>
+                <Text style={[styles.noticeText, { fontWeight: '800' }]}>📅 {t('Booked for {when}', { when: whenLabel(job.scheduledFor) })}</Text>
+                <Text style={styles.noticeText}>{t('Your worker will set off about an hour before. You will see them on the map then.')}</Text>
+              </View>
+            ) : null}
 
             {job.arrivalCode ? (
               <View style={styles.noticeBox}>
