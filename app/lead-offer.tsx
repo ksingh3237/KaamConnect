@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Image, Linking, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -9,6 +9,8 @@ import { declineLead, getLead, reviseOffer, sendOffer, withdrawOffer } from '../
 import { isApiError, userMessage } from '../api/errors';
 import { confirmAction, notify } from '../utils/dialog';
 import { whenLabel } from '../utils/time';
+import { isClosedOutcome, outcomeNotice } from '../utils/leadOutcome';
+import { onLeadClosed, onOfferRejected } from '../api/socket';
 import { mediaPath, steadyUrl } from '../utils/steadyUrl';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../components/StateBlocks';
 import { useImageViewer } from '../components/ImageViewerModal';
@@ -21,6 +23,8 @@ const ETA_MINUTES = [15, 30, 45];
 
 /** Server answers that mean the request is gone for this worker, not that something broke. */
 const CLOSED_CODES = new Set(['NOT_FOUND', 'JOB_NOT_OPEN']);
+/** How often an open lead is re-read while the screen is up (in case the live connection is down). */
+const LIVE_RELOAD_MS = 20_000;
 
 export default function LeadOfferScreen() {
   const router = useRouter();
@@ -61,7 +65,9 @@ export default function LeadOfferScreen() {
     closedOnSend ||
     (leadState.errorCode !== null && CLOSED_CODES.has(leadState.errorCode)) ||
     // Taken by someone else, cancelled, completed, or its time ran out (an old "new job near you" in the bell)
-    (!!lead && !won && (lead.status !== 'OPEN' || (lead.expiresAt !== null && Date.parse(lead.expiresAt) <= Date.now())));
+    (!!lead && !won && (isClosedOutcome(lead.outcome) || lead.status !== 'OPEN' || (lead.expiresAt !== null && Date.parse(lead.expiresAt) <= Date.now())));
+  // What became of it, in words: "Cancelled by customer", "Customer declined your quote"... (null while simply open)
+  const notice = lead && !won ? outcomeNotice(lead) : null;
   const toRadar = () => router.replace('/(tabs)/leads');
   const toJob = () => {
     if (!lead) return;
@@ -75,15 +81,40 @@ export default function LeadOfferScreen() {
     if (won) toJob();
   }, [won]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Start from the category's standard visit fee, or from the quote already sent
+  // Start from the category's standard visit fee, or from the quote already sent. Only when the quote itself changed: the
+  // lead is re-read while the screen is open, and that must not wipe what the worker is typing.
+  const formFor = useRef<string | null>(null);
   useEffect(() => {
     if (!lead) return;
+    const key = `${lead.id}|${lead.myOffer?.id ?? ''}|${lead.myOffer?.status ?? ''}`;
+    if (formFor.current === key) return;
+    formFor.current = key;
     setFee(String(lead.myOffer?.visitFee ?? lead.baseVisitFee));
     if (lead.myOffer) {
       setEta(lead.myOffer.etaMinutes);
       setMessage(lead.myOffer.message ?? '');
     }
   }, [lead]);
+
+  // While the request is open, notice it closing (cancelled, someone else chosen) or the quote being declined: live when
+  // the connection is up, and by re-reading every so often when it is not.
+  const reloadLead = useRef(leadState.reload);
+  reloadLead.current = leadState.reload;
+  useEffect(() => {
+    if (!id || closed || won) return undefined;
+    const timer = setInterval(() => void reloadLead.current(), LIVE_RELOAD_MS);
+    const offClosed = onLeadClosed((p) => {
+      if (p.id === id) void reloadLead.current();
+    });
+    const offRejected = onOfferRejected((p) => {
+      if (p.jobId === id) void reloadLead.current();
+    });
+    return () => {
+      clearInterval(timer);
+      offClosed();
+      offRejected();
+    };
+  }, [id, closed, won]);
 
   const handleSendOffer = async () => {
     if (sending || !lead) return;
@@ -102,8 +133,11 @@ export default function LeadOfferScreen() {
     } catch (error) {
       if (isApiError(error) && CLOSED_CODES.has(error.code)) {
         setClosedOnSend(true);
+        void leadState.reload(); // to say why: cancelled, someone else chosen, expired
         return;
       }
+      // The quote was answered meanwhile (declined or not chosen): show where it stands now
+      if (isApiError(error) && error.code === 'OFFER_NOT_PENDING') void leadState.reload();
       const fields = isApiError(error) ? error.details.map((d) => `${d.field}: ${d.issue}`).join('; ') : '';
       setFormError(userMessage(error) + (fields ? ` (${fields})` : ''));
     } finally {
@@ -161,7 +195,7 @@ export default function LeadOfferScreen() {
             <ArrowLeft color={Colors.textMain} size={20} />
           </TouchableOpacity>
           <View style={styles.headerText}>
-            <Text style={styles.headerTitle}>{t('Lead Details & Send Quote')}</Text>
+            <Text style={styles.headerTitle}>{closed ? t('Lead Details') : t('Lead Details & Send Quote')}</Text>
             <Text style={styles.headerSub}>{t('Direct Customer Connect • 0% Fee')}</Text>
           </View>
           {lead?.urgency === 'IMMEDIATE' && (
@@ -170,7 +204,14 @@ export default function LeadOfferScreen() {
         </View>
         {!id && <EmptyBlock title={t('Choose a lead first')} hint={t('Open a lead from your radar to send a quote.')} />}
         {id && leadState.loading && <LoadingBlock />}
-        {closed && <EmptyBlock title={t('This lead has been fulfilled or closed')} hint={t('Check new leads on your radar.')} />}
+        {/* The lead is shown with what became of it; the generic words only when the server could not say */}
+        {notice && (
+          <View style={[styles.outcomeBanner, notice.tone === 'closed' ? styles.outcomeBannerClosed : styles.outcomeBannerRetry]} accessibilityRole="alert">
+            <Text style={[styles.outcomeTitle, notice.tone === 'closed' ? styles.outcomeTitleClosed : styles.outcomeTitleRetry]}>{notice.title}</Text>
+            <Text style={styles.outcomeHint}>{notice.hint}</Text>
+          </View>
+        )}
+        {closed && !notice && <EmptyBlock title={t('This lead has been fulfilled or closed')} hint={t('Check new leads on your radar.')} />}
         {leadState.error && !leadState.data && !closed && <ErrorBlock message={leadState.error} onRetry={() => void leadState.reload()} />}
         {(!id || closed) && (
           <TouchableOpacity style={styles.sendQuoteBtn} onPress={toRadar} activeOpacity={0.8} accessibilityRole="button">
@@ -625,6 +666,36 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#065F46',
     marginBottom: 4,
+  },
+  outcomeBanner: {
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: Spacing.md
+  },
+  outcomeBannerClosed: {
+    backgroundColor: Colors.errorLight,
+    borderColor: '#FCA5A5'
+  },
+  outcomeBannerRetry: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FCD34D'
+  },
+  outcomeTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 2
+  },
+  outcomeTitleClosed: {
+    color: '#B91C1C'
+  },
+  outcomeTitleRetry: {
+    color: '#92400E'
+  },
+  outcomeHint: {
+    fontSize: 13,
+    color: Colors.textMain,
+    lineHeight: 18
   },
   quotedNote: {
     fontSize: 13,

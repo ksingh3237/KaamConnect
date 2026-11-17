@@ -74,6 +74,8 @@ export const tabs: Record<string, { hi: string; pa: string }> = {
   Accept: { hi: 'स्वीकार करें', pa: 'ਮਨਜ਼ੂਰ ਕਰੋ' },
   'View Quote →': { hi: 'कोटेशन देखें →', pa: 'ਕੋਟੇਸ਼ਨ ਵੇਖੋ →' },
   'Send Quote →': { hi: 'कोटेशन भेजें →', pa: 'ਕੋਟੇਸ਼ਨ ਭੇਜੋ →' },
+  'Quote again →': { hi: 'फिर से कोटेशन भेजें →', pa: 'ਫਿਰ ਤੋਂ ਕੋਟੇਸ਼ਨ ਭੇਜੋ →' },
+  'View details': { hi: 'विवरण देखें', pa: 'ਵੇਰਵਾ ਵੇਖੋ' },
   'Tap a service to post your job • 0% commission, pay the worker directly': {
     hi: 'काम पोस्ट करने के लिए सेवा चुनें • 0% कमीशन, कारीगर को सीधा भुगतान',
     pa: 'ਕੰਮ ਪੋਸਟ ਕਰਨ ਲਈ ਸੇਵਾ ਚੁਣੋ • 0% ਕਮਿਸ਼ਨ, ਕਾਰੀਗਰ ਨੂੰ ਸਿੱਧਾ ਭੁਗਤਾਨ',

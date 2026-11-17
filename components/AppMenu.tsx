@@ -1,10 +1,12 @@
-// The side menu opened from the ☰ button on Home (customer and worker alike): profile, help, language, terms, privacy.
+// The side menu opened from the ☰ button on Home (customer and worker alike): profile, the worker's wallet, help,
+// language, terms, privacy.
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ChevronRight, FileText, Globe, HelpCircle, Lock, Settings, User as UserIcon, X } from 'lucide-react-native';
+import { ChevronRight, FileText, Globe, HelpCircle, Lock, Settings, User as UserIcon, Wallet, X } from 'lucide-react-native';
 import { Colors } from '../constants/theme';
+import { useStore } from '../store/useStore';
 import { notify } from '../utils/dialog';
 import { useT } from '../i18n/useT';
 
@@ -13,6 +15,7 @@ const NATIVE = Platform.OS !== 'web';
 export default function AppMenu({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const router = useRouter();
   const t = useT();
+  const isWorker = useStore((s) => s.role) === 'worker';
   const insets = useSafeAreaInsets();
   const slide = useRef(new Animated.Value(-Dimensions.get('window').width)).current;
   // Stays mounted while the closing slide runs
@@ -35,6 +38,8 @@ export default function AppMenu({ visible, onClose }: { visible: boolean; onClos
 
   const items: { icon: typeof UserIcon; title: string; onPress: () => void }[] = [
     { icon: UserIcon, title: t('Profile'), onPress: () => router.navigate('/(tabs)/profile') },
+    // Earnings are a worker's; a customer has nothing to show there
+    ...(isWorker ? [{ icon: Wallet, title: t('Wallet'), onPress: () => router.push('/wallet') }] : []),
     {
       icon: HelpCircle,
       title: t('Help & Support'),

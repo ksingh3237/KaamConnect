@@ -1,6 +1,6 @@
 // The worker's Home: the "taking jobs" switch, their active jobs, the newest leads with a quote button, and today's
 // earnings (always 100% theirs). No customer features here: workers never see job posting.
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -15,6 +15,7 @@ import type { JobStatus, JobTiming, LeadItem } from '../api/types';
 import { notify } from '../utils/dialog';
 import { useWorkerTracking } from '../utils/useWorkerTracking';
 import { isBooked } from '../utils/appointment';
+import { isClosedOutcome } from '../utils/leadOutcome';
 import { timeAgo, whenLabel } from '../utils/time';
 import { ErrorBlock, LoadingBlock } from './StateBlocks';
 import AppMenu from './AppMenu';
@@ -67,8 +68,19 @@ export default function WorkerHome() {
   const jobs = useAsync(() => listWorkerJobs('ongoing'), [], { pollMs: POLL_MS });
   const earnings = useAsync(() => getEarnings('today'), []);
 
-  const openLeads = (leads.data?.items ?? []).filter((l) => l.leadState !== 'DECLINED');
+  // Only leads still worth quoting: a closed one (cancelled, given to someone else) stays on the radar, not on Home
+  const openLeads = (leads.data?.items ?? []).filter((l) => l.leadState !== 'DECLINED' && !isClosedOutcome(l.outcome));
   const activeJobs = (jobs.data?.items ?? []).filter((j) => jobStatusText(j.status) !== '');
+
+  // A customer choosing this worker switches them back on (server side). The push says so, but it can be missed: a job
+  // that newly appears in the list is the other sign, so read the switch again then.
+  const jobIds = (jobs.data?.items ?? []).map((j) => j.id).join(',');
+  const seenJobIds = useRef<string | null>(null);
+  useEffect(() => {
+    if (!jobs.data) return;
+    if (seenJobIds.current !== null && seenJobIds.current !== jobIds && !available) void refreshMe();
+    seenJobIds.current = jobIds;
+  }, [jobIds]); // eslint-disable-line react-hooks/exhaustive-deps
   // The worker may leave the job screen while driving: sharing GPS follows the job's status, not the open screen
   // Only a job that is due: tomorrow's booking must not share the worker's position today
   useWorkerTracking(jobs.data ? (jobs.data.items.find((j) => j.status === 'ASSIGNED' && !isBooked(j))?.id ?? null) : undefined);
@@ -146,7 +158,7 @@ export default function WorkerHome() {
               {available ? t('Available • Taking jobs') : t('Offline • Not taking jobs')}
             </Text>
             <Text style={[styles.dutySub, !available && { color: Colors.textMuted }]}>
-              {available ? t('New nearby jobs alert you instantly.') : t('No new job alerts and customers will not see you.')}
+              {available ? t('New nearby jobs alert you instantly.') : t('No new job alerts and customers will not see you. You can still quote on leads; if a customer chooses you, you go online.')}
             </Text>
           </View>
           <Switch
@@ -239,7 +251,7 @@ export default function WorkerHome() {
                 activeOpacity={0.8}
                 accessibilityRole="button"
               >
-                <Text style={styles.quoteBtnText}>{lead.myOffer ? t('View or update my quote') : t('Send Quote')}</Text>
+                <Text style={styles.quoteBtnText}>{lead.outcome === 'QUOTE_DECLINED' ? t('Quote again →') : lead.myOffer ? t('View or update my quote') : t('Send Quote')}</Text>
                 <ArrowRight color="#FFFFFF" size={18} />
               </TouchableOpacity>
             </View>

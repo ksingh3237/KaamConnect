@@ -8,6 +8,7 @@ import { useStore } from '../../store/useStore';
 import { listLeads } from '../../api/endpoints';
 import { useSession } from '../../store/useSession';
 import { usePresenceLocation } from '../../utils/usePresenceLocation';
+import { isClosedOutcome } from '../../utils/leadOutcome';
 import { useT } from '../../i18n/useT';
 import OfferToastHost from '../../components/OfferToastHost';
 
@@ -24,7 +25,7 @@ export default function TabLayout() {
   const openNewestLead = async () => {
     try {
       const page = await listLeads({ filter: 'all' });
-      const lead = page.items.find((l) => l.leadState !== 'DECLINED');
+      const lead = page.items.find((l) => l.leadState !== 'DECLINED' && !isClosedOutcome(l.outcome));
       if (lead) {
         router.push({ pathname: '/lead-offer', params: { id: lead.id } });
         return;

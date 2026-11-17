@@ -176,4 +176,39 @@ export const utils: Record<string, { hi: string; pa: string }> = {
   'Cleaning & Washing': { hi: 'सफाई व धुलाई', pa: 'ਸਫ਼ਾਈ ਅਤੇ ਧੁਆਈ' },
   'Vehicles & Moving': { hi: 'वाहन व शिफ़्टिंग', pa: 'ਵਾਹਨ ਅਤੇ ਸ਼ਿਫ਼ਟਿੰਗ' },
   More: { hi: 'और', pa: 'ਹੋਰ' },
+
+  // What became of a lead (utils/leadOutcome.ts)
+  'Customer declined your quote': { hi: 'ग्राहक ने आपका कोटेशन मना कर दिया', pa: 'ਗਾਹਕ ਨੇ ਤੁਹਾਡਾ ਕੋਟੇਸ਼ਨ ਮਨ੍ਹਾ ਕਰ ਦਿੱਤਾ' },
+  'The request is still open. You can send a new quote.': {
+    hi: 'अनुरोध अभी खुला है। आप नया कोटेशन भेज सकते हैं।',
+    pa: 'ਬੇਨਤੀ ਹਾਲੇ ਖੁੱਲ੍ਹੀ ਹੈ। ਤੁਸੀਂ ਨਵਾਂ ਕੋਟੇਸ਼ਨ ਭੇਜ ਸਕਦੇ ਹੋ।',
+  },
+  'Cancelled by customer': { hi: 'ग्राहक ने रद्द किया', pa: 'ਗਾਹਕ ਨੇ ਰੱਦ ਕੀਤਾ' },
+  'The customer cancelled this request. There is nothing more to do.': {
+    hi: 'ग्राहक ने यह अनुरोध रद्द कर दिया। अब कुछ करने की ज़रूरत नहीं है।',
+    pa: 'ਗਾਹਕ ਨੇ ਇਹ ਬੇਨਤੀ ਰੱਦ ਕਰ ਦਿੱਤੀ। ਹੁਣ ਕੁਝ ਕਰਨ ਦੀ ਲੋੜ ਨਹੀਂ ਹੈ।',
+  },
+  'Customer chose another worker': { hi: 'ग्राहक ने दूसरा कारीगर चुना', pa: 'ਗਾਹਕ ਨੇ ਹੋਰ ਕਾਰੀਗਰ ਚੁਣਿਆ' },
+  'This request is closed. New jobs will keep coming to your radar.': {
+    hi: 'यह अनुरोध बंद हो गया। नए काम आपके रडार पर आते रहेंगे।',
+    pa: 'ਇਹ ਬੇਨਤੀ ਬੰਦ ਹੋ ਗਈ। ਨਵੇਂ ਕੰਮ ਤੁਹਾਡੇ ਰਡਾਰ ’ਤੇ ਆਉਂਦੇ ਰਹਿਣਗੇ।',
+  },
+  'Request expired': { hi: 'अनुरोध की समय-सीमा खत्म', pa: 'ਬੇਨਤੀ ਦੀ ਸਮਾਂ-ਸੀਮਾ ਖ਼ਤਮ' },
+  'Nobody was chosen in time, so this request is closed.': {
+    hi: 'समय पर कोई नहीं चुना गया, इसलिए यह अनुरोध बंद हो गया।',
+    pa: 'ਸਮੇਂ ਸਿਰ ਕੋਈ ਨਹੀਂ ਚੁਣਿਆ ਗਿਆ, ਇਸ ਲਈ ਇਹ ਬੇਨਤੀ ਬੰਦ ਹੋ ਗਈ।',
+  },
+  'Request closed': { hi: 'अनुरोध बंद', pa: 'ਬੇਨਤੀ ਬੰਦ' },
+
+  // Post Job's early warning (utils/serviceAvailability.ts)
+  'Service Unavailable': { hi: 'सेवा उपलब्ध नहीं', pa: 'ਸੇਵਾ ਉਪਲਬਧ ਨਹੀਂ' },
+  'No worker offers this service in this area yet. You can still post your request.': {
+    hi: 'इस इलाके में अभी कोई कारीगर यह सेवा नहीं देता। आप फिर भी अपना अनुरोध पोस्ट कर सकते हैं।',
+    pa: 'ਇਸ ਇਲਾਕੇ ਵਿੱਚ ਹਾਲੇ ਕੋਈ ਕਾਰੀਗਰ ਇਹ ਸੇਵਾ ਨਹੀਂ ਦਿੰਦਾ। ਤੁਸੀਂ ਫਿਰ ਵੀ ਆਪਣੀ ਬੇਨਤੀ ਪੋਸਟ ਕਰ ਸਕਦੇ ਹੋ।',
+  },
+  'Currently Temporarily Unavailable': { hi: 'अभी कुछ समय के लिए उपलब्ध नहीं', pa: 'ਹਾਲੇ ਕੁਝ ਸਮੇਂ ਲਈ ਉਪਲਬਧ ਨਹੀਂ' },
+  'Workers for this service are offline or booked at this time. You can still post, and they will see it.': {
+    hi: 'इस सेवा के कारीगर इस समय ऑफ़लाइन हैं या बुक हैं। आप फिर भी पोस्ट कर सकते हैं, वे इसे देखेंगे।',
+    pa: 'ਇਸ ਸੇਵਾ ਦੇ ਕਾਰੀਗਰ ਇਸ ਸਮੇਂ ਔਫਲਾਈਨ ਹਨ ਜਾਂ ਬੁੱਕ ਹਨ। ਤੁਸੀਂ ਫਿਰ ਵੀ ਪੋਸਟ ਕਰ ਸਕਦੇ ਹੋ, ਉਹ ਇਸਨੂੰ ਵੇਖਣਗੇ।',
+  },
 };

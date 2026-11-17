@@ -8,12 +8,18 @@ import { useNotifications } from '../store/useNotifications';
 import { openNotification } from '../utils/openNotification';
 import { onFcmTokenRefresh, onPushTokenChanged } from '../utils/pushRegistration';
 import { buzz, levelForType } from '../utils/alerts';
+import { onWorkerAvailability } from '../api/socket';
 
 const UNREAD_POLL_MS = 30_000;
 const native = Platform.OS === 'android' || Platform.OS === 'ios';
 
 // A tap can be reported twice (the live listener and the launch notification), so each is opened only once
 const opened = new Set<string>();
+
+// Being chosen for a job switches an offline worker back on (server side): re-read the profile so the Home switch shows it
+function refreshIfProfileChanged(type: string): void {
+  if (type === 'BOOKING_CONFIRMED') void useSession.getState().refreshMe();
+}
 
 function openFromResponse(response: Notifications.NotificationResponse): void {
   const key = `${response.notification.request.identifier}|${response.notification.date}|${response.actionIdentifier}`;
@@ -22,6 +28,7 @@ function openFromResponse(response: Notifications.NotificationResponse): void {
   if (opened.size > 50) opened.delete(opened.values().next().value as string);
   const data = response.notification.request.content.data as Record<string, unknown> | undefined;
   const type = typeof data?.type === 'string' ? data.type : '';
+  refreshIfProfileChanged(type);
   openNotification(type, data);
 }
 
@@ -54,7 +61,9 @@ export default function PushHost() {
     const received = Notifications.addNotificationReceivedListener((notification) => {
       void refreshUnread();
       const data = notification.request.content.data as Record<string, unknown> | undefined;
-      buzz(levelForType(typeof data?.type === 'string' ? data.type : ''));
+      const type = typeof data?.type === 'string' ? data.type : '';
+      buzz(levelForType(type));
+      refreshIfProfileChanged(type);
     });
     // A tap while the app was running or in the background
     const tapped = Notifications.addNotificationResponseReceivedListener(openFromResponse);
@@ -78,6 +87,12 @@ export default function PushHost() {
       rotatedIos();
     };
   }, [signedIn, refreshUnread]);
+
+  // The same news over the live connection, when it happens to be up (it is opened while a job is being followed)
+  useEffect(() => {
+    if (!signedIn) return undefined;
+    return onWorkerAvailability(() => void useSession.getState().refreshMe());
+  }, [signedIn]);
 
   return null;
 }

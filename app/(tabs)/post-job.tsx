@@ -18,12 +18,25 @@ import { serviceIcon } from "../../constants/services";
 import { useStore } from "../../store/useStore";
 import { useSession } from "../../store/useSession";
 import { useAsync } from "../../api/useAsync";
-import { createJob, getCategories, getLocations } from "../../api/endpoints";
+import {
+  createJob,
+  getCategories,
+  getLocations,
+  getServiceAvailability,
+} from "../../api/endpoints";
 import { isApiError, userMessage } from "../../api/errors";
 import { uploadFile, type PickedFile } from "../../api/upload";
 import { useImagePicker } from "../../components/ImageSourceModal";
 import { useImageViewer } from "../../components/ImageViewerModal";
-import type { CreateJobBody, JobTiming } from "../../api/types";
+import type {
+  CreateJobBody,
+  JobTiming,
+  ServiceAvailability,
+} from "../../api/types";
+import {
+  availabilityNotice,
+  availabilityQuery,
+} from "../../utils/serviceAvailability";
 import { ErrorBlock, LoadingBlock } from "../../components/StateBlocks";
 import { KeyboardAwareScrollView } from "../../components/KeyboardAwareScrollView";
 import GoogleLocationPicker, {
@@ -40,6 +53,8 @@ import { useLang, useT } from "../../i18n/useT";
 const MAX_PHOTOS = 4;
 /** Approximate width of one service pill plus the gap, used to scroll the chosen one into view. */
 const CAT_PILL_STEP = 190;
+/** Wait this long after the last change of service, place or time before asking whether anyone is available. */
+const SUPPLY_CHECK_DELAY_MS = 400;
 
 export default function PostJobScreen() {
   const router = useRouter();
@@ -116,6 +131,37 @@ export default function PostJobScreen() {
   const categoryIndex = (categories.data ?? []).findIndex(
     (c) => c.id === category?.id,
   );
+
+  // Is anyone there for this service, place and time? Asked as the form changes (a moment after the last change), so the
+  // customer is warned before posting into silence. A warning only: posting stays possible, and a failed check says nothing.
+  const supplyQuery = availabilityQuery({
+    categoryId: category?.id ?? null,
+    areaId: addressMode === "CUSTOM" ? customAreaId : (address?.area.id ?? null),
+    coords: addressMode === "CUSTOM" ? customCoords : address,
+    timing,
+    slotIso: slot?.iso ?? null,
+  });
+  const supplyKey = supplyQuery ? JSON.stringify(supplyQuery) : null;
+  const [supply, setSupply] = useState<{ key: string; state: ServiceAvailability["state"] } | null>(null);
+  useEffect(() => {
+    if (!supplyQuery || !supplyKey) return undefined;
+    let current = true;
+    const timer = setTimeout(() => {
+      getServiceAvailability(supplyQuery)
+        .then((answer) => {
+          if (current) setSupply({ key: supplyKey, state: answer.state });
+        })
+        .catch(() => {
+          if (current) setSupply(null);
+        });
+    }, SUPPLY_CHECK_DELAY_MS);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [supplyKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Only the answer for what the form holds now: never a stale one for the previous service or place
+  const supplyWarning = availabilityNotice(supply && supply.key === supplyKey ? supply.state : null);
 
   // Bring the chosen service into view (it may have been picked on Home, far along the row)
   useEffect(() => {
@@ -634,6 +680,12 @@ export default function PostJobScreen() {
           )}
         </View>
 
+        {supplyWarning && (
+          <View style={styles.supplyCard} accessibilityRole="alert">
+            <Text style={styles.supplyTitle}>⚠️ {supplyWarning.title}</Text>
+            <Text style={styles.supplyHint}>{supplyWarning.hint}</Text>
+          </View>
+        )}
         {formError && (
           <Text
             style={[styles.errorText, { textAlign: "center", marginBottom: 8 }]}
@@ -1010,5 +1062,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.textMuted,
     marginTop: 6,
+  },
+  supplyCard: {
+    backgroundColor: "#FFFBEB",
+    borderWidth: 1,
+    borderColor: "#FCD34D",
+    borderRadius: Radius.lg,
+    padding: 12,
+    marginBottom: Spacing.md,
+  },
+  supplyTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#92400E",
+    marginBottom: 2,
+  },
+  supplyHint: {
+    fontSize: 13,
+    color: Colors.textMain,
+    lineHeight: 18,
   },
 });

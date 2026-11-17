@@ -23,6 +23,13 @@ describe('notificationTarget', () => {
     expect(notificationTarget('JOB_CANCELLED_BY_CUSTOMER', data)).toEqual({ side: 'worker', href: '/job-progress', jobId: 'job-1' });
   });
 
+  it("sends what became of a worker's quote to that lead, on the worker side, which shows the outcome", () => {
+    for (const type of ['QUOTE_DECLINED', 'QUOTE_NOT_SELECTED', 'LEAD_CANCELLED']) {
+      expect(notificationTarget(type, data)).toEqual({ side: 'worker', href: { pathname: '/lead-offer', params: { id: 'job-1' } }, jobId: null });
+      expect(notificationSide(type)).toBe('worker');
+    }
+  });
+
   it('sends a declined or unanswered direct request to the customer tracking screen', () => {
     expect(notificationTarget('DIRECT_DECLINED', data)).toEqual({ side: 'customer', href: '/tracking', jobId: 'job-1' });
     expect(notificationTarget('DIRECT_EXPIRED', data)).toEqual({ side: 'customer', href: '/tracking', jobId: 'job-1' });

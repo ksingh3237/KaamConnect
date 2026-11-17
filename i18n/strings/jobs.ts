@@ -7,6 +7,7 @@ export const jobs: Record<string, { hi: string; pa: string }> = {
     pa: 'ਤੁਹਾਡਾ ₹{fee} ਦਾ ਕੋਟੇਸ਼ਨ {name} ਨੂੰ ਭੇਜ ਦਿੱਤਾ ਗਿਆ। ਜੇ ਉਹ ਤੁਹਾਨੂੰ ਚੁਣਦੇ ਹਨ ਤਾਂ ਇੱਥੇ ਮਨਜ਼ੂਰ ਦਿਖੇਗਾ।',
   },
   'Lead Details & Send Quote': { hi: 'लीड की जानकारी और कोटेशन', pa: 'ਲੀਡ ਦੀ ਜਾਣਕਾਰੀ ਅਤੇ ਕੋਟੇਸ਼ਨ' },
+  'Lead Details': { hi: 'लीड की जानकारी', pa: 'ਲੀਡ ਦੀ ਜਾਣਕਾਰੀ' },
   'Direct Customer Connect • 0% Fee': { hi: 'ग्राहक से सीधा संपर्क • 0% शुल्क', pa: 'ਗਾਹਕ ਨਾਲ ਸਿੱਧਾ ਸੰਪਰਕ • 0% ਫ਼ੀਸ' },
   'Choose a lead first': { hi: 'पहले कोई लीड चुनें', pa: 'ਪਹਿਲਾਂ ਕੋਈ ਲੀਡ ਚੁਣੋ' },
   'Open a lead from your radar to send a quote.': { hi: 'कोटेशन भेजने के लिए रडार से कोई लीड खोलें।', pa: 'ਕੋਟੇਸ਼ਨ ਭੇਜਣ ਲਈ ਰਡਾਰ ਤੋਂ ਕੋਈ ਲੀਡ ਖੋਲ੍ਹੋ।' },

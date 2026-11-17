@@ -12,6 +12,7 @@ import { legal } from './strings/legal';
 import { start } from './strings/start';
 import { tabs } from './strings/tabs';
 import { utils } from './strings/utils';
+import { wallet } from './strings/wallet';
 
 export const STRINGS: Record<string, { hi: string; pa: string }> = {
   ...common,
@@ -24,4 +25,5 @@ export const STRINGS: Record<string, { hi: string; pa: string }> = {
   ...start,
   ...tabs,
   ...utils,
+  ...wallet,
 };

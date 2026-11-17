@@ -13,6 +13,7 @@ import { useWorkerTracking } from '../../utils/useWorkerTracking';
 import { isBooked } from '../../utils/appointment';
 import { notify } from '../../utils/dialog';
 import { timeAgo, whenLabel } from '../../utils/time';
+import { isClosedOutcome, outcomeNotice } from '../../utils/leadOutcome';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../../components/StateBlocks';
 import { LeadCardSkeleton } from '../../components/skeletons/LeadCardSkeleton';
 import ServiceCard from '../../components/ServiceCard';
@@ -172,8 +173,17 @@ export default function LeadsScreen() {
             )}
 
             {/* Leads Cards */}
-            {visibleLeads.map((lead) => (
-              <View key={lead.id} style={styles.leadCard}>
+            {visibleLeads.map((lead) => {
+              // What became of it (declined, cancelled, someone else chosen): said on the card, never a quote button on a closed one
+              const notice = outcomeNotice(lead);
+              const over = isClosedOutcome(lead.outcome);
+              return (
+              <View key={lead.id} style={[styles.leadCard, over && styles.leadCardClosed]}>
+                {notice && (
+                  <View style={[styles.outcomeStrip, notice.tone === 'closed' ? styles.outcomeClosed : styles.outcomeRetry]} accessibilityRole="text">
+                    <Text style={[styles.outcomeText, notice.tone === 'closed' ? styles.outcomeTextClosed : styles.outcomeTextRetry]}>{notice.title}</Text>
+                  </View>
+                )}
                 <View style={styles.leadHeader}>
                   <View style={{ flex: 1 }}>
                     <View style={styles.catPill}><Text style={styles.catPillText}>{pick(lead.category.title, lang)}{lead.isDirect ? ` • ${t('Direct request')}` : ''}</Text></View>
@@ -199,7 +209,7 @@ export default function LeadsScreen() {
                     </Text>
                     {lead.myOffer && <Text style={styles.leadBudget}>{t('Your quote: ₹{fee} • {min} min', { fee: lead.myOffer.visitFee, min: lead.myOffer.etaMinutes })}</Text>}
                   </View>
-                  {lead.isDirect && lead.leadState === 'NEW' ? (
+                  {lead.isDirect && lead.leadState === 'NEW' && !over ? (
                     <View style={{ flexDirection: 'row', gap: 6 }}>
                       <TouchableOpacity style={[styles.quoteBtn, directBusy !== null && { opacity: 0.6 }]} disabled={directBusy !== null} onPress={() => void answerDirect(lead.id, true)} accessibilityRole="button">
                         <Text style={styles.quoteBtnText}>{directBusy === lead.id ? '…' : t('Accept')}</Text>
@@ -209,13 +219,16 @@ export default function LeadsScreen() {
                       </TouchableOpacity>
                     </View>
                   ) : (
-                    <TouchableOpacity style={styles.quoteBtn} onPress={() => router.push({ pathname: '/lead-offer', params: { id: lead.id } })} accessibilityRole="button">
-                      <Text style={styles.quoteBtnText}>{lead.myOffer ? t('View Quote →') : t('Send Quote →')}</Text>
+                    <TouchableOpacity style={[styles.quoteBtn, over && styles.quoteBtnQuiet]} onPress={() => router.push({ pathname: '/lead-offer', params: { id: lead.id } })} accessibilityRole="button">
+                      <Text style={[styles.quoteBtnText, over && styles.quoteBtnQuietText]}>
+                        {over ? t('View details') : lead.outcome === 'QUOTE_DECLINED' ? t('Quote again →') : lead.myOffer ? t('View Quote →') : t('Send Quote →')}
+                      </Text>
                     </TouchableOpacity>
                   )}
                 </View>
               </View>
-            ))}
+              );
+            })}
           </View>
         ) : (
           /* CUSTOMER MODE: Service Category Directory */
@@ -453,6 +466,41 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '800'
+  },
+  quoteBtnQuiet: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: Colors.borderDark
+  },
+  quoteBtnQuietText: {
+    color: Colors.textMain
+  },
+  leadCardClosed: {
+    borderLeftColor: Colors.borderDark,
+    backgroundColor: '#F8FAFC'
+  },
+  outcomeStrip: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+    marginBottom: 8
+  },
+  outcomeClosed: {
+    backgroundColor: Colors.errorLight
+  },
+  outcomeRetry: {
+    backgroundColor: '#FFFBEB'
+  },
+  outcomeText: {
+    fontSize: 12,
+    fontWeight: '800'
+  },
+  outcomeTextClosed: {
+    color: '#B91C1C'
+  },
+  outcomeTextRetry: {
+    color: '#92400E'
   },
   catIntro: {
     fontSize: 14,

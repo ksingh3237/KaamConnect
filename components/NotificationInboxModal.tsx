@@ -32,6 +32,9 @@ const ICONS: Record<NotificationType, { Icon: LucideIcon; color: string; bg: str
   JOB_WORKER_LATE: { Icon: Clock, color: '#D97706', bg: '#FEF3C7' },
   JOB_YOU_ARE_LATE: { Icon: Clock, color: '#D97706', bg: '#FEF3C7' },
   JOB_NO_SHOW_RELEASED: { Icon: CircleX, color: '#B91C1C', bg: '#FEE2E2' },
+  QUOTE_DECLINED: { Icon: BadgeIndianRupee, color: '#D97706', bg: '#FEF3C7' },
+  QUOTE_NOT_SELECTED: { Icon: CircleX, color: '#B91C1C', bg: '#FEE2E2' },
+  LEAD_CANCELLED: { Icon: CircleX, color: '#B91C1C', bg: '#FEE2E2' },
 };
 const FALLBACK_ICON = { Icon: Briefcase, color: Colors.textMuted, bg: Colors.surfaceVariant };
 

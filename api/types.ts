@@ -419,7 +419,14 @@ export interface LeadItem {
   isDirect: boolean;
   expiresAt: string | null;
   myOffer: OfferSummary | null;
+  /** What became of the lead for this worker; null while it is simply open. Absent from an older server. */
+  outcome?: LeadOutcome | null;
 }
+/**
+ * QUOTE_DECLINED: the customer declined this worker's quote, the request is still open (they may quote again).
+ * The others are endings: the lead stays on the radar for a day so the worker sees what happened.
+ */
+export type LeadOutcome = 'QUOTE_DECLINED' | 'CANCELLED_BY_CUSTOMER' | 'TAKEN_BY_OTHER' | 'EXPIRED' | 'CLOSED';
 export interface LeadDetail extends LeadItem {
   status: JobStatus;
   photoUrls: string[];
@@ -457,14 +464,32 @@ export interface WorkerJobsPage extends Page<WorkerJobItem> {
 }
 
 // ── money views
+export type EarningsPeriod = 'today' | 'week' | 'month' | 'all';
 export interface Earnings {
-  period: 'today' | 'week' | 'month';
+  period: EarningsPeriod;
   from: string;
   to: string;
   amount: number;
   jobsDone: number;
   platformFee: 0;
   currency: 'INR';
+}
+/** One paid job in the Wallet: what the worker was paid for it and when. */
+export interface EarningJob {
+  jobId: string;
+  reference: string;
+  title: string;
+  category: { id: string; title: { en: string; hi: string; pa: string } };
+  customerName: string;
+  area: string;
+  completedAt: string;
+  amount: number;
+  method: 'UPI' | 'CASH';
+}
+/** Post Job's early warning: is any worker there for this service, place and time? */
+export interface ServiceAvailability {
+  state: 'NONE' | 'ALL_BUSY' | 'AVAILABLE';
+  scheduledFor: string | null;
 }
 export interface Savings {
   commissionSaved: number;
@@ -523,7 +548,10 @@ export type NotificationType =
   | 'DIRECT_EXPIRED'
   | 'JOB_WORKER_LATE'
   | 'JOB_YOU_ARE_LATE'
-  | 'JOB_NO_SHOW_RELEASED';
+  | 'JOB_NO_SHOW_RELEASED'
+  | 'QUOTE_DECLINED'
+  | 'QUOTE_NOT_SELECTED'
+  | 'LEAD_CANCELLED';
 
 export interface NotificationItem {
   id: string;
