@@ -11,6 +11,7 @@ import type { JobView, OfferForCustomer } from '../api/types';
 import OfferCard, { useOfferActions } from '../components/OfferCard';
 import { EmptyBlock, ErrorBlock, LoadingBlock } from '../components/StateBlocks';
 import { useT } from '../i18n/useT';
+import { whenLabel } from '../utils/time';
 
 const POLL_MS = 8000; // quotes arrive while the screen is open; REST polling is the baseline, a socket can replace it
 
@@ -84,6 +85,7 @@ export default function CompareOffersScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.recapTitle}>{job.data?.title ?? '…'}</Text>
             <Text style={styles.recapSub}>{job.data ? `${job.data.locality ?? job.data.area.name}, ${job.data.city.name.replace(/\s*\(.*\)/, '')} • ${job.data.reference}` : ''}</Text>
+            {job.data?.scheduledFor ? <Text style={styles.recapWhen}>📅 {t('Booked for {when}', { when: whenLabel(job.data.scheduledFor) })}</Text> : null}
           </View>
           <View style={styles.offersTag}><Text style={styles.offersTagText}>{offerCount === 1 ? t('1 Offer') : t('{count} Offers', { count: offerCount })}</Text></View>
         </View>
@@ -122,6 +124,7 @@ export default function CompareOffersScreen() {
               key={offer.offerId}
               offer={offer}
               fastest={offer.offerId === fastestId && offerCount > 1}
+              appointment={job.data?.scheduledFor}
               busy={busy}
               onAccept={() => void accept(activeJobId!, offer)}
               onDecline={() => void decline(activeJobId!, offer)}
@@ -165,6 +168,7 @@ const styles = StyleSheet.create({
   },
   recapTitle: { fontSize: 14, fontWeight: '800', color: Colors.textMain },
   recapSub: { fontSize: 13, color: Colors.textMuted },
+  recapWhen: { fontSize: 13, fontWeight: '800', color: '#065F46', marginTop: 2 },
   offersTag: { backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   offersTagText: { fontSize: 12, fontWeight: '800', color: '#92400E' },
   closedCard: {

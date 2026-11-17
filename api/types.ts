@@ -178,6 +178,8 @@ export interface CreateJobBody {
   title: string;
   description?: string;
   timing: JobTiming;
+  /** The appointment the customer picked (ISO with offset); AFTERNOON/TOMORROW without it default on the server. */
+  scheduledFor?: string;
   /** Send exactly one of addressId (saved address) or address (typed for this job). */
   addressId?: string;
   address?: JobAddressInput;

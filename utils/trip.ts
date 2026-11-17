@@ -81,10 +81,18 @@ export interface PillInput {
   distanceKm: number | null;
   /** "3 min ago" style text for a stale fix. */
   lastSeen?: string;
+  /**
+   * Straight line from the worker's fix to the customer's pin, NOT rounded. Null without both points. The door message
+   * is decided on this alone: the server's distance is rounded to 0.1 km (149 m would read "0.1") and an area centre is
+   * not anybody's door.
+   */
+  doorKm?: number | null;
 }
 
-/** Within this, the worker is at the address rather than on the way to it (the fix's own accuracy is of that order). */
-export const AT_THE_DOOR_KM = 0.1;
+/** Within this, the worker is at the address rather than on the way to it. */
+export const AT_THE_DOOR_KM = 0.05;
+/** Within this, "arriving in 1 min" is all the ETA could say: tell the customer to get the code ready instead. */
+export const NEARLY_THERE_KM = 0.25;
 
 /** The floating line on the customer's tracking map. */
 export function trackingPill(input: PillInput): string {
@@ -93,7 +101,9 @@ export function trackingPill(input: PillInput): string {
   if (!input.hasLocation) return `⏳ ${t('Worker on the way • Updating live location...')}`;
   if (input.stale) return `⏳ ${t('Worker on the way • location last seen {ago}', { ago: input.lastSeen ?? t('a while ago') })}`;
   // Close enough that "arriving in 1 min" is useless: what the customer needs is the arrival code in their hand
-  if (input.distanceKm !== null && input.distanceKm <= AT_THE_DOOR_KM) return `🚪 ${t('Your worker is at your door • have the arrival code ready')}`;
+  const door = input.doorKm ?? null;
+  if (door !== null && door <= AT_THE_DOOR_KM) return `🚪 ${t('Your worker is at your door • have the arrival code ready')}`;
+  if (door !== null && door <= NEARLY_THERE_KM) return `🛵 ${t('Your worker is almost there • keep the arrival code ready')}`;
   if (input.etaMinutes === null) return `⚡ ${t('Worker is on the way • live location on the map')}`;
   return input.distanceKm !== null
     ? `⚡ ${t('Arriving in {min} min • {km} km away', { min: input.etaMinutes, km: input.distanceKm })}`

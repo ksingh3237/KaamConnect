@@ -25,8 +25,10 @@ import type { LatLng } from './trip';
 import { t } from '../i18n';
 
 export const TRACKING_TASK = 'kaamconnect-trip-location';
+// High (GPS), not Balanced: Balanced is network positioning, often 100 m off, which is the whole gap between "a minute
+// away" and "at your door". Only runs during a trip, so the battery cost is short.
 export const WATCH_OPTIONS = {
-  accuracy: Location.Accuracy.Balanced,
+  accuracy: Location.Accuracy.High,
   timeInterval: 10_000,
   distanceInterval: 15,
 };
@@ -169,7 +171,7 @@ async function attach(s: Session): Promise<void> {
     if (!(await startService(s)) && !(await startWatch(s))) return;
     ui().setTrackingState(true, null);
     // The source stays quiet until the worker moves 15 m, so ask for one fix now: the customer sees a dot straight away
-    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
       .then((location) => pushFix(s, pointOf(location)))
       .catch(() => undefined);
   } catch {

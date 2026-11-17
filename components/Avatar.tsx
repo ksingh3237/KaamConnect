@@ -2,13 +2,15 @@
 // (assets/images/avatar-placeholder.png is a temporary stand-in until real design assets exist).
 import React from 'react';
 import { Image, ImageStyle, StyleProp } from 'react-native';
+import { steadyUrl } from '../utils/steadyUrl';
 
 const PLACEHOLDER = require('../assets/images/avatar-placeholder.png');
 
 export default function Avatar({ uri, size = 48, style }: { uri?: string | null; size?: number; style?: StyleProp<ImageStyle> }) {
   return (
     <Image
-      source={uri ? { uri } : PLACEHOLDER}
+      // Screens poll and the server re-signs the link: keep the one already shown so the photo does not reload
+      source={uri ? { uri: steadyUrl(uri) } : PLACEHOLDER}
       style={[{ width: size, height: size, borderRadius: size / 2, backgroundColor: '#E6F7F0' }, style]}
       accessibilityIgnoresInvertColors
     />

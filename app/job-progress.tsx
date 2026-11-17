@@ -19,7 +19,10 @@ import { getLocationAccess, requestWorkerLocationAccess } from '../utils/locatio
 import { workerTracking } from '../utils/workerTracking';
 import { useWorkerTracking } from '../utils/useWorkerTracking';
 import LateBanner from '../components/LateBanner';
-import { AT_THE_DOOR_KM, distanceKm, navigationUrls } from '../utils/trip';
+import { distanceKm, navigationUrls } from '../utils/trip';
+import { arrivalOpensAt, isBooked } from '../utils/appointment';
+import { whenLabel } from '../utils/time';
+import { mediaPath, steadyUrl } from '../utils/steadyUrl';
 import { buzz, ringAlert } from '../utils/alerts';
 import { jobStep, type JobSection } from '../utils/jobStep';
 import { TRIP_RETURN_TYPE, clearReturnReminder, showReturnReminder } from '../utils/tripReturn';
@@ -35,6 +38,8 @@ import { categoryTitle } from '../i18n/categories';
 const POLL_MS = 6000;
 /** Once the worker is further than this again, a new approach can nudge them a second time. */
 const LEFT_THE_DOOR_KM = 0.3;
+/** The worker's own "you are here, enter the code" nudge. Looser than the customer's door message: nudging early costs nothing. */
+const WORKER_AT_DOOR_KM = 0.1;
 const PHOTO_PLACEHOLDER = require('../assets/images/photo-placeholder.png');
 const KINDS: Exclude<BillItemKind, 'VISIT_FEE'>[] = ['PARTS', 'LABOUR', 'OTHER'];
 const money = (n: number) => `₹${n.toFixed(2)}`;
@@ -109,8 +114,11 @@ export default function JobProgressScreen() {
   // What the worker charged to come: owed to them directly if the visit ends without the work (shown in the cancel sheet)
   const visitFee = bill?.items.find((i) => i.kind === 'VISIT_FEE')?.amount ?? null;
 
-  // Worker on the way: share GPS for this job while it stays ASSIGNED, stop the moment it is not (arrived, cancelled...)
-  const enRoute = isWorker && job?.status === 'ASSIGNED';
+  // Accepted for a later time and that time is more than an hour off: booked, nobody is on the way yet
+  const booked = !!job && isBooked(job);
+  // Worker on the way: share GPS for this job while it stays ASSIGNED, stop the moment it is not (arrived, cancelled...).
+  // Not for a booked appointment: tomorrow's job must not track the worker today.
+  const enRoute = isWorker && job?.status === 'ASSIGNED' && !booked;
   const jobId = job?.id;
   useWorkerTracking(!job ? undefined : enRoute ? job.id : null);
 
@@ -153,13 +161,13 @@ export default function JobProgressScreen() {
   // Arrived in front of the address: buzz, say so, and put the code entry under their thumb. The worker is usually
   // still holding the phone from the navigation, so this is the moment the next step has to be visible.
   useEffect(() => {
-    if (!isWorker || job?.status !== 'ASSIGNED' || !workerPoint || !destination) return;
+    if (!isWorker || job?.status !== 'ASSIGNED' || booked || !workerPoint || !destination) return;
     const km = distanceKm(workerPoint, destination);
     if (km > LEFT_THE_DOOR_KM) {
       nudged.current = false; // they drove off again (wrong turn, another street): the next approach may nudge
       return;
     }
-    if (km > AT_THE_DOOR_KM || nudged.current) return;
+    if (km > WORKER_AT_DOOR_KM || nudged.current) return;
     nudged.current = true;
     void clearReturnReminder();
     void ringAlert({
@@ -344,7 +352,7 @@ export default function JobProgressScreen() {
           </View>
         </View>
         <View style={styles.statusPill}>
-          <Text style={styles.statusPillText}>{job ? statusPill[job.status] ?? job.status : '…'}</Text>
+          <Text style={styles.statusPillText}>{job ? (booked ? t('BOOKED') : statusPill[job.status] ?? job.status) : '…'}</Text>
         </View>
       </View>
 
@@ -375,6 +383,20 @@ export default function JobProgressScreen() {
                     </TouchableOpacity>
                   ) : null}
                 </View>
+              </View>
+            )}
+
+            {/* The appointment the customer asked for (Afternoon / Tomorrow): both sides see the same time */}
+            {job.scheduledFor && ['OPEN', 'ASSIGNED'].includes(job.status) && (
+              <View style={[styles.card, styles.bookedCard]}>
+                <Text style={styles.bookedTitle}>📅 {t('Booked for {when}', { when: whenLabel(job.scheduledFor) })}</Text>
+                {booked && (
+                  <Text style={styles.hint}>
+                    {isWorker
+                      ? t('Set off in time to reach by then. You can enter the arrival code from {time}; the customer sees you on the map once you start.', { time: whenLabel(new Date(arrivalOpensAt(job.scheduledFor)!).toISOString()) })
+                      : t('Your worker will set off about an hour before. You will see them on the map then.')}
+                  </Text>
+                )}
               </View>
             )}
 
@@ -417,9 +439,9 @@ export default function JobProgressScreen() {
               <View style={styles.card}>
                 <Text style={styles.sectionTitle}>{isWorker ? t('Photos from the customer') : t('Photos you attached')}</Text>
                 <View style={styles.photoThumbRow}>
-                  {job.photoUrls.map((url, index) => (
+                  {job.photoUrls.map((signed) => steadyUrl(signed)).map((url, index) => (
                     <TouchableOpacity
-                      key={url}
+                      key={mediaPath(url)}
                       onPress={() => viewImage(url, t('Job photo {number}', { number: index + 1 }))}
                       activeOpacity={0.85}
                       accessibilityRole="imagebutton"
@@ -525,7 +547,7 @@ export default function JobProgressScreen() {
             )}
 
             {/* Worker: arrival code */}
-            {isWorker && job.status === 'ASSIGNED' && (
+            {isWorker && job.status === 'ASSIGNED' && !booked && (
               <View style={styles.card} onLayout={onSectionLayout('arrival')}>
                 <Text style={styles.sectionTitle}>{t('Arrival Code')}</Text>
                 {job.arrivalLocked ? (
@@ -574,7 +596,8 @@ export default function JobProgressScreen() {
                 )}
                 <View style={styles.photosGrid}>
                   {(['before', 'after'] as const).map((side) => {
-                    const urls = job.workPhotos?.[side] ?? [];
+                    // The same link while it is valid: the 6-second poll re-signs it, and a new link reloads the photo (blink)
+                    const urls = (job.workPhotos?.[side] ?? []).map((signed) => steadyUrl(signed));
                     return (
                       <View key={side} style={styles.photoCol}>
                         <View style={styles.photoLabelRow}>
@@ -587,7 +610,7 @@ export default function JobProgressScreen() {
                           {urls.length === 0 && <Image source={PHOTO_PLACEHOLDER} style={styles.proofImage} />}
                           {urls.map((u) => (
                             <TouchableOpacity
-                              key={u}
+                              key={mediaPath(u)}
                               onPress={() => viewImage(u, side === 'before' ? t('Before the work') : t('After the work'))}
                               activeOpacity={0.85}
                               accessibilityRole="imagebutton"
@@ -849,6 +872,16 @@ const styles = StyleSheet.create({
   content: {
     padding: Spacing.lg,
     gap: Spacing.lg
+  },
+  bookedCard: {
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    backgroundColor: '#F0FDF4',
+  },
+  bookedTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#065F46',
   },
   card: {
     backgroundColor: '#FFFFFF',

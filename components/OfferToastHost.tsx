@@ -25,6 +25,7 @@ const NATIVE = Platform.OS !== 'web';
 interface QueuedOffer {
   jobId: string;
   jobTitle: string;
+  scheduledFor: string | null;
   offer: OfferForCustomer;
   /** This quote's place among the request's waiting quotes ("2 of 3"). */
   position: number;
@@ -39,7 +40,7 @@ async function loadWaitingOffers(): Promise<QueuedOffer[]> {
     open.map(async (job) => {
       const offers = (await listOffers(job.id, 'fee')).filter((o) => o.status === 'PENDING');
       const byArrival = [...offers].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-      return byArrival.map((offer, i) => ({ jobId: job.id, jobTitle: job.title, offer, position: i + 1, total: offers.length }));
+      return byArrival.map((offer, i) => ({ jobId: job.id, jobTitle: job.title, scheduledFor: job.scheduledFor, offer, position: i + 1, total: offers.length }));
     }),
   );
   return perJob.flat().sort((a, b) => a.offer.createdAt.localeCompare(b.offer.createdAt));
@@ -153,6 +154,7 @@ export default function OfferToastHost() {
       </View>
       <OfferCard
         offer={current.offer}
+        appointment={current.scheduledFor}
         fastest={false}
         busy={busy}
         onAccept={() => {

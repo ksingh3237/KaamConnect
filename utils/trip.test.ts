@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AT_THE_DOOR_KM, FALLBACK_SPEED_KMH, bearingDeg, distanceKm, navigationUrls, nextHeading, roadTrip, trackingPill, vehicleEmoji } from './trip';
+import { AT_THE_DOOR_KM, FALLBACK_SPEED_KMH, NEARLY_THERE_KM, bearingDeg, distanceKm, navigationUrls, nextHeading, roadTrip, trackingPill, vehicleEmoji } from './trip';
 
 const sector22 = { lat: 30.7333, lng: 76.7794 };
 const north = { lat: 30.7433, lng: 76.7794 };
@@ -79,16 +79,28 @@ describe('navigationUrls', () => {
 describe('trackingPill at the door', () => {
   const base = { status: 'ASSIGNED', hasLocation: true, stale: false };
   it('drops the countdown once the worker is at the address and asks for the code instead', () => {
-    expect(trackingPill({ ...base, etaMinutes: 1, distanceKm: 0.05 })).toContain('at your door');
-    expect(trackingPill({ ...base, etaMinutes: 1, distanceKm: AT_THE_DOOR_KM })).toContain('at your door');
+    expect(trackingPill({ ...base, etaMinutes: 1, distanceKm: 0, doorKm: 0.03 })).toContain('at your door');
+    expect(trackingPill({ ...base, etaMinutes: 1, distanceKm: 0.1, doorKm: AT_THE_DOOR_KM })).toContain('at your door');
+  });
+
+  it('a worker a minute away (the 149 m the server rounds to "0.1 km") is almost there, not at the door', () => {
+    const pill = trackingPill({ ...base, etaMinutes: 1, distanceKm: 0.1, doorKm: 0.149 });
+    expect(pill).toContain('almost there');
+    expect(pill).not.toContain('at your door');
+    expect(trackingPill({ ...base, etaMinutes: 1, distanceKm: 0.3, doorKm: NEARLY_THERE_KM })).toContain('almost there');
+  });
+
+  it('never claims the door from the rounded server distance alone (no pin, or only an area centre)', () => {
+    expect(trackingPill({ ...base, etaMinutes: 1, distanceKm: 0.1 })).toBe('⚡ Arriving in 1 min • 0.1 km away');
+    expect(trackingPill({ ...base, etaMinutes: 1, distanceKm: 0, doorKm: null })).not.toContain('door');
   });
 
   it('still counts down from a street away', () => {
-    expect(trackingPill({ ...base, etaMinutes: 2, distanceKm: 0.4 })).toBe('⚡ Arriving in 2 min • 0.4 km away');
+    expect(trackingPill({ ...base, etaMinutes: 2, distanceKm: 0.4, doorKm: 0.3 })).toBe('⚡ Arriving in 2 min • 0.4 km away');
   });
 
   it('does not claim a door when the last fix is old', () => {
-    expect(trackingPill({ ...base, stale: true, etaMinutes: null, distanceKm: 0.02, lastSeen: '5 min ago' })).toContain('last seen');
+    expect(trackingPill({ ...base, stale: true, etaMinutes: null, distanceKm: 0.02, doorKm: 0.02, lastSeen: '5 min ago' })).toContain('last seen');
   });
 });
 

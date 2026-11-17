@@ -14,6 +14,7 @@ import { userMessage } from '../api/errors';
 import type { JobStatus, JobTiming, LeadItem } from '../api/types';
 import { notify } from '../utils/dialog';
 import { useWorkerTracking } from '../utils/useWorkerTracking';
+import { isBooked } from '../utils/appointment';
 import { timeAgo, whenLabel } from '../utils/time';
 import { ErrorBlock, LoadingBlock } from './StateBlocks';
 import AppMenu from './AppMenu';
@@ -42,7 +43,8 @@ function jobStatusText(status: JobStatus): string {
 
 function urgencyOf(lead: Pick<LeadItem, 'urgency' | 'scheduledFor'>): { label: string; urgent: boolean } {
   const byTiming: Record<JobTiming, string> = { IMMEDIATE: t('URGENT'), AFTERNOON: t('Afternoon'), TOMORROW: t('Tomorrow'), SCHEDULED: t('Scheduled') };
-  if (lead.urgency === 'SCHEDULED' && lead.scheduledFor) return { label: whenLabel(lead.scheduledFor), urgent: false };
+  // Afternoon and Tomorrow carry a time as well: show it, the worker has to know when they are being asked to come
+  if (lead.urgency !== 'IMMEDIATE' && lead.scheduledFor) return { label: whenLabel(lead.scheduledFor), urgent: false };
   return { label: byTiming[lead.urgency], urgent: lead.urgency === 'IMMEDIATE' };
 }
 
@@ -68,7 +70,8 @@ export default function WorkerHome() {
   const openLeads = (leads.data?.items ?? []).filter((l) => l.leadState !== 'DECLINED');
   const activeJobs = (jobs.data?.items ?? []).filter((j) => jobStatusText(j.status) !== '');
   // The worker may leave the job screen while driving: sharing GPS follows the job's status, not the open screen
-  useWorkerTracking(jobs.data ? (jobs.data.items.find((j) => j.status === 'ASSIGNED')?.id ?? null) : undefined);
+  // Only a job that is due: tomorrow's booking must not share the worker's position today
+  useWorkerTracking(jobs.data ? (jobs.data.items.find((j) => j.status === 'ASSIGNED' && !isBooked(j))?.id ?? null) : undefined);
 
   const toggleAvailable = async (next: boolean) => {
     if (switching) return;
@@ -166,7 +169,7 @@ export default function WorkerHome() {
                   <Wrench color="#FFFFFF" size={20} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.jobStatus}>{jobStatusText(job.status)}</Text>
+                  <Text style={styles.jobStatus}>{isBooked(job) && job.scheduledFor ? `📅 ${t('Booked for {when}', { when: whenLabel(job.scheduledFor) })}` : jobStatusText(job.status)}</Text>
                   <Text style={styles.jobTitle} numberOfLines={1}>{job.title}</Text>
                   <Text style={styles.jobMeta} numberOfLines={1}>📍 {job.area}, {job.city.replace(/\s*\(.*\)/, '')} • {job.customerName}</Text>
                 </View>

@@ -153,4 +153,27 @@ export const jobs: Record<string, { hi: string; pa: string }> = {
   'Worker is on the way • live location on the map': { hi: 'कारीगर रास्ते में है • नक्शे पर लाइव लोकेशन', pa: 'ਕਾਰੀਗਰ ਰਸਤੇ ਵਿੱਚ ਹੈ • ਨਕਸ਼ੇ ’ਤੇ ਲਾਈਵ ਲੋਕੇਸ਼ਨ' },
   'Arriving in {min} min • {km} km away': { hi: '{min} मिनट में पहुँचेंगे • {km} कि.मी. दूर', pa: '{min} ਮਿੰਟ ਵਿੱਚ ਪਹੁੰਚਣਗੇ • {km} ਕਿ.ਮੀ. ਦੂਰ' },
   'Arriving in {min} min': { hi: '{min} मिनट में पहुँचेंगे', pa: '{min} ਮਿੰਟ ਵਿੱਚ ਪਹੁੰਚਣਗੇ' },
+  'Your worker is almost there • keep the arrival code ready': { hi: 'आपका कारीगर बस पहुँचने वाला है • आगमन कोड तैयार रखें', pa: 'ਤੁਹਾਡਾ ਕਾਰੀਗਰ ਬੱਸ ਪਹੁੰਚਣ ਵਾਲਾ ਹੈ • ਆਗਮਨ ਕੋਡ ਤਿਆਰ ਰੱਖੋ' },
+  // Booked appointments (Afternoon / Tomorrow): accepted, but nobody is on the way yet
+  'BOOKED': { hi: 'बुक है', pa: 'ਬੁੱਕ ਹੈ' },
+  'Booked for {when}': { hi: '{when} के लिए बुक है', pa: '{when} ਲਈ ਬੁੱਕ ਹੈ' },
+  'Booked for {when} • your worker sets off about an hour before': { hi: '{when} के लिए बुक है • कारीगर लगभग एक घंटा पहले निकलेगा', pa: '{when} ਲਈ ਬੁੱਕ ਹੈ • ਕਾਰੀਗਰ ਲਗਭਗ ਇੱਕ ਘੰਟਾ ਪਹਿਲਾਂ ਨਿਕਲੇਗਾ' },
+  'Your worker will set off about an hour before. You will see them on the map then.': {
+    hi: 'आपका कारीगर लगभग एक घंटा पहले निकलेगा। तब आप उसे नक्शे पर देख पाएँगे।',
+    pa: 'ਤੁਹਾਡਾ ਕਾਰੀਗਰ ਲਗਭਗ ਇੱਕ ਘੰਟਾ ਪਹਿਲਾਂ ਨਿਕਲੇਗਾ। ਤਦ ਤੁਸੀਂ ਉਸਨੂੰ ਨਕਸ਼ੇ ’ਤੇ ਵੇਖ ਸਕੋਗੇ।',
+  },
+  'Set off in time to reach by then. You can enter the arrival code from {time}; the customer sees you on the map once you start.': {
+    hi: 'समय पर पहुँचने के लिए वक्त से निकलें। आगमन कोड {time} से डाल सकते हैं; तब से ग्राहक आपको नक्शे पर देखेगा।',
+    pa: 'ਸਮੇਂ ਸਿਰ ਪਹੁੰਚਣ ਲਈ ਵੇਲੇ ਨਾਲ ਨਿਕਲੋ। ਆਗਮਨ ਕੋਡ {time} ਤੋਂ ਪਾ ਸਕਦੇ ਹੋ; ਤਦ ਤੋਂ ਗਾਹਕ ਤੁਹਾਨੂੰ ਨਕਸ਼ੇ ’ਤੇ ਵੇਖੇਗਾ।',
+  },
+  'The customer wants you at {when}': { hi: 'ग्राहक आपको {when} बुला रहा है', pa: 'ਗਾਹਕ ਤੁਹਾਨੂੰ {when} ਬੁਲਾ ਰਿਹਾ ਹੈ' },
+  'Sending this quote means you agree to come at that time. You can start the job from one hour before.': {
+    hi: 'यह कोटेशन भेजने का मतलब है कि आप उसी समय आएँगे। काम एक घंटा पहले से शुरू कर सकते हैं।',
+    pa: 'ਇਹ ਕੋਟੇਸ਼ਨ ਭੇਜਣ ਦਾ ਮਤਲਬ ਹੈ ਕਿ ਤੁਸੀਂ ਉਸੇ ਸਮੇਂ ਆਓਗੇ। ਕੰਮ ਇੱਕ ਘੰਟਾ ਪਹਿਲਾਂ ਤੋਂ ਸ਼ੁਰੂ ਕਰ ਸਕਦੇ ਹੋ।',
+  },
+  'Set your inspection rate.': { hi: 'अपनी जाँच फीस तय करें।', pa: 'ਆਪਣੀ ਜਾਂਚ ਫ਼ੀਸ ਤੈਅ ਕਰੋ।' },
+  'You quoted ₹{fee} for {when}. Change it below, or withdraw it.': {
+    hi: 'आपने {when} के लिए ₹{fee} का कोटेशन दिया है। नीचे बदलें या वापस लें।',
+    pa: 'ਤੁਸੀਂ {when} ਲਈ ₹{fee} ਦਾ ਕੋਟੇਸ਼ਨ ਦਿੱਤਾ ਹੈ। ਹੇਠਾਂ ਬਦਲੋ ਜਾਂ ਵਾਪਸ ਲਓ।',
+  },
 };
