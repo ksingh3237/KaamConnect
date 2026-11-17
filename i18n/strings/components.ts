@@ -198,7 +198,10 @@ export const components: Record<string, { hi: string; pa: string }> = {
   'Available • Taking jobs': { hi: 'उपलब्ध • काम ले रहे हैं', pa: 'ਉਪਲਬਧ • ਕੰਮ ਲੈ ਰਹੇ ਹੋ' },
   'Offline • Not taking jobs': { hi: 'ऑफ़लाइन • काम नहीं ले रहे', pa: 'ਆਫ਼ਲਾਈਨ • ਕੰਮ ਨਹੀਂ ਲੈ ਰਹੇ' },
   'New nearby jobs alert you instantly.': { hi: 'आस-पास के नए काम की सूचना तुरंत मिलेगी।', pa: 'ਨੇੜਲੇ ਨਵੇਂ ਕੰਮ ਦੀ ਸੂਚਨਾ ਤੁਰੰਤ ਮਿਲੇਗੀ।' },
-  'No new job alerts and customers will not see you.': { hi: 'नए काम की सूचना नहीं मिलेगी और ग्राहक आपको नहीं देखेंगे।', pa: 'ਨਵੇਂ ਕੰਮ ਦੀ ਸੂਚਨਾ ਨਹੀਂ ਮਿਲੇਗੀ ਅਤੇ ਗਾਹਕ ਤੁਹਾਨੂੰ ਨਹੀਂ ਵੇਖਣਗੇ।' },
+  'No new job alerts and customers will not see you. You can still quote on leads; if a customer chooses you, you go online.': {
+    hi: 'नए काम की सूचना नहीं मिलेगी और ग्राहक आपको नहीं देखेंगे। आप फिर भी लीड पर कोटेशन भेज सकते हैं; ग्राहक आपको चुनेगा तो आप ऑनलाइन हो जाएँगे।',
+    pa: 'ਨਵੇਂ ਕੰਮ ਦੀ ਸੂਚਨਾ ਨਹੀਂ ਮਿਲੇਗੀ ਅਤੇ ਗਾਹਕ ਤੁਹਾਨੂੰ ਨਹੀਂ ਵੇਖਣਗੇ। ਤੁਸੀਂ ਫਿਰ ਵੀ ਲੀਡ ’ਤੇ ਕੋਟੇਸ਼ਨ ਭੇਜ ਸਕਦੇ ਹੋ; ਗਾਹਕ ਤੁਹਾਨੂੰ ਚੁਣੇਗਾ ਤਾਂ ਤੁਸੀਂ ਔਨਲਾਈਨ ਹੋ ਜਾਓਗੇ।',
+  },
   'Taking jobs': { hi: 'काम ले रहे हैं', pa: 'ਕੰਮ ਲੈ ਰਹੇ ਹੋ' },
   'Your active jobs': { hi: 'आपके चालू काम', pa: 'ਤੁਹਾਡੇ ਚਾਲੂ ਕੰਮ' },
   Open: { hi: 'खोलें', pa: 'ਖੋਲ੍ਹੋ' },

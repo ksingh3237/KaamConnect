@@ -18,6 +18,9 @@ const EVENT = {
   LOCATION_UPDATE: 'location:update',
   JOB_LOCATION: 'job.location',
   JOB_STATUS: 'job.status',
+  WORKER_AVAILABILITY: 'worker.availability',
+  LEAD_CLOSED: 'lead.closed',
+  OFFER_REJECTED: 'offer.rejected',
 } as const;
 
 const ACK_TIMEOUT_MS = 4000;
@@ -142,6 +145,18 @@ export const onJobLocation = (callback: (payload: JobLocationPayload) => void) =
 
 /** Every `job.status` event (assigned, arrived, cancelled...). */
 export const onJobStatus = (callback: (payload: JobStatusPayload) => void) => listen<JobStatusPayload>(EVENT.JOB_STATUS, callback);
+
+/** Worker: the server changed their "taking jobs" switch (being chosen for a job switches an offline worker back on). */
+export const onWorkerAvailability = (callback: (payload: { isAvailable: boolean; reason: string; jobId: string }) => void) =>
+  listen<{ isAvailable: boolean; reason: string; jobId: string }>(EVENT.WORKER_AVAILABILITY, callback);
+
+/** Worker: a lead left the radar (given to someone, cancelled, expired). `id` is the job. */
+export const onLeadClosed = (callback: (payload: { id: string; reason: string }) => void) =>
+  listen<{ id: string; reason: string }>(EVENT.LEAD_CLOSED, callback);
+
+/** Worker: one of their quotes was turned down (declined by the customer, or another worker was chosen). */
+export const onOfferRejected = (callback: (payload: { jobId: string; offerId: string }) => void) =>
+  listen<{ jobId: string; offerId: string }>(EVENT.OFFER_REJECTED, callback);
 
 /** Worker side: sends one GPS fix over the socket. Never throws; delivered=false tells the caller to use REST instead. */
 export function emitLocationUpdate(jobId: string, lat: number, lng: number): Promise<LocationAck> {

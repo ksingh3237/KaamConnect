@@ -7,8 +7,11 @@ import type {
   CreateJobBody,
   CreatedJob,
   DocumentType,
+  EarningJob,
   Earnings,
+  EarningsPeriod,
   JobListPage,
+  JobTiming,
   JobTab,
   JobView,
   Lang,
@@ -28,6 +31,7 @@ import type {
   ReviewTag,
   ReviewView,
   Savings,
+  ServiceAvailability,
   ServiceCategory,
   Tracking,
   VerifyResult,
@@ -80,8 +84,11 @@ export const putWorkerDocument = (type: DocumentType, key: string) =>
 export const getWorkerDocumentUrl = (type: DocumentType) =>
   get<{ url: string; expiresInSec: number }>(`/workers/me/documents/${type}/url`);
 export const putWorkerLocation = (lat: number, lng: number) => put<void>('/workers/me/location', { lat, lng });
-export const getEarnings = (period: 'today' | 'week' | 'month' = 'today') =>
+export const getEarnings = (period: EarningsPeriod = 'today') =>
   get<Earnings>('/workers/me/earnings', { query: { period } });
+/** The Wallet's list: paid jobs, most recently paid first. */
+export const listEarningJobs = (cursor?: string) =>
+  get<Page<EarningJob>>('/workers/me/earnings/jobs', { query: { limit: 20, cursor } });
 
 // ── discovery (customer)
 export const listWorkers = (query: { categoryId?: string; areaId?: number; sort?: 'distance' | 'rating'; limit?: number; cursor?: string }) =>
@@ -91,6 +98,15 @@ export const listWorkers = (query: { categoryId?: string; areaId?: number; sort?
 // The server does not implement idempotency keys (docs/03 lists it as later), so a double tap is prevented on the
 // screen by disabling the button while the request is in flight.
 export const createJob = (body: CreateJobBody) => post<CreatedJob>('/jobs', body);
+/** Is any worker there for this service, place and time? A warning only: posting is never refused because of it. */
+export const getServiceAvailability = (query: {
+  categoryId: string;
+  areaId: number;
+  lat?: number;
+  lng?: number;
+  timing: JobTiming;
+  scheduledFor?: string;
+}) => get<ServiceAvailability>('/jobs/availability', { query });
 export const createDirectBooking = (body: CreateJobBody & { workerId: string }) => post<CreatedJob>('/jobs/direct-booking', body);
 export const listMyJobs = (tab: JobTab, cursor?: string) =>
   get<JobListPage>('/customers/me/jobs', { query: { tab, limit: 20, cursor } });

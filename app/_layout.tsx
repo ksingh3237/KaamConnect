@@ -95,6 +95,7 @@ export default function RootLayout() {
           <Stack.Screen name="job-progress" />
           <Stack.Screen name="rating" />
           <Stack.Screen name="carousel" />
+          <Stack.Screen name="wallet" />
           <Stack.Screen name="legal" options={{ animation: 'slide_from_bottom' }} />
         </Stack>
       </SessionGate>

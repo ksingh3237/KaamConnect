@@ -23,6 +23,9 @@ const WORKER_TYPES: ReadonlySet<string> = new Set<string>([
   'JOB_CANCELLED_BY_CUSTOMER',
   'JOB_YOU_ARE_LATE',
   'JOB_NO_SHOW_RELEASED',
+  'QUOTE_DECLINED',
+  'QUOTE_NOT_SELECTED',
+  'LEAD_CANCELLED',
 ]);
 
 export function notificationSide(type: string): NotificationSide {
@@ -43,6 +46,10 @@ export function notificationTarget(type: string, data: Record<string, unknown> |
   switch (type) {
     case 'NEW_LEAD':
     case 'DIRECT_REQUEST':
+    // What became of a quote: the lead screen says it (and offers a new quote only when the request is still open)
+    case 'QUOTE_DECLINED':
+    case 'QUOTE_NOT_SELECTED':
+    case 'LEAD_CANCELLED':
       return { side, href: { pathname: '/lead-offer', params: { id: jobId } }, jobId: null };
     case 'NEW_QUOTE':
       return { side, href: '/compare-offers', jobId };

@@ -11,7 +11,8 @@ import {
   ChevronRight,
   RefreshCw,
   LogOut,
-  Trash2
+  Trash2,
+  Wallet
 } from 'lucide-react-native';
 import { Colors, Spacing, Radius } from '../../constants/theme';
 import LanguageToggle, { LANGUAGE_NAMES } from '../../components/LanguageToggle';
@@ -155,6 +156,27 @@ export default function ProfileScreen() {
 
         {/* Settings Navigation List */}
         <View style={[styles.card, { paddingVertical: 4 }]}>
+          {/* Wallet: the worker's earnings (and Top Up, coming soon) */}
+          {isWorker && (
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/wallet')}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+            >
+              <View style={styles.menuLeft}>
+                <View style={[styles.menuIconBg, { backgroundColor: '#D1FAE5' }]}>
+                  <Wallet color={Colors.primary} size={18} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.menuText}>{t('Wallet')}</Text>
+                  <Text style={styles.menuSub}>{t('Earnings, paid jobs and top up')}</Text>
+                </View>
+              </View>
+              <ChevronRight color="#94A3B8" size={18} />
+            </TouchableOpacity>
+          )}
+
           {/* Saved Addresses */}
           <TouchableOpacity
             style={styles.menuItem}
